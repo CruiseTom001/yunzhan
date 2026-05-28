@@ -1,0 +1,17 @@
+node_modules/
+dist/
+release/
+
+*.log
+*.local
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+
+vite.config.ts.timestamp-*.mjs
+yunzhan-optimization-check.png
+yunzhan-plan.pdf

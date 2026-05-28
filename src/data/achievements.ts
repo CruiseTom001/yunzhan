@@ -1,0 +1,88 @@
+import type { Achievement } from '@/types'
+
+export const achievements: Achievement[] = [
+  {
+    id: 'first-chapter',
+    name: '初出茅庐',
+    description: '完成第一个章节的学习',
+    icon: '🎯',
+    condition: { type: 'complete_course', value: 1 },
+  },
+  {
+    id: 'course-3',
+    name: '学有所成',
+    description: '完成 3 门课程',
+    icon: '📚',
+    condition: { type: 'total_courses', value: 3 },
+  },
+  {
+    id: 'course-7',
+    name: '运维达人',
+    description: '完成 7 门课程',
+    icon: '⚡',
+    condition: { type: 'total_courses', value: 7 },
+  },
+  {
+    id: 'course-15',
+    name: '全栈运维大师',
+    description: '完成全部 15 门课程',
+    icon: '👑',
+    condition: { type: 'total_courses', value: 15 },
+  },
+  {
+    id: 'quiz-score-80',
+    name: '答题高手',
+    description: '答题正确率达到 80%',
+    icon: '🧠',
+    condition: { type: 'quiz_score', value: 80 },
+  },
+  {
+    id: 'quiz-score-95',
+    name: '知识渊博',
+    description: '答题正确率达到 95%',
+    icon: '🌟',
+    condition: { type: 'quiz_score', value: 95 },
+  },
+  {
+    id: 'quiz-streak-10',
+    name: '连击达人',
+    description: '连续答对 10 题',
+    icon: '🔥',
+    condition: { type: 'quiz_streak', value: 10 },
+  },
+  {
+    id: 'quiz-streak-20',
+    name: '势不可挡',
+    description: '连续答对 20 题',
+    icon: '💎',
+    condition: { type: 'quiz_streak', value: 20 },
+  },
+  {
+    id: 'complete-linux',
+    name: 'Linux 大师',
+    description: '完成 Linux 系统基础全部章节',
+    icon: '🐧',
+    condition: { type: 'complete_course', value: 1, categoryId: 'linux-basics' },
+  },
+  {
+    id: 'complete-docker',
+    name: '容器专家',
+    description: '完成容器技术全部章节',
+    icon: '🐳',
+    condition: { type: 'complete_course', value: 1, categoryId: 'docker' },
+  },
+  {
+    id: 'complete-k8s',
+    name: 'K8s 指挥官',
+    description: '完成 Kubernetes 全部章节',
+    icon: '☸️',
+    condition: { type: 'complete_course', value: 1, categoryId: 'kubernetes' },
+  },
+  {
+    id: 'complete-devops',
+    name: 'DevOps 先锋',
+    description: '完成 DevOps 与 SRE 全部章节',
+    icon: '🔄',
+    condition: { type: 'complete_course', value: 1, categoryId: 'devops-sre' },
+  },
+]

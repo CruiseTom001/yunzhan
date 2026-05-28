@@ -1,0 +1,123 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { BookOpen, PenTool, BarChart3, Menu, X, Home, Search, Sun, Moon, Bot, Terminal } from 'lucide-vue-next'
+import { useTheme } from '@/stores/theme'
+
+const router = useRouter()
+const route = useRoute()
+const mobileMenuOpen = ref(false)
+const { theme, toggleTheme } = useTheme()
+
+const emit = defineEmits<{
+  openSearch: []
+  toggleAi: []
+  toggleTerminal: []
+}>()
+
+const navItems = [
+  { path: '/', label: '首页', icon: Home },
+  { path: '/courses', label: '课程', icon: BookOpen },
+  { path: '/quiz', label: '问答', icon: PenTool },
+  { path: '/progress', label: '进度', icon: BarChart3 },
+  { path: '/terminal', label: '终端', icon: Terminal },
+]
+
+function navigate(path: string) {
+  mobileMenuOpen.value = false
+  router.push(path)
+}
+</script>
+
+<template>
+  <header class="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-theme/80 border-b border-white/[0.03]">
+    <nav class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 cursor-pointer group" @click="navigate('/')">
+        <span class="text-cyan-400 font-mono font-bold text-sm bg-cyan-400/10 px-1.5 py-0.5 rounded border border-cyan-400/20">&gt;_</span>
+        <span class="text-white font-semibold tracking-wide text-sm">云栈<span class="text-cyan-400 font-mono">.dev</span></span>
+      </div>
+
+      <div class="hidden md:flex items-center gap-0.5">
+        <!-- 终端按钮 -->
+        <button
+          @click="emit('toggleTerminal')"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:bg-cyan-400/[0.05] transition-all mr-1 border border-cyan-400/10"
+          title="实验终端"
+        >
+          <Terminal class="w-3.5 h-3.5" />
+          <span class="text-cyan-400/50 text-[10px]">终端</span>
+        </button>
+
+        <!-- AI 助教按钮 -->
+        <button
+          @click="emit('toggleAi')"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-purple-400 hover:text-purple-300 hover:bg-purple-400/[0.05] transition-all mr-1 border border-purple-400/10"
+          title="AI 助教"
+        >
+          <Bot class="w-3.5 h-3.5" />
+          <span class="text-purple-400/50 text-[10px]">AI</span>
+        </button>
+
+        <!-- 搜索按钮 -->
+        <button
+          @click="emit('openSearch')"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-gray-500 hover:text-gray-300 hover:bg-white/[0.02] transition-all mr-1"
+          title="搜索 (Ctrl+K)"
+        >
+          <Search class="w-3.5 h-3.5" />
+          <span class="text-gray-700 border border-white/[0.04] rounded px-1.5 py-0.5 text-[10px]">Ctrl+K</span>
+        </button>
+        <div class="w-px h-5 bg-white/[0.04] mr-1"></div>
+        <!-- 主题切换 -->
+        <button
+          @click="toggleTheme"
+          class="flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:text-gray-300 hover:bg-white/[0.02] transition-all mr-1"
+          :title="theme === 'dark' ? '切换浅色模式' : '切换深色模式'"
+        >
+          <Sun v-if="theme === 'dark'" class="w-4 h-4" />
+          <Moon v-else class="w-4 h-4" />
+        </button>
+        <div class="w-px h-5 bg-white/[0.04] mr-1"></div>
+        <button
+          v-for="item in navItems"
+          :key="item.path"
+          @click="navigate(item.path)"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 font-mono',
+            route.path === item.path
+              ? 'text-cyan-400 bg-cyan-400/5'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.02]',
+          ]"
+        >
+          <component :is="item.icon" class="w-3.5 h-3.5" />
+          {{ item.label }}
+        </button>
+      </div>
+
+      <button class="md:hidden text-gray-500 hover:text-white" @click="mobileMenuOpen = !mobileMenuOpen">
+        <Menu v-if="!mobileMenuOpen" class="w-5 h-5" />
+        <X v-else class="w-5 h-5" />
+      </button>
+    </nav>
+
+    <div
+      v-if="mobileMenuOpen"
+      class="md:hidden border-t border-white/[0.03] bg-theme/95 backdrop-blur-xl px-6 py-3 flex flex-col gap-1"
+    >
+      <button
+        v-for="item in navItems"
+        :key="item.path"
+        @click="navigate(item.path)"
+        :class="[
+          'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-mono transition-all',
+          route.path === item.path
+            ? 'text-cyan-400 bg-cyan-400/5'
+            : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.02]',
+        ]"
+      >
+        <component :is="item.icon" class="w-4 h-4" />
+        {{ item.label }}
+      </button>
+    </div>
+  </header>
+</template>
