@@ -24,10 +24,6 @@ function getElectronApi() {
   return window.electronAPI
 }
 
-export function loadProgress(): LearningProgress {
-  return loadProgressSnapshot().progress
-}
-
 export function loadProgressSnapshot(): ProgressSnapshot {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)

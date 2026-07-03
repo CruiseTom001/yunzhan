@@ -9,7 +9,7 @@ import { executeSandboxCommand, sandboxWelcomeLines } from '@/utils/terminalSand
 
 defineOptions({ inheritAttrs: false })
 
-defineProps<{ visible: boolean }>()
+const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const progressStore = useProgressStore()
 
@@ -87,7 +87,13 @@ function initTerminal() {
   fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
   terminal.open(terminalEl.value)
-  setTimeout(() => fitAddon?.fit(), 50)
+  // 两次 rAF 等待布局稳定再 fit：Terminal.open() 后 DOM 行高 width cache 一次，
+  // 首次 fit 在 layout 完成前调用会算出错误的行数，导致末行被裁或留白。
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try { fitAddon?.fit() } catch { /* 容器尚未稳定时 fit 会抛异常，忽略重试 */ }
+    })
+  })
 
   for (const line of sandboxWelcomeLines) {
     terminal.writeln(line)
@@ -193,6 +199,19 @@ watch(minimized, (val) => {
   }
 })
 
+// 浮窗从隐藏切到显示时（首次打开 / 重新打开）也要 fit，
+// 否则 xterm 仍保留上次按旧尺寸算的行数，末行会被裁切。
+watch(() => props.visible, (val) => {
+  if (val) {
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        try { fitAddon?.fit() } catch { /* 容器还没好 */ }
+        terminal?.focus()
+      })
+    })
+  }
+}, { flush: 'post' })
+
 onUnmounted(() => {
   window.removeEventListener('yunzhan:run-command', handleRunCommand)
   window.removeEventListener('resize', handleResize)
@@ -269,6 +288,10 @@ onUnmounted(() => {
   flex: 1;
   padding: 6px 8px;
   min-height: 0;
+  /* xterm 初始化时默认按 24 行渲染，DOM 高度可能短暂大于父容器，
+     导致末行被裁切。overflow:hidden 防止 xterm 内部 dom 撑高父容器，
+     让 fit() 能正确算出实际可用行数。 */
+  overflow: hidden;
 }
 .fade-enter-active, .fade-leave-active { transition: all 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(10px); }
