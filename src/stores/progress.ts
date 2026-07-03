@@ -1,11 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { LabTask, LearningProgress, QuizRecord } from '@/types'
-import { loadProgress, saveProgress } from '@/utils/storage'
+import {
+  loadDesktopProgressSnapshot,
+  loadProgressSnapshot,
+  saveProgress,
+  saveProgressToLocal,
+} from '@/utils/storage'
 import { allQuestions } from '@/data/quizzes/all'
+import type { QuizQuestion } from '@/types'
+
+/** 按题目 id 建立索引，避免每次答题 O(n) 扫描全量题库 */
+const questionMap: Map<string, QuizQuestion> = new Map(allQuestions.map((q) => [q.id, q]))
 
 export const useProgressStore = defineStore('progress', () => {
-  const progress = ref<LearningProgress>(loadProgress())
+  const initialSnapshot = loadProgressSnapshot()
+  const progress = ref<LearningProgress>(initialSnapshot.progress)
+  const storageReady = ref(false)
+  const storageStatus = ref<'browser' | 'desktop' | 'error'>('browser')
+  const storagePath = ref('')
+  let latestSavedAt = initialSnapshot.updatedAt
 
   const completedChaptersCount = computed(() =>
     Object.values(progress.value.completedChapters).reduce((sum, ch) => sum + ch.length, 0),
@@ -104,6 +118,12 @@ export const useProgressStore = defineStore('progress', () => {
 
   function updateLastVisited(courseId: string) {
     progress.value.lastVisited = courseId
+    persist()
+  }
+
+  function updateLastRoute(route: string) {
+    if (!route || progress.value.lastRoute === route) return
+    progress.value.lastRoute = route
     persist()
   }
 
@@ -321,7 +341,7 @@ export const useProgressStore = defineStore('progress', () => {
 
   function upsertQuizReview(questionId: string, isCorrect: boolean) {
     if (!progress.value.reviewCards) progress.value.reviewCards = {}
-    const question = allQuestions.find(q => q.id === questionId)
+    const question = questionMap.get(questionId)
     if (!question) return
     const id = `quiz:${questionId}`
     const existing = progress.value.reviewCards[id]
@@ -371,12 +391,97 @@ export const useProgressStore = defineStore('progress', () => {
     }
   }
 
+  /**
+   * 持久化策略：
+   * - persist()：防抖（300ms 合并），适合高频用户操作（答题、终端命令等）
+   * - flushPersist()：立即落盘，适合时序敏感场景（hydration、页面卸载）
+   *
+   * 原实现每次 mutator 都全量 JSON.stringify + localStorage + Electron IPC，
+   * 终端连续敲命令时会产生大量同步写。防抖把它们合并为一次。
+   */
+  const PERSIST_DEBOUNCE_MS = 300
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+  function flushPersist() {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    latestSavedAt = saveProgress(progress.value)
+  }
+
   function persist() {
-    saveProgress(progress.value)
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      latestSavedAt = saveProgress(progress.value)
+    }, PERSIST_DEBOUNCE_MS)
+  }
+
+  // 页面隐藏/卸载时强制刷盘，避免防抖丢掉最后一次未写改动
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', flushPersist, { capture: true })
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPersist()
+    })
+  }
+
+  const storageHydration = hydrateDesktopStorage()
+
+  async function hydrateDesktopStorage() {
+    try {
+      const desktopSnapshot = await loadDesktopProgressSnapshot()
+      if (!desktopSnapshot) {
+        if (latestSavedAt > 0 || hasLearningData(progress.value)) {
+          flushPersist()
+        }
+        storageReady.value = true
+        return
+      }
+
+      storageStatus.value = 'desktop'
+      storagePath.value = desktopSnapshot.path
+
+      if (desktopSnapshot.updatedAt >= latestSavedAt) {
+        progress.value = desktopSnapshot.progress
+        latestSavedAt = desktopSnapshot.updatedAt
+        saveProgressToLocal(progress.value, latestSavedAt)
+      } else {
+        flushPersist()
+      }
+    } catch (error) {
+      console.warn('Failed to hydrate desktop progress:', error)
+      storageStatus.value = 'error'
+    } finally {
+      // 确保 hydration 期间任何被防抖挂起的写入都已落盘，
+      // 否则 main.ts 在 await whenStorageReady() 后恢复路由时可能读到旧状态
+      flushPersist()
+      storageReady.value = true
+    }
+  }
+
+  function whenStorageReady() {
+    return storageHydration
+  }
+
+  function hasLearningData(value: LearningProgress) {
+    return (
+      Object.keys(value.completedChapters).length > 0 ||
+      Object.keys(value.quizRecords).length > 0 ||
+      value.achievements.length > 0 ||
+      value.bookmarks.length > 0 ||
+      value.studyDays.length > 0 ||
+      value.commandHistory.length > 0 ||
+      Object.keys(value.labRecords).length > 0 ||
+      Boolean(value.lastVisited || value.lastRoute)
+    )
   }
 
   return {
     progress,
+    storageReady,
+    storageStatus,
+    storagePath,
     completedChaptersCount,
     quizTotalAnswered,
     quizCorrectCount,
@@ -398,6 +503,7 @@ export const useProgressStore = defineStore('progress', () => {
     hasAchievement,
     addTimeSpent,
     updateLastVisited,
+    updateLastRoute,
     addBookmark,
     removeBookmark,
     isBookmarked,
@@ -415,5 +521,6 @@ export const useProgressStore = defineStore('progress', () => {
     createSyncSnapshot,
     addCommunityDraft,
     updateUserProfile,
+    whenStorageReady,
   }
 })

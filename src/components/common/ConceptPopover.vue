@@ -13,60 +13,162 @@ interface PopoverState {
 const popover = ref<PopoverState | null>(null)
 const popoverEl = ref<HTMLElement | null>(null)
 const hoverTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const closeTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const activeTarget = ref<HTMLElement | null>(null)
 
-function handleMouseOver(e: MouseEvent) {
-  const target = (e.target as HTMLElement).closest('.knowledge-term') as HTMLElement | null
-  if (!target) {
-    closePopover()
-    return
+function clearTimers() {
+  if (hoverTimer.value) {
+    clearTimeout(hoverTimer.value)
+    hoverTimer.value = null
   }
+  if (closeTimer.value) {
+    clearTimeout(closeTimer.value)
+    closeTimer.value = null
+  }
+}
 
+function showPopover(target: HTMLElement) {
   const term = target.dataset.term
   if (!term) return
 
   const entry = getKnowledgeEntry(term)
   if (!entry) return
 
-  // 鼠标进入知识点标记
-  hoverTimer.value = setTimeout(() => {
-    const rect = target.getBoundingClientRect()
-    // 跟随鼠标位置，在文字下方弹出
-    popover.value = {
-      entry,
-      x: rect.left + rect.width / 2,
-      y: rect.bottom + 8,
+  activeTarget.value = target
+  const rect = target.getBoundingClientRect()
+  popover.value = {
+    entry,
+    x: rect.left + rect.width / 2,
+    y: rect.bottom + 8,
+  }
+
+  nextTick(() => {
+    if (!popoverEl.value || !popover.value) return
+    const pr = popoverEl.value.getBoundingClientRect()
+    let x = popover.value.x
+    let y = popover.value.y
+
+    if (pr.right > window.innerWidth - 16) {
+      x = window.innerWidth - pr.width / 2 - 16
     }
-    nextTick(() => {
-      // 如果弹窗超出右侧，左移
-      if (popoverEl.value) {
-        const pr = popoverEl.value.getBoundingClientRect()
-        if (pr.right > window.innerWidth - 16) {
-          popover.value = {
-            ...popover.value!,
-            x: window.innerWidth - pr.width - 16 + pr.width / 2,
-          }
-        }
-        popoverEl.value.classList.add('visible')
-      }
+    if (pr.left < 16) {
+      x = pr.width / 2 + 16
+    }
+    if (pr.bottom > window.innerHeight - 16) {
+      y = Math.max(16, rect.top - pr.height - 8)
+    }
+
+    popover.value = { ...popover.value, x, y }
+    requestAnimationFrame(() => {
+      popoverEl.value?.classList.add('visible')
     })
-  }, 300)
+  })
+}
+
+function scheduleClose(delay = 120) {
+  if (closeTimer.value) clearTimeout(closeTimer.value)
+  closeTimer.value = setTimeout(() => closePopover(), delay)
+}
+
+function handleMouseOver(e: MouseEvent) {
+  const rawTarget = e.target as HTMLElement
+  if (rawTarget.closest('.knowledge-popover')) {
+    clearTimers()
+    return
+  }
+
+  const target = rawTarget.closest('.knowledge-term') as HTMLElement | null
+  if (!target) return
+
+  clearTimers()
+  hoverTimer.value = setTimeout(() => {
+    showPopover(target)
+  }, 180)
 }
 
 function handleMouseOut(e: MouseEvent) {
-  const target = (e.target as HTMLElement).closest('.knowledge-term') as HTMLElement | null
-  const related = (e.relatedTarget as HTMLElement)?.closest('.knowledge-popover')
+  const rawTarget = e.target as HTMLElement
+  const fromTerm = rawTarget.closest('.knowledge-term')
+  const fromPopover = rawTarget.closest('.knowledge-popover')
+  const related = e.relatedTarget as HTMLElement | null
 
-  if (target && !related) {
+  if (fromTerm || fromPopover) {
+    const movingToSafeArea = related?.closest?.('.knowledge-term, .knowledge-popover')
+    if (!movingToSafeArea) scheduleClose()
+  }
+}
+
+function handleFocusIn(e: FocusEvent) {
+  const target = (e.target as HTMLElement).closest('.knowledge-term') as HTMLElement | null
+  if (target) showPopover(target)
+}
+
+function handleClick(e: MouseEvent) {
+  const rawTarget = e.target as HTMLElement
+  const target = rawTarget.closest('.knowledge-term') as HTMLElement | null
+  const insidePopover = rawTarget.closest('.knowledge-popover')
+
+  if (target) {
+    e.preventDefault()
+    e.stopPropagation()
+    clearTimers()
+    if (activeTarget.value === target && popover.value) {
+      closePopover()
+    } else {
+      showPopover(target)
+    }
+    return
+  }
+
+  if (!insidePopover && popover.value) {
     closePopover()
   }
 }
 
-function closePopover() {
-  if (hoverTimer.value) {
-    clearTimeout(hoverTimer.value)
-    hoverTimer.value = null
+function handleKeydown(e: KeyboardEvent) {
+  const target = (e.target as HTMLElement).closest('.knowledge-term') as HTMLElement | null
+  if (target && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault()
+    showPopover(target)
+    return
   }
+  if (e.key === 'Escape' && popover.value) {
+    closePopover()
+  }
+}
+
+function handlePopoverMouseEnter() {
+  clearTimers()
+}
+
+function handlePopoverMouseLeave(e: MouseEvent) {
+  const related = e.relatedTarget as HTMLElement | null
+  if (!related?.closest?.('.knowledge-term')) {
+    scheduleClose()
+  }
+}
+
+function handleScroll() {
+  if (!popover.value || !activeTarget.value) return
+  const rect = activeTarget.value.getBoundingClientRect()
+  const stillVisible = rect.bottom >= 0 && rect.top <= window.innerHeight
+  if (!stillVisible) {
+    closePopover()
+    return
+  }
+  showPopover(activeTarget.value)
+}
+
+function handleResize() {
+  if (activeTarget.value && popover.value) {
+    showPopover(activeTarget.value)
+  }
+}
+
+function closePopover() {
+  clearTimers()
   popover.value = null
+  activeTarget.value = null
 }
 
 function getLevelText(level?: string): string {
@@ -90,11 +192,21 @@ function getLevelColor(level?: string): string {
 onMounted(() => {
   document.addEventListener('mouseover', handleMouseOver)
   document.addEventListener('mouseout', handleMouseOut)
+  document.addEventListener('focusin', handleFocusIn)
+  document.addEventListener('click', handleClick, true)
+  document.addEventListener('keydown', handleKeydown)
+  window.addEventListener('scroll', handleScroll, true)
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   document.removeEventListener('mouseover', handleMouseOver)
   document.removeEventListener('mouseout', handleMouseOut)
+  document.removeEventListener('focusin', handleFocusIn)
+  document.removeEventListener('click', handleClick, true)
+  document.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('scroll', handleScroll, true)
+  window.removeEventListener('resize', handleResize)
   closePopover()
 })
 </script>
@@ -109,7 +221,9 @@ onUnmounted(() => {
         left: popover.x + 'px',
         top: popover.y + 'px',
       }"
-      @mouseover="closePopover"
+      data-testid="knowledge-popover"
+      @mouseenter="handlePopoverMouseEnter"
+      @mouseleave="handlePopoverMouseLeave"
     >
       <!-- 标题 -->
       <div class="popover-header">

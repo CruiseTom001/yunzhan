@@ -104,9 +104,15 @@ function annotateKnowledgeTerms() {
       const span = document.createElement('span')
       span.className = range.core ? 'knowledge-term knowledge-term-core' : 'knowledge-term'
       span.dataset.term = range.term
+      span.dataset.testid = 'knowledge-term'
+      span.setAttribute('role', 'button')
+      span.setAttribute('tabindex', '0')
+      span.setAttribute('aria-label', `查看知识点：${range.term}`)
       if (range.core) {
         span.dataset.core = 'true'
         span.title = '必修知识点'
+      } else {
+        span.title = `查看知识点：${range.term}`
       }
       span.textContent = text.slice(range.start, range.end)
       fragment.appendChild(span)

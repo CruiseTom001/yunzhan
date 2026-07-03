@@ -1,9 +1,22 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 const { execFile } = require('child_process')
+const fs = require('fs/promises')
 const path = require('path')
 
 const isDev = !app.isPackaged
 const allowedCommands = new Set(['pwd', 'whoami', 'hostname', 'date', 'ls', 'dir', 'docker'])
+const progressFileName = 'progress.json'
+const backupFileName = 'progress.backup.json'
+
+function getProgressPaths() {
+  const dataDir = app.getPath('userData')
+  return {
+    dataDir,
+    progressPath: path.join(dataDir, progressFileName),
+    backupPath: path.join(dataDir, backupFileName),
+    tempPath: path.join(dataDir, `${progressFileName}.tmp`),
+  }
+}
 
 function createContentSecurityPolicy() {
   return [
@@ -63,6 +76,68 @@ function registerIpc() {
 
   ipcMain.handle('app:getPath', (_event, name) => app.getPath(name || 'userData'))
   ipcMain.handle('app:getVersion', () => app.getVersion())
+
+  ipcMain.handle('progress:load', async () => {
+    const { progressPath, backupPath } = getProgressPaths()
+    const readJson = async (filePath, source) => {
+      const raw = await fs.readFile(filePath, 'utf8')
+      return {
+        source,
+        path: filePath,
+        payload: JSON.parse(raw),
+      }
+    }
+
+    try {
+      return await readJson(progressPath, 'primary')
+    } catch (primaryError) {
+      try {
+        return await readJson(backupPath, 'backup')
+      } catch {
+        if (primaryError && primaryError.code !== 'ENOENT') {
+          console.warn('Failed to read progress file:', primaryError)
+        }
+        return null
+      }
+    }
+  })
+
+  ipcMain.handle('progress:save', async (_event, payload) => {
+    const { dataDir, progressPath, backupPath, tempPath } = getProgressPaths()
+    await fs.mkdir(dataDir, { recursive: true })
+
+    try {
+      await fs.copyFile(progressPath, backupPath)
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') {
+        console.warn('Failed to refresh progress backup:', error)
+      }
+    }
+
+    const envelope = {
+      version: 1,
+      updatedAt: Date.now(),
+      ...payload,
+    }
+    await fs.writeFile(tempPath, JSON.stringify(envelope, null, 2), 'utf8')
+    await fs.rename(tempPath, progressPath)
+
+    return {
+      ok: true,
+      path: progressPath,
+      updatedAt: envelope.updatedAt,
+    }
+  })
+
+  ipcMain.handle('progress:clear', async () => {
+    const { progressPath, backupPath, tempPath } = getProgressPaths()
+    await Promise.allSettled([
+      fs.rm(progressPath, { force: true }),
+      fs.rm(backupPath, { force: true }),
+      fs.rm(tempPath, { force: true }),
+    ])
+    return { ok: true }
+  })
 }
 
 function createWindow() {

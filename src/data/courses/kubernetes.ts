@@ -3,12 +3,12 @@ import type { Course } from '@/types'
 export const course: Course = {
   id: 'kubernetes',
   title: 'Kubernetes',
-  description: 'K8s 架构深入理解、Pod/Service/Deployment 管理、Helm 与集群运维',
+  description: 'K8s 架构深入理解、Pod/Service/Deployment 管理、Gateway API、Helm 与集群运维',
   icon: 'Ship',
   difficulty: 'advanced',
   category: 'container',
   prerequisites: ['docker'],
-  estimatedHours: 24,
+  estimatedHours: 27,
   chapters: [
     {
       index: 0,
@@ -65,6 +65,13 @@ export const course: Course = {
             contentFile: 'kubernetes/chapter-7.md',
       content: '',
       keyConcepts: ['Metrics Server', 'Prometheus Operator', 'ServiceMonitor', 'PromQL', 'Grafana', 'Alertmanager', 'EFK', 'Loki']
+    },
+    {
+      index: 8,
+      title: 'Gateway API 与现代流量入口',
+      contentFile: 'kubernetes/chapter-8.md',
+      content: '',
+      keyConcepts: ['Gateway API', 'GatewayClass', 'Gateway', 'HTTPRoute', 'Listener', 'parentRefs', '流量分割', '跨命名空间路由']
     }
   ]
 }

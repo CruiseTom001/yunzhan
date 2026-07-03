@@ -37,23 +37,23 @@ export const course: Course = {
       keyConcepts: ['Round Robin', 'Least Connections', 'IP Hash', '一致性哈希', '会话保持', 'Session共享', '故障转移', 'backup', 'proxy_next_upstream', '限流', 'limit_req_zone']
     },
     {
-      index: 5,
+      index: 4,
       title: '第5章：HTTPS 证书配置',
-      contentFile: 'web-server/chapter-5.md',
+      contentFile: 'web-server/chapter-4.md',
       content: '',
       keyConcepts: ['HTTPS', 'TLS', 'Let\'s Encrypt', 'Certbot', 'SSL证书', 'HSTS', 'OCSP Stapling', 'DH参数', 'ssl_ciphers', 'HTTP强制跳转', '自签名证书']
     },
     {
-      index: 6,
+      index: 5,
       title: '第6章：Nginx 性能调优',
-      contentFile: 'web-server/chapter-6.md',
+      contentFile: 'web-server/chapter-5.md',
       content: '',
       keyConcepts: ['worker_processes', 'worker_connections', 'epoll', 'Gzip压缩', '代理缓存', '浏览器缓存', 'sendfile', 'keepalive', 'sysctl', '压力测试']
     },
     {
-      index: 7,
+      index: 6,
       title: '第7章：日志配置与分析',
-      contentFile: 'web-server/chapter-7.md',
+      contentFile: 'web-server/chapter-6.md',
       content: '',
       keyConcepts: ['access_log', 'error_log', 'log_format', 'JSON日志', '条件日志', 'logrotate', 'ELK', 'Filebeat', 'GoAccess', '日志分析']
     }

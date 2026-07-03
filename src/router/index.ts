@@ -43,6 +43,11 @@ const router = createRouter({
       name: 'terminal',
       component: () => import('@/pages/TerminalPage.vue'),
     },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'notFound',
+      component: () => import('@/pages/NotFoundPage.vue'),
+    },
   ],
 })
 

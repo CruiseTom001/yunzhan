@@ -3,12 +3,12 @@ import type { Course } from '@/types'
 export const course: Course = {
   id: 'cicd',
   title: 'CI/CD 流水线',
-  description: 'Jenkins/GitLab CI/GitHub Actions 自动化构建、测试与部署流程',
+  description: 'Jenkins/GitLab CI/GitHub Actions 自动化构建、测试、供应链证明与部署流程',
   icon: 'GitBranch',
   difficulty: 'intermediate',
   category: 'devops',
   prerequisites: ['docker'],
-  estimatedHours: 14,
+  estimatedHours: 17,
   chapters: [
     {
       index: 0,
@@ -51,6 +51,13 @@ export const course: Course = {
       contentFile: 'cicd/chapter-5.md',
       content: '',
       keyConcepts: ['滚动部署', '蓝绿部署', '金丝雀发布', 'ArgoCD', 'GitOps', '冒烟测试', '自动回滚', '数据库迁移']
+    },
+    {
+      index: 6,
+      title: '构建产物证明与供应链安全',
+      contentFile: 'cicd/chapter-6.md',
+      content: '',
+      keyConcepts: ['Artifact Attestation', 'Provenance', 'SBOM', 'SLSA', 'OIDC', 'actions/attest', 'gh attestation verify', '不可篡改发布']
     }
   ]
 }

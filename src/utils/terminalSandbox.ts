@@ -22,7 +22,9 @@ export function executeSandboxCommand(command: string): SandboxResult {
         output: [
           '\x1b[1;36m可用命令：\x1b[0m',
           '  ls  pwd  whoami  clear  date  uname  uptime  df  free  ps',
-          '  echo  cat  env  hostname  grep  curl  ping  ss',
+          '  echo  cat  env  hostname  grep  curl  ping  ss  stat  diff',
+          '  sort  uniq  cut  wc  id  useradd  usermod  file  xargs  jobs',
+          '  nohup  ulimit',
           '  docker  git  kubectl  systemctl  journalctl',
           '',
           '\x1b[2m这是浏览器内的训练沙箱，可放心运行课程和实验命令。\x1b[0m',
@@ -72,6 +74,51 @@ export function executeSandboxCommand(command: string): SandboxResult {
 
     case 'ps':
       return { output: 'PID  %CPU %MEM  COMMAND\n  1   0.0  0.1  init\n342   0.0  0.3  nginx\n567   0.1  1.2  docker\n891   0.2  0.8  node' }
+
+    case 'stat':
+      return { output: '  File: app.log\n  Size: 4096       Blocks: 8          IO Block: 4096 regular file\nDevice: 8,1   Inode: 524293      Links: 1\nAccess: (0644/-rw-r--r--)  Uid: (1000/user)   Gid: (1000/user)\nModify: 2026-07-03 14:30:00.000000000 +0800' }
+
+    case 'diff':
+      return { output: '--- nginx.conf.bak\n+++ nginx.conf\n@@ -1,3 +1,3 @@\n-server_name old.example.com;\n+server_name app.example.com;' }
+
+    case 'sort':
+      return { output: '10.0.0.8\n10.0.0.21\n10.0.0.34\nERROR\nINFO\nWARN' }
+
+    case 'uniq':
+      return { output: fullCmd.includes('-c') ? '  12 10.0.0.8\n   7 10.0.0.21\n   3 10.0.0.34' : '10.0.0.8\n10.0.0.21\n10.0.0.34' }
+
+    case 'cut':
+      return { output: 'root\nuser\ndeploy\nnginx' }
+
+    case 'wc':
+      return { output: fullCmd.includes('-l') ? '128 app.log' : '128 640 4096 app.log' }
+
+    case 'id':
+      return { output: fullCmd.includes('nginx') ? 'uid=995(nginx) gid=995(nginx) groups=995(nginx)' : 'uid=1000(user) gid=1000(user) groups=1000(user),10(wheel),998(docker)' }
+
+    case 'useradd':
+      return { output: '模拟执行：用户已创建。生产环境请确认家目录、Shell、组和 sudo 权限策略。' }
+
+    case 'usermod':
+      return { output: '模拟执行：用户属性已更新。提示：修改附加组后，用户通常需要重新登录才会生效。' }
+
+    case 'file':
+      return { output: `${fullCmd.slice(5).trim() || 'deploy.sh'}: Bourne-Again shell script, UTF-8 Unicode text executable` }
+
+    case 'xargs':
+      return { output: 'xargs 模拟执行：已将标准输入转换为命令参数。处理含空格文件名时建议使用 find -print0 | xargs -0。' }
+
+    case 'jobs':
+      return { output: '[1]-  Running                 nohup ./backup.sh > backup.log 2>&1 &\n[2]+  Stopped                 vim nginx.conf' }
+
+    case 'nohup':
+      return { output: 'nohup: ignoring input and redirecting stderr to stdout\n[1] 2048\n输出已写入 nohup.out 或你指定的日志文件。' }
+
+    case 'ulimit':
+      if (fullCmd.includes('-n')) {
+        return { output: '1024' }
+      }
+      return { output: 'core file size          (blocks, -c) 0\nopen files                      (-n) 1024\nmax user processes              (-u) 4096\nstack size              (kbytes, -s) 8192' }
 
     case 'echo':
       return { output: fullCmd.slice(5).trim() }

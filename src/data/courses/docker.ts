@@ -3,12 +3,12 @@ import type { Course } from '@/types'
 export const course: Course = {
   id: 'docker',
   title: '容器技术',
-  description: 'Docker 核心概念、Dockerfile 编写、Compose 编排与镜像仓库管理',
+  description: 'Docker 核心概念、Dockerfile 编写、Compose 编排、Compose Watch 与镜像仓库管理',
   icon: 'Box',
   difficulty: 'intermediate',
   category: 'container',
   prerequisites: ['linux-basics'],
-  estimatedHours: 16,
+  estimatedHours: 18,
   chapters: [
     {
       index: 0,
@@ -58,6 +58,13 @@ export const course: Course = {
             contentFile: 'docker/chapter-6.md',
       content: '',
       keyConcepts: ['Harbor', '私有仓库', '镜像管理', '安全扫描', '垃圾回收', '内容信任', '代理缓存']
+    },
+    {
+      index: 7,
+      title: 'Compose Watch 与本地开发闭环',
+      contentFile: 'docker/chapter-7.md',
+      content: '',
+      keyConcepts: ['Compose Watch', 'develop.watch', 'sync', 'sync+restart', 'rebuild', 'initial_sync', 'ignore', 'Hot Reload']
     }
   ]
 }

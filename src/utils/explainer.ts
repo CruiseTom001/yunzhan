@@ -614,6 +614,394 @@ const explainDB: Record<string, CommandExplanation> = {
     demoUrl: 'https://www.bilibili.com/search?keyword=linux%20ss%20%E5%91%BD%E4%BB%A4',
     demoTitle: '搜索 ss 命令教程',
   },
+  // ========== Linux 高频运维补充 ==========
+  sudo: {
+    command: 'sudo',
+    summary: '以授权用户身份执行命令',
+    description: 'sudo（Superuser Do）用于让普通用户临时以 root 或其他用户权限执行命令。运维中安装软件、修改系统配置、管理服务时经常需要 sudo，但应坚持最小权限原则，只在确实需要时使用。',
+    options: {
+      '-u': '指定以哪个用户身份执行命令',
+      '-i': '启动目标用户的登录 Shell，常用于进入 root 环境',
+      '-l': '列出当前用户被允许执行的 sudo 命令',
+      '-k': '清除已缓存的认证状态，下次 sudo 需要重新输入密码',
+    },
+    examples: [
+      'sudo systemctl restart nginx     # 以管理员权限重启服务',
+      'sudo -l                          # 查看当前用户可执行的提权命令',
+      'sudo -u deploy whoami            # 以 deploy 用户身份执行命令',
+    ],
+  },
+  vi: {
+    command: 'vi',
+    summary: '终端文本编辑器',
+    description: 'vi 是几乎所有类 Unix 系统都会提供的文本编辑器。运维改配置时常遇到 vi：按 i 进入插入模式，按 Esc 回到普通模式，输入 :wq 保存退出，输入 :q! 放弃修改退出。',
+    options: {
+      '+数字': '打开文件后跳到指定行号',
+      '-R': '只读方式打开文件',
+    },
+    examples: [
+      'vi /etc/nginx/nginx.conf         # 编辑 Nginx 配置',
+      'vi +120 app.log                  # 打开文件并跳到第 120 行',
+      '按 i 编辑，Esc 后输入 :wq 保存退出',
+    ],
+  },
+  vim: {
+    command: 'vim',
+    summary: '增强版 vi 文本编辑器',
+    description: 'vim 是 vi 的增强版，支持语法高亮、搜索、分屏、插件等功能。服务器上如果安装了 vim，通常比 vi 更适合长时间编辑配置和脚本。',
+    options: {
+      '-O': '垂直分屏打开多个文件',
+      '-d': '以 diff 模式比较文件',
+      '+/关键词': '打开文件后跳到第一个匹配关键词的位置',
+    },
+    examples: [
+      'vim /etc/ssh/sshd_config         # 编辑 SSH 配置',
+      'vim -d old.conf new.conf         # 对比两个配置文件',
+      'vim +/server nginx.conf          # 打开后定位到 server 关键字',
+    ],
+  },
+  nano: {
+    command: 'nano',
+    summary: '新手友好的终端文本编辑器',
+    description: 'nano 比 vi/vim 更直观，底部会显示快捷键提示。常用 Ctrl+O 保存、Enter 确认文件名、Ctrl+X 退出，适合初学者快速修改小配置。',
+    options: {
+      '-l': '显示行号',
+      '-w': '关闭自动换行',
+      '+行号': '打开后跳到指定行',
+    },
+    examples: [
+      'nano /etc/hosts                  # 编辑 hosts 文件',
+      'nano -l script.sh                # 显示行号编辑脚本',
+    ],
+  },
+  which: {
+    command: 'which',
+    summary: '查找命令实际执行路径',
+    description: 'which 会根据 PATH 环境变量查找命令的位置。排查“为什么执行的是这个版本”“为什么命令找不到”时非常有用。',
+    examples: [
+      'which nginx                      # 查看 nginx 命令路径',
+      'which python                     # 判断当前默认 python 来自哪里',
+      'which -a node                    # 显示 PATH 中所有匹配的 node',
+    ],
+  },
+  whereis: {
+    command: 'whereis',
+    summary: '查找命令、源码和手册页位置',
+    description: 'whereis 不只看 PATH，还会在系统常见目录中查找二进制文件、源码和 man 手册。它适合粗略定位软件安装位置。',
+    options: {
+      '-b': '只查找二进制文件',
+      '-m': '只查找 man 手册',
+      '-s': '只查找源码',
+    },
+    examples: [
+      'whereis nginx                    # 查找 nginx 相关路径',
+      'whereis -b python                # 只查找 python 可执行文件',
+    ],
+  },
+  env: {
+    command: 'env',
+    summary: '查看或临时设置环境变量',
+    description: 'env 常用于列出当前进程环境变量，也可以在不污染当前 Shell 的情况下临时设置变量执行命令。它与 export、PATH、脚本运行环境关系很密切。',
+    options: {
+      '-i': '从空环境启动命令',
+      'VAR=value': '临时设置环境变量',
+    },
+    examples: [
+      'env                              # 查看所有环境变量',
+      'env | grep PATH                  # 查看 PATH 配置',
+      'env NODE_ENV=production npm run build  # 临时设置变量执行命令',
+    ],
+  },
+  history: {
+    command: 'history',
+    summary: '查看 Shell 命令历史',
+    description: 'history 可以查看曾经执行过的命令，是提升终端效率和复盘操作的重要工具。配合 Ctrl+R 反向搜索历史命令，能显著减少重复输入。',
+    options: {
+      '-c': '清空当前 Shell 历史记录',
+      '-d': '删除指定编号的历史记录',
+      '-w': '将当前历史写入历史文件',
+    },
+    examples: [
+      'history                          # 查看历史命令',
+      'history | grep docker            # 搜索执行过的 docker 命令',
+      '!123                             # 重新执行编号为 123 的历史命令',
+    ],
+  },
+  tree: {
+    command: 'tree',
+    summary: '树形展示目录结构',
+    description: 'tree 会用层级树的形式展示目录，比 ls -R 更适合快速理解项目结构、配置目录和部署产物。部分系统需要先安装 tree 软件包。',
+    options: {
+      '-L': '限制显示层级深度',
+      '-a': '显示隐藏文件',
+      '-d': '只显示目录',
+      '-I': '排除匹配的文件或目录',
+    },
+    examples: [
+      'tree -L 2                         # 展示两层目录结构',
+      'tree -a -I node_modules           # 显示隐藏文件并排除 node_modules',
+    ],
+  },
+  ln: {
+    command: 'ln',
+    summary: '创建硬链接或软链接',
+    description: 'ln 用于创建链接文件。默认创建硬链接，最常见的是 ln -s 创建软链接。运维中常用软链接管理版本目录、配置文件入口和可执行文件快捷路径。',
+    options: {
+      '-s': '创建符号链接（软链接）',
+      '-f': '目标存在时强制覆盖',
+      '-n': '把已存在的符号链接当作普通文件处理',
+      '-v': '显示创建过程',
+    },
+    examples: [
+      'ln -s /opt/app/releases/v2 /opt/app/current  # 创建当前版本软链接',
+      'ln -s /etc/nginx/sites-available/app.conf /etc/nginx/sites-enabled/app.conf',
+      'ln source.log hardlink.log       # 创建硬链接',
+    ],
+  },
+  tee: {
+    command: 'tee',
+    summary: '同时输出到屏幕和文件',
+    description: 'tee 会从标准输入读取内容，一边显示到终端，一边写入文件。它常用于管道中保存日志，也常配合 sudo 写入普通重定向无法写入的系统文件。',
+    options: {
+      '-a': '追加写入，不覆盖原文件',
+      '-i': '忽略中断信号',
+    },
+    examples: [
+      'echo "server_name example.com;" | sudo tee /etc/nginx/conf.d/app.conf',
+      'docker logs -f api | tee api.log  # 实时查看并保存日志',
+      'command 2>&1 | tee run.log        # 同时保存标准输出和错误输出',
+    ],
+  },
+  source: {
+    command: 'source',
+    summary: '在当前 Shell 中执行脚本',
+    description: 'source 会让脚本在当前 Shell 进程中执行，因此脚本里设置的变量、函数、alias 会保留下来。修改 ~/.bashrc、~/.profile 后常用 source 立即生效。',
+    examples: [
+      'source ~/.bashrc                  # 让新的 Shell 配置立即生效',
+      '. ./env.sh                        # source 的简写形式',
+      'source venv/bin/activate          # 激活 Python 虚拟环境',
+    ],
+  },
+  stat: {
+    command: 'stat',
+    summary: '查看文件元数据',
+    description: 'stat 用于查看文件的 inode、权限、大小、所有者、访问/修改/状态变更时间等元数据。排查文件是否被改动、软硬链接关系、inode 问题时非常常用。',
+    options: {
+      '-c': '自定义输出格式',
+      '-f': '查看文件所在文件系统的信息',
+      '-L': '跟随符号链接，显示目标文件信息',
+    },
+    examples: [
+      'stat /etc/passwd                 # 查看文件完整元数据',
+      'stat -c "%i %n" *                # 输出 inode 和文件名',
+      'stat -f /var/log                 # 查看文件系统信息',
+    ],
+  },
+  diff: {
+    command: 'diff',
+    summary: '比较文件差异',
+    description: 'diff 用于比较两个文件或目录的差异。运维改配置前后、升级前后、排障回滚时都常用它确认到底改了什么。',
+    options: {
+      '-u': '以 unified 格式显示差异，最常用',
+      '-r': '递归比较目录',
+      '-q': '只报告是否不同，不显示具体差异',
+    },
+    examples: [
+      'diff -u nginx.conf.bak nginx.conf  # 比较配置改动',
+      'diff -qr old-dir new-dir           # 递归比较目录',
+    ],
+  },
+  sort: {
+    command: 'sort',
+    summary: '排序文本行',
+    description: 'sort 对文本按行排序，常和 uniq、cut、grep、awk 组合处理日志和清单。默认按字典序排序，数值统计时要加 -n。',
+    options: {
+      '-n': '按数字大小排序',
+      '-r': '倒序排序',
+      '-k': '按指定列排序',
+      '-u': '排序并去重',
+    },
+    examples: [
+      'sort access.log                  # 按行排序日志',
+      'sort -nr count.txt               # 数值倒序排序',
+      'sort -k2 users.txt               # 按第 2 列排序',
+    ],
+  },
+  uniq: {
+    command: 'uniq',
+    summary: '合并相邻重复行',
+    description: 'uniq 用于去除或统计相邻重复行，所以通常要先 sort 再 uniq。它非常适合统计访问 IP、错误类型、重复条目。',
+    options: {
+      '-c': '统计每行出现次数',
+      '-d': '只显示重复行',
+      '-u': '只显示不重复行',
+    },
+    examples: [
+      "awk '{print $1}' access.log | sort | uniq -c",
+      'sort names.txt | uniq            # 去重',
+      'sort errors.txt | uniq -c | sort -nr',
+    ],
+  },
+  cut: {
+    command: 'cut',
+    summary: '按列或字符切割文本',
+    description: 'cut 用于从每行文本中提取指定字段或字符范围。处理冒号分隔的 /etc/passwd、CSV、日志字段时很方便。',
+    options: {
+      '-d': '指定字段分隔符',
+      '-f': '选择字段编号',
+      '-c': '按字符位置截取',
+    },
+    examples: [
+      "cut -d: -f1 /etc/passwd          # 提取用户名",
+      "echo 'a,b,c' | cut -d, -f2       # 输出 b",
+      'cut -c1-10 app.log              # 提取前 10 个字符',
+    ],
+  },
+  wc: {
+    command: 'wc',
+    summary: '统计行数、单词数和字节数',
+    description: 'wc 常用于统计文件行数、日志匹配数量、命令输出规模。运维里最常见的是 wc -l。',
+    options: {
+      '-l': '统计行数',
+      '-w': '统计单词数',
+      '-c': '统计字节数',
+      '-m': '统计字符数',
+    },
+    examples: [
+      'wc -l app.log                    # 查看日志行数',
+      'grep ERROR app.log | wc -l       # 统计错误行数',
+      'find . -type f | wc -l           # 统计文件数量',
+    ],
+  },
+  id: {
+    command: 'id',
+    summary: '查看用户 UID、GID 和组信息',
+    description: 'id 用于确认当前或指定用户的 UID、主组、附加组。排查文件权限、sudo 权限、服务运行用户时很常用。',
+    options: {
+      '-u': '只显示 UID',
+      '-g': '只显示主组 GID',
+      '-G': '显示所有组 ID',
+      '-n': '显示名称而不是数字 ID',
+    },
+    examples: [
+      'id                              # 查看当前用户身份',
+      'id nginx                        # 查看 nginx 用户信息',
+      'id -nG deploy                   # 查看 deploy 所属组名',
+    ],
+  },
+  useradd: {
+    command: 'useradd',
+    summary: '创建系统用户',
+    description: 'useradd 用于创建新用户。生产环境中创建服务用户、部署用户时很常见，通常需要 sudo 权限，并配合 passwd、usermod、id 检查结果。',
+    options: {
+      '-m': '创建用户家目录',
+      '-s': '指定登录 Shell',
+      '-G': '指定附加组',
+      '-r': '创建系统用户',
+    },
+    examples: [
+      'sudo useradd -m -s /bin/bash deploy',
+      'sudo useradd -r -s /usr/sbin/nologin app',
+      'id deploy                       # 验证用户创建结果',
+    ],
+  },
+  usermod: {
+    command: 'usermod',
+    summary: '修改用户属性',
+    description: 'usermod 用于修改已有用户的组、Shell、家目录、锁定状态等。把用户加入 docker 或 sudo 组时经常用到。',
+    options: {
+      '-aG': '追加用户到附加组，注意通常要带 -a',
+      '-s': '修改登录 Shell',
+      '-L': '锁定用户密码',
+      '-U': '解锁用户密码',
+    },
+    examples: [
+      'sudo usermod -aG docker deploy   # 将用户加入 docker 组',
+      'sudo usermod -s /bin/bash app    # 修改登录 Shell',
+      'id deploy                        # 查看组是否生效',
+    ],
+  },
+  file: {
+    command: 'file',
+    summary: '识别文件类型',
+    description: 'file 根据文件内容判断类型，而不是只看后缀。遇到没有扩展名的文件、脚本执行失败、二进制和文本混淆时很好用。',
+    options: {
+      '-b': '只输出类型，不输出文件名',
+      '-i': '输出 MIME 类型',
+      '-L': '跟随符号链接',
+    },
+    examples: [
+      'file deploy.sh                   # 判断脚本类型',
+      'file -i data.json                # 查看 MIME 和编码',
+      'file /usr/bin/ls                 # 查看可执行文件类型',
+    ],
+  },
+  xargs: {
+    command: 'xargs',
+    summary: '把标准输入转换成命令参数',
+    description: 'xargs 会把管道输入转换为后续命令的参数，常用于 find、grep、awk 后面批量处理文件。处理文件名含空格时要使用 -0 搭配 find -print0。',
+    options: {
+      '-0': '以 NUL 字符分隔输入，安全处理空格文件名',
+      '-n': '每次传给命令的参数数量',
+      '-I': '指定占位符，逐项替换执行',
+    },
+    examples: [
+      'find . -name "*.log" -print0 | xargs -0 rm',
+      'cat hosts.txt | xargs -n1 ping -c1',
+      'find . -name "*.conf" | xargs grep server_name',
+    ],
+  },
+  jobs: {
+    command: 'jobs',
+    summary: '查看当前 Shell 的后台作业',
+    description: 'jobs 显示当前 Shell 启动并管理的后台/暂停作业。它和 Ctrl+Z、bg、fg、& 组成基础的作业控制能力。',
+    options: {
+      '-l': '显示作业对应的进程 ID',
+      '-r': '只显示正在运行的作业',
+      '-s': '只显示已停止的作业',
+    },
+    examples: [
+      'jobs                            # 查看后台作业',
+      'jobs -l                         # 显示 PID',
+      'fg %1                           # 把 1 号作业切回前台',
+    ],
+  },
+  nohup: {
+    command: 'nohup',
+    summary: '让命令忽略退出登录信号',
+    description: 'nohup 用于让命令在终端退出后继续运行，常配合 & 放到后台。它适合临时任务，但正式服务更推荐 systemd、supervisor 或容器编排管理。',
+    examples: [
+      'nohup ./backup.sh > backup.log 2>&1 &',
+      'nohup python app.py > app.log 2>&1 &',
+      'tail -f nohup.out               # 查看默认输出',
+    ],
+  },
+  ulimit: {
+    command: 'ulimit',
+    summary: '查看或设置 Shell 资源限制',
+    description: 'ulimit 控制当前 Shell 及其子进程的资源限制，比如最大打开文件数、最大进程数、core dump 大小。排查 too many open files 时必看。',
+    options: {
+      '-a': '显示所有限制',
+      '-n': '查看或设置最大打开文件数',
+      '-u': '查看或设置最大用户进程数',
+      '-c': '查看或设置 core 文件大小',
+    },
+    examples: [
+      'ulimit -a                       # 查看全部限制',
+      'ulimit -n                       # 查看最大打开文件数',
+      'ulimit -n 65535                 # 临时提高打开文件数限制',
+    ],
+  },
+  heredoc: {
+    command: 'heredoc',
+    summary: '使用 <<EOF 写入多行文本',
+    description: 'Heredoc 不是独立命令，而是 Shell 的多行输入语法。它常和 cat、tee、ssh 配合，用来生成配置文件或把多行脚本传给远程主机执行。',
+    examples: [
+      'cat > app.conf <<EOF\nserver_name example.com;\nEOF',
+      'sudo tee /etc/app/config.yml >/dev/null <<EOF\nport: 8080\nEOF',
+      'ssh host <<EOF\nhostname\nuptime\nEOF',
+    ],
+  },
   // ========== Docker ==========
   docker: {
     command: 'docker',
@@ -658,7 +1046,10 @@ export function extractCommand(code: string, _lang?: string): string | null {
   // 取第一行第一个词作为命令名
   const firstLine = code.trim().split('\n')[0].trim()
   // 去掉行首的 $ 或 #
-  const cmd = firstLine.replace(/^[$#%>]\s*/, '').split(/\s+/)[0]
+  const normalizedLine = firstLine.replace(/^[$#%>]\s*/, '')
+  if (/<<\s*['"]?[A-Za-z_][A-Za-z0-9_]*['"]?/.test(normalizedLine)) return 'heredoc'
+  if (/^\.\s+/.test(normalizedLine)) return 'source'
+  const cmd = normalizedLine.split(/\s+/)[0]
   if (!cmd) return null
   // 去掉路径前缀（如 /usr/bin/ls 取 ls）
   return cmd.split('/').pop() || null
@@ -670,6 +1061,10 @@ export function extractCommand(code: string, _lang?: string): string | null {
 export function lookupCommand(command: string): CommandExplanation | null {
   const normalized = command.toLowerCase().replace(/[^a-z0-9_-]/g, '')
   return explainDB[normalized] || null
+}
+
+export function getAllCommandExplanations(): CommandExplanation[] {
+  return Object.values(explainDB)
 }
 
 /**

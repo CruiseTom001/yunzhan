@@ -2,6 +2,7 @@
 import { Clock } from 'lucide-vue-next'
 import type { Course, Difficulty } from '@/types'
 import { DIFFICULTY_COLORS, DIFFICULTY_LABELS } from '@/types'
+import { getCourseIconChar } from '@/data/courseIcons'
 
 defineProps<{
   course: Omit<Course, 'chapters'>
@@ -12,31 +13,6 @@ defineProps<{
 const emit = defineEmits<{
   click: [id: string]
 }>()
-
-const iconMap: Record<string, string> = {
-  Terminal: '>_',
-  Network: 'NET',
-  Server: 'WEB',
-  Database: 'DB',
-  Zap: 'HA',
-  Box: 'BOX',
-  Ship: 'K8S',
-  GitBranch: 'GIT',
-  Eye: 'OBS',
-  Cog: 'OPS',
-  FileText: 'LOG',
-  Shield: 'SEC',
-  Cloud: 'CLD',
-  CloudLightning: 'SRE',
-  RefreshCw: 'CI',
-  Monitor: 'MON',
-  Code: '</>',
-  Layers: 'APP',
-}
-
-function getIcon(iconName: string): string {
-  return iconMap[iconName] || 'OPS'
-}
 </script>
 
 <template>
@@ -46,7 +22,7 @@ function getIcon(iconName: string): string {
   >
     <div class="flex items-start justify-between mb-3">
       <div class="w-10 h-10 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center font-mono text-cyan-400 text-sm">
-        {{ getIcon(course.icon) }}
+        {{ getCourseIconChar(course.icon) }}
       </div>
       <span
         :class="[

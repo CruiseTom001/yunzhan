@@ -203,26 +203,35 @@ export const courseIndex: Omit<Course, 'chapters'>[] = [
   },
 ]
 
-/** 各课程章节数（用于进度计算，无需加载完整课程） */
+/**
+ * 各课程章节数（用于进度计算，无需加载完整课程）
+ *
+ * 此表必须与 src/data/markdown/ 下的实际 .md 文件数保持一致。
+ * 新增/删除章节时需同步更新此表。构建时会由 scripts/check-chapter-counts.cjs
+ * 自动校验，不一致则构建失败。
+ *
+ * 不能用 import.meta.glob 派生：index.ts 被 HomePage / CourseListPage / ProgressPage
+ * 等首屏页面引用，若把 .md 内容拉进其依赖图，会导致主 chunk 膨胀 ~270KB。
+ */
 export const chapterCounts: Record<string, number> = {
-  'computer-basics': 7,
-  git: 7,
-  'python-ops': 9,
-  virtualization: 7,
-  'linux-basics': 14,
-  networking: 5,
-  'web-server': 5,
-  database: 5,
-  'cache-queue': 5,
-  docker: 7,
-  kubernetes: 5,
-  cicd: 5,
-  monitoring: 5,
-  automation: 5,
-  logging: 5,
-  security: 5,
-  'high-availability': 5,
+  'computer-basics': 6,
+  git: 6,
+  'python-ops': 7,
+  virtualization: 6,
+  'linux-basics': 8,
+  networking: 6,
+  'web-server': 7,
+  database: 7,
+  'cache-queue': 6,
+  docker: 8,
+  kubernetes: 9,
+  cicd: 7,
+  monitoring: 7,
+  automation: 7,
+  logging: 6,
+  security: 6,
+  'high-availability': 6,
   'cloud-ops': 5,
-  'devops-sre': 5,
+  'devops-sre': 6,
   'devops-project': 6,
 }

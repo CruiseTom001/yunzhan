@@ -279,4 +279,18 @@ export const questions: QuizQuestion[] = [
     explanation: '`increase()` 函数计算 Counter 在指定时间窗口内的总增长量（外推值），并自动处理计数器重置（如服务重启导致计数器归零）的情况。返回值是与原指标相同单位的值，而非速率。例如，若过去 5 分钟的 `rate()` 为 10 req/s，则 `increase([5m])` 约返回 3000（10 × 60 × 5）。',
     difficulty: 'intermediate',
   },
+  {
+    id: 'monitoring-021',
+    categoryId: 'monitoring',
+    type: 'single',
+    question: 'OpenTelemetry 语义约定（Semantic Conventions）的主要价值是什么？',
+    options: [
+      { id: 'a', text: '让不同服务用统一字段描述 Trace、Metric、Log，便于跨系统查询和关联分析', isCorrect: true },
+      { id: 'b', text: '替代 Prometheus、Loki 和 Jaeger 等所有后端存储', isCorrect: false },
+      { id: 'c', text: '强制所有服务只能使用 gRPC 协议上报数据', isCorrect: false },
+      { id: 'd', text: '自动修复应用中的性能问题', isCorrect: false },
+    ],
+    explanation: 'OpenTelemetry 语义约定定义了资源、Span、Metric、Log 等字段的标准命名方式，例如 service.name、deployment.environment、http.response.status_code。统一命名后，Dashboard、告警、Trace 和日志检索才能稳定关联。',
+    difficulty: 'intermediate',
+  },
 ]

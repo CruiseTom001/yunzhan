@@ -1,9 +1,20 @@
 /**
  * Electron Preload Script
- * 
+ *
  * 安全加固：仅暴露白名单 API，所有 Node.js 访问通过 contextBridge
  */
 const { contextBridge, ipcRenderer } = require('electron')
+
+// 白名单通道：每项都必须在 main.cjs 的 registerIpc() 中注册了对应 handler，
+// 否则调用会报 "No handler registered"。
+const allowedChannels = [
+  'terminal:exec',
+  'app:getPath',
+  'app:getVersion',
+  'progress:load',
+  'progress:save',
+  'progress:clear',
+]
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // 应用信息
@@ -12,26 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // IPC 通信（白名单）
   invoke: (channel, ...args) => {
-    const allowedChannels = [
-      'terminal:exec',
-      'terminal:resize',
-      'app:getPath',
-      'app:getVersion',
-    ]
     if (allowedChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
     }
     return Promise.reject(new Error(`不允许的 IPC 通道: ${channel}`))
-  },
-
-  // 终端相关（合并到 node-pty 后端时使用）
-  onTerminalData: (callback) => {
-    ipcRenderer.on('terminal:data', (_, data) => callback(data))
-  },
-
-  // 文件操作（仅读）
-  readFile: (filePath) => {
-    // 仅允许读取特定目录
-    return ipcRenderer.invoke('app:readFile', filePath)
   },
 })

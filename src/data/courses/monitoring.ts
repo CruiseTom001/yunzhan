@@ -3,12 +3,12 @@ import type { Course } from '@/types'
 export const course: Course = {
   id: 'monitoring',
   title: '监控与告警',
-  description: 'Prometheus + Grafana 监控体系、ELK Stack 日志分析与告警配置',
+  description: 'Prometheus + Grafana 监控体系、OpenTelemetry 可观测性、ELK Stack 日志分析与告警配置',
   icon: 'Eye',
   difficulty: 'intermediate',
   category: 'monitoring',
   prerequisites: ['linux-basics', 'networking'],
-  estimatedHours: 16,
+  estimatedHours: 19,
   chapters: [
     {
       index: 0,
@@ -51,6 +51,13 @@ export const course: Course = {
       contentFile: 'monitoring/chapter-5.md',
       content: '',
       keyConcepts: ['Blackbox Exporter', 'HTTP 探测', 'TCP 探测', 'ICMP 探测', 'DNS 探测', 'SSL 证书监控', 'probe_success']
+    },
+    {
+      index: 6,
+      title: 'OpenTelemetry 统一可观测性',
+      contentFile: 'monitoring/chapter-6.md',
+      content: '',
+      keyConcepts: ['OpenTelemetry', 'Trace', 'Metric', 'Log', 'Baggage', 'Collector', 'OTLP', 'Semantic Conventions']
     }
   ]
 }

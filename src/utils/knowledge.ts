@@ -35,1500 +35,6 @@ const knowledgeDB: KnowledgeEntry[] = [
   {
     term: 'AMD',
     keywords: ['amd'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'AMD  — Linux 运维概念',
-    description: `AMD 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'CPU',
-    keywords: ['cpu'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: true,
-    summary: 'CPU ⭐ 必修 — Linux 运维概念',
-    description: `CPU 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'CRT',
-    keywords: ['crt'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'CRT  — Linux 运维概念',
-    description: `CRT 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'GNU',
-    keywords: ['gnu'],
-    category: '云计算基础',
-    level: 'beginner',
-    core: true,
-    summary: 'GNU ⭐ 必修 — Linux 运维概念',
-    description: `GNU 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'GPL',
-    keywords: ['gpl'],
-    category: '云计算基础',
-    level: 'beginner',
-    core: true,
-    summary: 'GPL ⭐ 必修 — Linux 运维概念',
-    description: `GPL 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'GPT',
-    keywords: ['gpt'],
-    category: '存储',
-    level: 'beginner',
-    core: true,
-    summary: 'GPT ⭐ 必修 — Linux 运维概念',
-    description: `GPT 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'LED',
-    keywords: ['led'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'LED  — Linux 运维概念',
-    description: `LED 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'MBR',
-    keywords: ['mbr'],
-    category: '存储',
-    level: 'beginner',
-    core: true,
-    summary: 'MBR ⭐ 必修 — Linux 运维概念',
-    description: `MBR 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'QQ512050951',
-    keywords: ['qq512050951'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'QQ512050951  — Linux 运维概念',
-    description: `QQ512050951 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'RHCA',
-    keywords: ['rhca'],
-    category: '云计算基础',
-    level: 'beginner',
-    core: true,
-    summary: 'RHCA ⭐ 必修 — Linux 运维概念',
-    description: `RHCA 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'RHCE',
-    keywords: ['rhce'],
-    category: '云计算基础',
-    level: 'beginner',
-    core: true,
-    summary: 'RHCE ⭐ 必修 — Linux 运维概念',
-    description: `RHCE 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'RHCSA',
-    keywords: ['rhcsa'],
-    category: '云计算基础',
-    level: 'beginner',
-    core: true,
-    summary: 'RHCSA ⭐ 必修 — Linux 运维概念',
-    description: `RHCSA 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'alice',
-    keywords: ['alice'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'alice  — Linux 运维概念',
-    description: `alice 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'background',
-    keywords: ['background'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'background  — Linux 运维概念',
-    description: `background 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'foreground',
-    keywords: ['foreground'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'foreground  — Linux 运维概念',
-    description: `foreground 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'mail',
-    keywords: ['mail'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'mail  — Linux 运维概念',
-    description: `mail 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'sgid',
-    keywords: ['sgid'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'sgid  — Linux 运维概念',
-    description: `sgid 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'ssssssss',
-    keywords: ['ssssssss'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'ssssssss  — Linux 运维概念',
-    description: `ssssssss 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'stick',
-    keywords: ['stick'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: 'stick  — Linux 运维概念',
-    description: `stick 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '一个进程为例',
-    keywords: ['一个进程为例'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '一个进程为例  — Linux 运维概念',
-    description: `一个进程为例 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '上一级',
-    keywords: ['上一级'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '上一级  — Linux 运维概念',
-    description: `上一级 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '上半部分',
-    keywords: ['上半部分'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '上半部分  — Linux 运维概念',
-    description: `上半部分 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '下半部分',
-    keywords: ['下半部分'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '下半部分  — Linux 运维概念',
-    description: `下半部分 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '不要影响文件原先的内容',
-    keywords: ['不要影响文件原先的内容'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '不要影响文件原先的内容  — Linux 运维概念',
-    description: `不要影响文件原先的内容 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '不输入任何路径',
-    keywords: ['不输入任何路径'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '不输入任何路径  — Linux 运维概念',
-    description: `不输入任何路径 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '中央处理器',
-    keywords: ['中央处理器'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: true,
-    summary: '中央处理器 ⭐ 必修 — Linux 运维概念',
-    description: `中央处理器 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '主分区已创建并使用',
-    keywords: ['主分区已创建并使用'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '主分区已创建并使用  — Linux 运维概念',
-    description: `主分区已创建并使用 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '主分区未创建未使用',
-    keywords: ['主分区未创建未使用'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '主分区未创建未使用  — Linux 运维概念',
-    description: `主分区未创建未使用 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '了解即可',
-    keywords: ['了解即可'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '了解即可  — Linux 运维概念',
-    description: `了解即可 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '从工作原理区分',
-    keywords: ['从工作原理区分'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '从工作原理区分  — Linux 运维概念',
-    description: `从工作原理区分 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '优先级图示',
-    keywords: ['优先级图示'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '优先级图示  — Linux 运维概念',
-    description: `优先级图示 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '优先级特性',
-    keywords: ['优先级特性'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '优先级特性  — Linux 运维概念',
-    description: `优先级特性 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '优先级范围和特性',
-    keywords: ['优先级范围和特性'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '优先级范围和特性  — Linux 运维概念',
-    description: `优先级范围和特性 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '作业要求',
-    keywords: ['作业要求'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '作业要求  — Linux 运维概念',
-    description: `作业要求 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '使用数字',
-    keywords: ['使用数字'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '使用数字  — Linux 运维概念',
-    description: `使用数字 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '使用符号',
-    keywords: ['使用符号'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '使用符号  — Linux 运维概念',
-    description: `使用符号 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '信号种类',
-    keywords: ['信号种类'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '信号种类  — Linux 运维概念',
-    description: `信号种类 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '先关闭虚拟机电源',
-    keywords: ['先关闭虚拟机电源'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '先关闭虚拟机电源  — Linux 运维概念',
-    description: `先关闭虚拟机电源 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '先准备一段邮件内容',
-    keywords: ['先准备一段邮件内容'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '先准备一段邮件内容  — Linux 运维概念',
-    description: `先准备一段邮件内容 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '关键词介绍',
-    keywords: ['关键词介绍'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '关键词介绍  — Linux 运维概念',
-    description: `关键词介绍 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '再次查看用户信息',
-    keywords: ['再次查看用户信息'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '再次查看用户信息  — Linux 运维概念',
-    description: `再次查看用户信息 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '冯诺依曼',
-    keywords: ['冯诺依曼'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: true,
-    summary: '冯诺依曼 ⭐ 必修 — Linux 运维概念',
-    description: `冯诺依曼 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '准备文件',
-    keywords: ['准备文件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '准备文件  — Linux 运维概念',
-    description: `准备文件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '准备物理磁盘',
-    keywords: ['准备物理磁盘'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '准备物理磁盘  — Linux 运维概念',
-    description: `准备物理磁盘 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '分区方式',
-    keywords: ['分区方式'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '分区方式  — Linux 运维概念',
-    description: `分区方式 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '切换用户登录',
-    keywords: ['切换用户登录'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '切换用户登录  — Linux 运维概念',
-    description: `切换用户登录 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '创建一个文件',
-    keywords: ['创建一个文件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '创建一个文件  — Linux 运维概念',
-    description: `创建一个文件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '创建一个目录',
-    keywords: ['创建一个目录'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '创建一个目录  — Linux 运维概念',
-    description: `创建一个目录 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '创建分区',
-    keywords: ['创建分区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '创建分区  — Linux 运维概念',
-    description: `创建分区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '删除分区',
-    keywords: ['删除分区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '删除分区  — Linux 运维概念',
-    description: `删除分区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '删除所有',
-    keywords: ['删除所有'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '删除所有  — Linux 运维概念',
-    description: `删除所有 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '删除组',
-    keywords: ['删除组'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '删除组  — Linux 运维概念',
-    description: `删除组 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '删除部分',
-    keywords: ['删除部分'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '删除部分  — Linux 运维概念',
-    description: `删除部分 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '刷新分区表',
-    keywords: ['刷新分区表'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '刷新分区表  — Linux 运维概念',
-    description: `刷新分区表 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '南北桥芯片',
-    keywords: ['南北桥芯片'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: false,
-    summary: '南北桥芯片  — Linux 运维概念',
-    description: `南北桥芯片 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '台式机',
-    keywords: ['台式机'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '台式机  — Linux 运维概念',
-    description: `台式机 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '台积电',
-    keywords: ['台积电'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '台积电  — Linux 运维概念',
-    description: `台积电 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '后台程序控制示例',
-    keywords: ['后台程序控制示例'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '后台程序控制示例  — Linux 运维概念',
-    description: `后台程序控制示例 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '启动分区工具',
-    keywords: ['启动分区工具'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '启动分区工具  — Linux 运维概念',
-    description: `启动分区工具 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '命令参数说明',
-    keywords: ['命令参数说明'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '命令参数说明  — Linux 运维概念',
-    description: `命令参数说明 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '命令模式',
-    keywords: ['命令模式'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '命令模式  — Linux 运维概念',
-    description: `命令模式 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '因为没有错误信息',
-    keywords: ['因为没有错误信息'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '因为没有错误信息  — Linux 运维概念',
-    description: `因为没有错误信息 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '图形安装详解',
-    keywords: ['图形安装详解'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '图形安装详解  — Linux 运维概念',
-    description: `图形安装详解 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '基本组',
-    keywords: ['基本组'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '基本组  — Linux 运维概念',
-    description: `基本组 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '如下命令不需要操作',
-    keywords: ['如下命令不需要操作'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '如下命令不需要操作  — Linux 运维概念',
-    description: `如下命令不需要操作 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '将用户加入到组',
-    keywords: ['将用户加入到组'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '将用户加入到组  — Linux 运维概念',
-    description: `将用户加入到组 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '常见硬件',
-    keywords: ['常见硬件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '常见硬件  — Linux 运维概念',
-    description: `常见硬件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '常见类型',
-    keywords: ['常见类型'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '常见类型  — Linux 运维概念',
-    description: `常见类型 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '常规文件',
-    keywords: ['常规文件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '常规文件  — Linux 运维概念',
-    description: `常规文件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '我从哪里来',
-    keywords: ['我从哪里来'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '我从哪里来  — Linux 运维概念',
-    description: `我从哪里来 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '手动挂载',
-    keywords: ['手动挂载'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '手动挂载  — Linux 运维概念',
-    description: `手动挂载 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '手机芯片厂商',
-    keywords: ['手机芯片厂商'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '手机芯片厂商  — Linux 运维概念',
-    description: `手机芯片厂商 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '扩展分区',
-    keywords: ['扩展分区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '扩展分区  — Linux 运维概念',
-    description: `扩展分区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '扩展命令模式',
-    keywords: ['扩展命令模式'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '扩展命令模式  — Linux 运维概念',
-    description: `扩展命令模式 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '挂载重启失效的问题',
-    keywords: ['挂载重启失效的问题'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '挂载重启失效的问题  — Linux 运维概念',
-    description: `挂载重启失效的问题 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '敲击回车键',
-    keywords: ['敲击回车键'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '敲击回车键  — Linux 运维概念',
-    description: `敲击回车键 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '文件权限设置真实的样子',
-    keywords: ['文件权限设置真实的样子'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '文件权限设置真实的样子  — Linux 运维概念',
-    description: `文件权限设置真实的样子 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '文件管理',
-    keywords: ['文件管理'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '文件管理  — Linux 运维概念',
-    description: `文件管理 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '文本编辑',
-    keywords: ['文本编辑'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '文本编辑  — Linux 运维概念',
-    description: `文本编辑 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '新建分区',
-    keywords: ['新建分区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '新建分区  — Linux 运维概念',
-    description: `新建分区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '新硬盘',
-    keywords: ['新硬盘'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '新硬盘  — Linux 运维概念',
-    description: `新硬盘 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '更改权限',
-    keywords: ['更改权限'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '更改权限  — Linux 运维概念',
-    description: `更改权限 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '有人认识这个软件吗',
-    keywords: ['有人认识这个软件吗'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '有人认识这个软件吗  — Linux 运维概念',
-    description: `有人认识这个软件吗 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '权限对象',
-    keywords: ['权限对象'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '权限对象  — Linux 运维概念',
-    description: `权限对象 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '权限类型',
-    keywords: ['权限类型'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '权限类型  — Linux 运维概念',
-    description: `权限类型 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看分区结果',
-    keywords: ['查看分区结果'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看分区结果  — Linux 运维概念',
-    description: `查看分区结果 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看卷组信息',
-    keywords: ['查看卷组信息'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看卷组信息  — Linux 运维概念',
-    description: `查看卷组信息 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看挂载结果',
-    keywords: ['查看挂载结果'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看挂载结果  — Linux 运维概念',
-    description: `查看挂载结果 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看文件',
-    keywords: ['查看文件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看文件  — Linux 运维概念',
-    description: `查看文件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看权限',
-    keywords: ['查看权限'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看权限  — Linux 运维概念',
-    description: `查看权限 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看用户原先信息',
-    keywords: ['查看用户原先信息'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看用户原先信息  — Linux 运维概念',
-    description: `查看用户原先信息 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看目录',
-    keywords: ['查看目录'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看目录  — Linux 运维概念',
-    description: `查看目录 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '查看邮件',
-    keywords: ['查看邮件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '查看邮件  — Linux 运维概念',
-    description: `查看邮件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '标准输入',
-    keywords: ['标准输入'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '标准输入 ⭐ 必修 — Linux 运维概念',
-    description: `标准输入 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '标准输出',
-    keywords: ['标准输出'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '标准输出 ⭐ 必修 — Linux 运维概念',
-    description: `标准输出 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '标准错误输出',
-    keywords: ['标准错误输出'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '标准错误输出 ⭐ 必修 — Linux 运维概念',
-    description: `标准错误输出 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '标题内容',
-    keywords: ['标题内容'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '标题内容  — Linux 运维概念',
-    description: `标题内容 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '核心数',
-    keywords: ['核心数'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: true,
-    summary: '核心数 ⭐ 必修 — Linux 运维概念',
-    description: `核心数 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '正确示范',
-    keywords: ['正确示范'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '正确示范  — Linux 运维概念',
-    description: `正确示范 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '正确输出',
-    keywords: ['正确输出'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '正确输出  — Linux 运维概念',
-    description: `正确输出 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '没有简写',
-    keywords: ['没有简写'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '没有简写  — Linux 运维概念',
-    description: `没有简写 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '添加磁盘',
-    keywords: ['添加磁盘'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '添加磁盘  — Linux 运维概念',
-    description: `添加磁盘 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '灵魂三问',
-    keywords: ['灵魂三问'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '灵魂三问  — Linux 运维概念',
-    description: `灵魂三问 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '然后使用立刻挂载命令',
-    keywords: ['然后使用立刻挂载命令'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '然后使用立刻挂载命令  — Linux 运维概念',
-    description: `然后使用立刻挂载命令 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '生产环境',
-    keywords: ['生产环境'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '生产环境  — Linux 运维概念',
-    description: `生产环境 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '用了多少内存',
-    keywords: ['用了多少内存'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '用了多少内存  — Linux 运维概念',
-    description: `用了多少内存 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '用户的作用',
-    keywords: ['用户的作用'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '用户的作用  — Linux 运维概念',
-    description: `用户的作用 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '用户管理',
-    keywords: ['用户管理'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '用户管理 ⭐ 必修 — Linux 运维概念',
-    description: `用户管理 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '用户需要密码',
-    keywords: ['用户需要密码'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '用户需要密码  — Linux 运维概念',
-    description: `用户需要密码 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '电子邮件',
-    keywords: ['电子邮件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '电子邮件  — Linux 运维概念',
-    description: `电子邮件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '百度云盘',
-    keywords: ['百度云盘'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '百度云盘  — Linux 运维概念',
-    description: `百度云盘 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '相对路径',
-    keywords: ['相对路径'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '相对路径 ⭐ 必修 — Linux 运维概念',
-    description: `相对路径 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '看到复制的文件即可',
-    keywords: ['看到复制的文件即可'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '看到复制的文件即可  — Linux 运维概念',
-    description: `看到复制的文件即可 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '看到文件即可',
-    keywords: ['看到文件即可'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '看到文件即可  — Linux 运维概念',
-    description: `看到文件即可 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '磁盘的结尾',
-    keywords: ['磁盘的结尾'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '磁盘的结尾  — Linux 运维概念',
-    description: `磁盘的结尾 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '磁盘简介',
-    keywords: ['磁盘简介'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '磁盘简介  — Linux 运维概念',
-    description: `磁盘简介 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '程序本身需要输出',
-    keywords: ['程序本身需要输出'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '程序本身需要输出  — Linux 运维概念',
-    description: `程序本身需要输出 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '笔记本',
-    keywords: ['笔记本'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '笔记本  — Linux 运维概念',
-    description: `笔记本 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '第四个分区',
-    keywords: ['第四个分区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '第四个分区  — Linux 运维概念',
-    description: `第四个分区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '答案是不',
-    keywords: ['答案是不'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '答案是不  — Linux 运维概念',
-    description: `答案是不 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '管理磁盘',
-    keywords: ['管理磁盘'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '管理磁盘  — Linux 运维概念',
-    description: `管理磁盘 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '管理磁盘流程三部曲',
-    keywords: ['管理磁盘流程三部曲'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '管理磁盘流程三部曲  — Linux 运维概念',
-    description: `管理磁盘流程三部曲 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '系统中的两种优先级',
-    keywords: ['系统中的两种优先级'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '系统中的两种优先级  — Linux 运维概念',
-    description: `系统中的两种优先级 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '系统的授权文件',
-    keywords: ['系统的授权文件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '系统的授权文件  — Linux 运维概念',
-    description: `系统的授权文件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '组成员默认为空',
-    keywords: ['组成员默认为空'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '组成员默认为空  — Linux 运维概念',
-    description: `组成员默认为空 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '结束符号',
-    keywords: ['结束符号'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '结束符号  — Linux 运维概念',
-    description: `结束符号 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '绝对路径',
-    keywords: ['绝对路径'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '绝对路径 ⭐ 必修 — Linux 运维概念',
-    description: `绝对路径 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '编写邮件',
-    keywords: ['编写邮件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '编写邮件  — Linux 运维概念',
-    description: `编写邮件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '联发科',
-    keywords: ['联发科'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '联发科  — Linux 运维概念',
-    description: `联发科 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '自动退出分区工具',
-    keywords: ['自动退出分区工具'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '自动退出分区工具  — Linux 运维概念',
-    description: `自动退出分区工具 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '芯片组',
-    keywords: ['芯片组'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: false,
-    summary: '芯片组  — Linux 运维概念',
-    description: `芯片组 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '英特尔',
-    keywords: ['英特尔'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '英特尔  — Linux 运维概念',
-    description: `英特尔 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '西部数据',
-    keywords: ['西部数据'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '西部数据  — Linux 运维概念',
-    description: `西部数据 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '观察授权信息',
-    keywords: ['观察授权信息'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '观察授权信息  — Linux 运维概念',
-    description: `观察授权信息 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '解决办法',
-    keywords: ['解决办法'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '解决办法  — Linux 运维概念',
-    description: `解决办法 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '记得磁铁的玩具吗',
-    keywords: ['记得磁铁的玩具吗'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '记得磁铁的玩具吗  — Linux 运维概念',
-    description: `记得磁铁的玩具吗 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '设置权限',
-    keywords: ['设置权限'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '设置权限  — Linux 运维概念',
-    description: `设置权限 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '该用户一定要注销',
-    keywords: ['该用户一定要注销'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '该用户一定要注销  — Linux 运维概念',
-    description: `该用户一定要注销 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '请思考',
-    keywords: ['请思考'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '请思考  — Linux 运维概念',
-    description: `请思考 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '起始扇区',
-    keywords: ['起始扇区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '起始扇区  — Linux 运维概念',
-    description: `起始扇区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '路径分为',
-    keywords: ['路径分为'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '路径分为  — Linux 运维概念',
-    description: `路径分为 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '输出提示',
-    keywords: ['输出提示'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '输出提示  — Linux 运维概念',
-    description: `输出提示 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '输出重定向分为',
-    keywords: ['输出重定向分为'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '输出重定向分为  — Linux 运维概念',
-    description: `输出重定向分为 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '过程略',
-    keywords: ['过程略'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '过程略  — Linux 运维概念',
-    description: `过程略 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进入会话模式',
-    keywords: ['进入会话模式'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进入会话模式  — Linux 运维概念',
-    description: `进入会话模式 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进入其它模式',
-    keywords: ['进入其它模式'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进入其它模式  — Linux 运维概念',
-    description: `进入其它模式 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进程三问',
-    keywords: ['进程三问'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进程三问  — Linux 运维概念',
-    description: `进程三问 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进程排序',
-    keywords: ['进程排序'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进程排序  — Linux 运维概念',
-    description: `进程排序 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进程状态产生的原因',
-    keywords: ['进程状态产生的原因'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进程状态产生的原因  — Linux 运维概念',
-    description: `进程状态产生的原因 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进程的父子关系',
-    keywords: ['进程的父子关系'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进程的父子关系  — Linux 运维概念',
-    description: `进程的父子关系 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '进程简介',
-    keywords: ['进程简介'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '进程简介  — Linux 运维概念',
-    description: `进程简介 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '选择分区号',
-    keywords: ['选择分区号'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '选择分区号  — Linux 运维概念',
-    description: `选择分区号 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '选择磁盘开始的扇区',
-    keywords: ['选择磁盘开始的扇区'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '选择磁盘开始的扇区  — Linux 运维概念',
-    description: `选择磁盘开始的扇区 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '邮件接收人',
-    keywords: ['邮件接收人'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '邮件接收人  — Linux 运维概念',
-    description: `邮件接收人 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '重定向',
-    keywords: ['重定向'],
-    category: 'Linux',
-    level: 'beginner',
-    core: true,
-    summary: '重定向 ⭐ 必修 — Linux 运维概念',
-    description: `重定向 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '针对文件内容进行过滤',
-    keywords: ['针对文件内容进行过滤'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '针对文件内容进行过滤  — Linux 运维概念',
-    description: `针对文件内容进行过滤 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '针脚数',
-    keywords: ['针脚数'],
-    category: '计算机基础',
-    level: 'beginner',
-    core: false,
-    summary: '针脚数  — Linux 运维概念',
-    description: `针脚数 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '链接文件',
-    keywords: ['链接文件'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '链接文件  — Linux 运维概念',
-    description: `链接文件 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '错误示范',
-    keywords: ['错误示范'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '错误示范  — Linux 运维概念',
-    description: `错误示范 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '错误输出',
-    keywords: ['错误输出'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '错误输出  — Linux 运维概念',
-    description: `错误输出 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '附加组',
-    keywords: ['附加组'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '附加组  — Linux 运维概念',
-    description: `附加组 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '随机箱赠送',
-    keywords: ['随机箱赠送'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '随机箱赠送  — Linux 运维概念',
-    description: `随机箱赠送 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '非常见类型',
-    keywords: ['非常见类型'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '非常见类型  — Linux 运维概念',
-    description: `非常见类型 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '高级权限的类型',
-    keywords: ['高级权限的类型'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '高级权限的类型  — Linux 运维概念',
-    description: `高级权限的类型 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '默认情况',
-    keywords: ['默认情况'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '默认情况  — Linux 运维概念',
-    description: `默认情况 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: '默认是用户名',
-    keywords: ['默认是用户名'],
-    category: 'Linux',
-    level: 'beginner',
-    core: false,
-    summary: '默认是用户名  — Linux 运维概念',
-    description: `默认是用户名 是 Linux 运维中的重要概念，详情请参考课程章节内容。`
-  },
-  {
-    term: 'AMD',
-    keywords: ['amd'],
     category: '计算机基础',
     level: 'beginner',
     summary: '半导体公司，生产 Ryzen 和 EPYC 系列 CPU',
@@ -1813,8 +319,139 @@ const knowledgeDB: KnowledgeEntry[] = [
     level: 'beginner',
     summary: 'Qualcomm，手机和 ARM 架构芯片的主要厂商',
     description: `Qualcomm，手机和 ARM 架构芯片的主要厂商`
+  },
+  {
+    term: 'PATH 环境变量',
+    keywords: ['PATH', '环境变量PATH', '命令查找路径'],
+    category: 'Linux',
+    level: 'beginner',
+    core: true,
+    summary: 'PATH 决定 Shell 到哪些目录里查找可执行命令',
+    description: `PATH 是一组用冒号分隔的目录列表。你输入 ls、docker、python 这类命令时，Shell 会按 PATH 的顺序逐个目录查找可执行文件。命令找不到、执行到了错误版本、自己写的脚本无法直接运行，很多都和 PATH 有关。`,
+    related: ['export', 'which', 'env'],
+    tips: '用 echo $PATH 查看当前查找路径，用 which 命令确认实际执行的是哪个程序。'
+  },
+  {
+    term: 'inode',
+    keywords: ['inode', '索引节点', 'df -i'],
+    category: 'Linux',
+    level: 'intermediate',
+    core: true,
+    summary: 'inode 保存文件元数据和数据块指针，不保存文件名',
+    description: `inode 是 Linux 文件系统中的索引节点，保存权限、所有者、大小、时间戳和数据块位置等元数据。文件名保存在目录项里，所以硬链接可以让多个文件名指向同一个 inode。磁盘空间没满但无法创建文件时，可能是 inode 用尽。`,
+    related: ['硬链接', 'stat', 'df'],
+    tips: '用 stat file 查看 inode 详细信息，用 df -i 查看 inode 使用率。'
+  },
+  {
+    term: '软链接与硬链接',
+    keywords: ['软链接', '硬链接', '符号链接', 'symbolic link', 'hard link'],
+    category: 'Linux',
+    level: 'beginner',
+    core: true,
+    summary: '软链接像快捷方式，硬链接是同一 inode 的多个文件名',
+    description: `软链接保存的是目标路径，可以跨文件系统，也可以指向目录；目标被删除后软链接会失效。硬链接直接指向同一个 inode，不能跨文件系统，通常也不能给目录创建硬链接。运维中更常用软链接管理版本目录和配置入口。`,
+    related: ['ln', 'inode'],
+    tips: '用 ln -s target link 创建软链接，用 ls -l 查看链接指向。'
+  },
+  {
+    term: 'FHS 文件系统层级',
+    keywords: ['FHS', '/etc', '/var', '/usr', '/opt', '文件系统层级'],
+    category: 'Linux',
+    level: 'beginner',
+    core: true,
+    summary: 'FHS 约定 Linux 关键目录分别存放配置、日志、程序和数据',
+    description: `FHS（Filesystem Hierarchy Standard）帮助你理解 Linux 目录职责：/etc 放系统配置，/var 放日志和可变数据，/usr 放系统软件和共享资源，/opt 常放第三方应用，/home 放普通用户数据，/tmp 放临时文件。理解这些目录能显著提升排障效率。`,
+    related: ['绝对路径', '相对路径'],
+    tips: '排查服务时通常先看 /etc 下的配置，再看 /var/log 下的日志。'
+  },
+  {
+    term: '通配符 glob',
+    keywords: ['glob', '通配符', '文件名通配', '模式匹配'],
+    category: 'Shell',
+    level: 'beginner',
+    core: true,
+    summary: 'glob 是 Shell 在执行命令前展开文件名的匹配规则',
+    description: `通配符由 Shell 先展开，再把结果交给命令执行。* 匹配任意长度字符，? 匹配单个字符，[abc] 匹配指定字符集合。它常用于批量查看、移动、删除文件，但 rm *.log 这类命令需要格外谨慎。`,
+    related: ['rm', 'find'],
+    tips: '执行危险操作前先用 ls *.log 确认匹配结果，再换成 rm。'
+  },
+  {
+    term: 'sudo 机制',
+    keywords: ['sudo机制', 'sudoers', '/etc/sudoers', '提权'],
+    category: 'Linux',
+    level: 'beginner',
+    core: true,
+    summary: 'sudo 根据 sudoers 策略临时授予用户执行高权限命令的能力',
+    description: `sudo 不是简单的“变成 root”，而是根据 /etc/sudoers 或 /etc/sudoers.d/ 中的规则，判断用户能否以指定身份执行某条命令。sudo 会记录审计日志，并通常缓存一小段时间的认证状态。生产环境应避免直接共享 root 密码，而是用普通账号 + sudo 控制权限。`,
+    related: ['sudo', '用户管理'],
+    tips: '编辑 sudoers 应使用 visudo，它会做语法检查，避免写错导致无法提权。'
+  },
+  {
+    term: '特殊权限位',
+    keywords: ['SUID', 'SGID', 'Sticky Bit', 'suid', 'sgid', 'sticky'],
+    category: 'Linux',
+    level: 'intermediate',
+    core: true,
+    summary: 'SUID、SGID、Sticky Bit 是 rwx 之外的高级权限控制',
+    description: `SUID 让可执行文件运行时临时获得文件所有者权限，典型例子是 passwd；SGID 让程序以所属组权限运行，或让目录中新文件继承目录所属组；Sticky Bit 常用于 /tmp，允许多人写入但只能删除自己的文件。`,
+    related: ['chmod', '权限管理'],
+    tips: '用 ls -l 可看到 s、S、t、T 标记；生产中不要随意给脚本或可写目录设置 SUID。'
+  },
+  {
+    term: 'systemd unit',
+    keywords: ['systemd', 'unit', 'service unit', 'systemd unit', 'journalctl'],
+    category: 'Linux',
+    level: 'intermediate',
+    core: true,
+    summary: 'systemd 用 unit 描述服务、挂载、定时器等系统资源',
+    description: `systemd 是现代 Linux 常见的系统和服务管理器。unit 是它的管理对象，常见类型包括 .service、.socket、.timer、.mount、.target。systemctl 管理 unit 状态，journalctl 查看 systemd 收集的日志。`,
+    related: ['systemctl', 'journalctl'],
+    tips: '排查服务常用三连：systemctl status 服务名、journalctl -u 服务名、systemctl cat 服务名。'
+  },
+  {
+    term: 'Linux 信号',
+    keywords: ['SIGTERM', 'SIGKILL', 'SIGHUP', '信号机制', 'kill信号'],
+    category: 'Linux',
+    level: 'beginner',
+    core: true,
+    summary: '信号是内核和进程之间传递控制事件的机制',
+    description: `Linux 信号用于通知进程发生了某类事件。SIGTERM 请求进程正常退出，SIGKILL 强制终止且无法被捕获，SIGHUP 常用于让守护进程重新加载配置。kill 命令本质上就是向进程发送信号。`,
+    related: ['kill', '进程'],
+    tips: '优先用 kill PID 或 systemctl stop，让程序有机会清理资源；最后才用 kill -9。'
+  },
+  {
+    term: '守护进程 daemon',
+    keywords: ['daemon', '守护进程', '后台服务'],
+    category: 'Linux',
+    level: 'beginner',
+    core: true,
+    summary: '守护进程是在后台长期运行、提供系统或网络能力的进程',
+    description: `守护进程通常不依赖交互式终端，随系统启动，在后台持续提供服务，例如 sshd、nginx、cron、dockerd。现代 Linux 通常由 systemd 负责启动、停止、重启和监督这些服务。`,
+    related: ['systemd unit', 'systemctl'],
+    tips: '服务异常时先看 systemctl status，再看 journalctl -u 对应服务。'
+  },
+  {
+    term: 'Heredoc',
+    keywords: ['Heredoc', '<<EOF', 'EOF', '多行写入'],
+    category: 'Shell',
+    level: 'beginner',
+    core: true,
+    summary: 'Heredoc 用 <<EOF 这类语法向命令传入多行文本',
+    description: `Heredoc 是 Shell 的多行输入语法，常用于生成配置文件、写入脚本片段或通过 ssh 执行多行远程命令。它不是一个独立命令，而是一种把多行文本作为标准输入传给命令的方式。`,
+    related: ['tee', 'cat', '重定向'],
+    tips: '写系统文件时常用 sudo tee file <<EOF，而不是 sudo echo ... > file，因为重定向发生在当前普通用户 Shell 中。'
+  },
+  {
+    term: 'DNS 解析流程',
+    keywords: ['DNS', '域名解析', '递归查询', '权威 DNS'],
+    category: '网络',
+    level: 'beginner',
+    core: true,
+    summary: 'DNS 把域名解析成 IP，是访问网站和服务发现的基础',
+    description: `DNS 解析通常会先查本机缓存和 hosts，再询问递归解析器；递归解析器必要时依次向根域、顶级域、权威 DNS 查询，最终返回记录。排查域名问题时要区分“解析不到”“解析到错误 IP”和“解析正确但网络不通”。`,
+    related: ['dig', 'nslookup', 'ping'],
+    tips: '先用 dig 域名 看解析结果，再用 curl -v 或 ping 判断服务连通性。'
   }
-
 ]
 
 export interface KnowledgeMatch {
@@ -1824,25 +461,45 @@ export interface KnowledgeMatch {
 
 /**
  * 在文本中查找所有匹配的知识点
+ *
+ * 短关键词（纯 ASCII 且长度 ≤4，如 ps/bg/fg/amd/e5）用单词边界匹配，
+ * 避免在 "config"/"specs"/"maps" 等无关单词子串上误命中；
+ * 其余关键词（含中文或较长术语）保持 includes 子串匹配。
  */
 export function findKnowledgeTerms(text: string): KnowledgeMatch[] {
   if (!text || text.length < 2) return []
   const results: KnowledgeMatch[] = []
   const seen = new Set<string>()
 
+  const lowerText = text.toLowerCase()
+
   for (const entry of knowledgeDB) {
     for (const kw of entry.keywords) {
-      if (text.toLowerCase().includes(kw.toLowerCase())) {
-        if (!seen.has(entry.term)) {
-          seen.add(entry.term)
-          results.push({ entry, matchedTerm: kw })
-        }
+      const lkw = kw.toLowerCase()
+      // 短 ASCII 关键词（如 ps/bg/fg/amd/e5）用单词边界匹配，
+      // 避免在 "config"/"specs"/"maps" 等无关单词子串上误命中；
+      // 含中文或较长的关键词保持 includes 子串匹配。
+      const matched = isShortAsciiKeyword(lkw)
+        ? new RegExp(`\\b${escapeRegExp(lkw)}\\b`).test(lowerText)
+        : lowerText.includes(lkw)
+      if (matched && !seen.has(entry.term)) {
+        seen.add(entry.term)
+        results.push({ entry, matchedTerm: kw })
         break
       }
     }
   }
 
   return results
+}
+
+/** 短 ASCII 关键词：纯字母数字且长度 ≤4，需要单词边界约束以减少误标 */
+function isShortAsciiKeyword(kw: string): boolean {
+  return kw.length > 0 && kw.length <= 4 && /^[a-z0-9]+$/.test(kw)
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /**

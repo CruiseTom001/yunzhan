@@ -279,4 +279,18 @@ export const questions: QuizQuestion[] = [
     explanation: '在 CI/CD 领域，"配置即代码"的核心体现是将流水线定义文件（Jenkinsfile、.gitlab-ci.yml、GitHub Actions yml 等）纳入版本控制系统。这使得流水线的变更具有可追溯性、可通过代码审查（Code Review）来保证质量、支持分支策略（如不同分支不同流水线），实现了 Pipeline as Code。',
     difficulty: 'intermediate',
   },
+  {
+    id: 'cicd-021',
+    categoryId: 'cicd',
+    type: 'single',
+    question: '构建产物证明（Artifact Attestation）主要解决什么问题？',
+    options: [
+      { id: 'a', text: '证明产物来自预期仓库、工作流和提交，提升供应链可追溯性', isCorrect: true },
+      { id: 'b', text: '保证产物没有任何漏洞', isCorrect: false },
+      { id: 'c', text: '自动把所有测试失败的流水线修复成功', isCorrect: false },
+      { id: 'd', text: '替代镜像仓库保存构建产物', isCorrect: false },
+    ],
+    explanation: 'Artifact Attestation 关注产物来源和构建过程证明，例如产物由哪个仓库、哪个 workflow、哪次 commit 构建。它不能直接证明没有漏洞，因此仍需要配合漏洞扫描、SBOM、最小权限和发布审批。',
+    difficulty: 'intermediate',
+  },
 ]

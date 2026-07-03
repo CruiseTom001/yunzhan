@@ -21,14 +21,19 @@ const loading = ref(true)
 const chapterContent = ref('')
 const labEditorContent = ref('')
 
+// 竞态保护：快速切换课程时（A→B→C），getCourse 是懒加载 async import，
+// 慢请求返回后会覆盖最新课程。用 courseLoadSeq 确保只有最新请求生效。
+let courseLoadSeq = 0
 watch(() => route.params.id, async (idParam) => {
   const id = Array.isArray(idParam) ? idParam[0] : idParam
   if (id) {
+    const mySeq = ++courseLoadSeq
     loading.value = true
     course.value = null
     chapterContent.value = ''
     labEditorContent.value = ''
     const data = await getCourse(id)
+    if (mySeq !== courseLoadSeq) return // 已被更新的请求取代
     course.value = data ?? null
     // 记录最近访问的课程
     progressStore.updateLastVisited(id)
@@ -63,20 +68,29 @@ const showConfigWorkbench = computed(() =>
 )
 
 // 加载章节内容（优先 .md 文件，其次 inline content）
+//
+// 竞态保护：用户快速切换章节（ch1→ch2→ch3）会触发多次 loadContent，
+// 每次各自 await。若不加保护，慢的请求（旧章节）resolve 后会覆盖最新章节内容。
+// 用 loadSeq 序号确保只有最后一次请求的结果才会写入 chapterContent。
+let loadSeq = 0
 async function loadContent() {
   if (!course.value || !currentChapter.value) return
   const ch = currentChapter.value
+  const mySeq = ++loadSeq
   if (ch.contentFile) {
     try {
       const md = await loadChapterContent(course.value.id, ch.index)
+      if (mySeq !== loadSeq) return // 已被更新的请求取代
       chapterContent.value = md || ch.content || '（内容加载中...）'
     } catch (e) {
+      if (mySeq !== loadSeq) return
       console.warn('[CourseDetail] .md 加载失败，使用内联内容:', e)
       chapterContent.value = ch.content
     }
   } else {
     chapterContent.value = ch.content
   }
+  if (mySeq !== loadSeq) return
   labEditorContent.value = createWorkbenchTemplate()
 }
 

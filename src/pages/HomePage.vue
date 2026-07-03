@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, BookOpen, PenTool, BarChart3, Terminal, Zap, Shield, Cloud, ChevronRight, Play, Lock, Unlock } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
-import type { Difficulty } from '@/types'
+import { getCourseIconChar } from '@/data/courseIcons'
+import type { Difficulty, CourseIcon } from '@/types'
 import ParticleBg from '@/components/common/ParticleBg.vue'
 import { useProgressStore } from '@/stores/progress'
 
@@ -12,17 +13,26 @@ const progressStore = useProgressStore()
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
 const activePhase = ref(0)
+let typeTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   let i = 0
-  const interval = setInterval(() => {
+  typeTimer = setInterval(() => {
     if (i <= fullText.length) {
       typedText.value = fullText.slice(0, i)
       i++
-    } else {
-      clearInterval(interval)
+    } else if (typeTimer) {
+      clearInterval(typeTimer)
+      typeTimer = null
     }
   }, 80)
+})
+
+onUnmounted(() => {
+  if (typeTimer) {
+    clearInterval(typeTimer)
+    typeTimer = null
+  }
 })
 
 const totalCourses = courseIndex.length
@@ -95,18 +105,8 @@ function getPhaseProgress(step: typeof roadmapSteps[0]) {
 interface CourseMeta {
   id: string
   title: string
-  icon: string
+  icon: CourseIcon
   chapterCount: number
-}
-const iconMap: Record<string, string> = {
-  Terminal: '>_', Network: '#', Server: '@', Database: 'DB', Zap: '⚡',
-  Box: '⬡', Ship: '☸', GitBranch: '⎇', Eye: '◎', Cog: '⚙',
-  FileText: '¶', Shield: '♦', Cloud: '☁', CloudLightning: '☈',
-  RefreshCw: '↻', Monitor: '⊞', Code: '</>', Layers: '▤',
-}
-
-function getIcon(iconName: string): string {
-  return iconMap[iconName] || '●'
 }
 
 const lastVisitedCourse = computed<CourseMeta | null>(() => {
@@ -261,7 +261,7 @@ const termLines = computed(() => [
           class="group flex items-center gap-4 w-full text-left"
         >
           <div class="w-12 h-12 rounded-lg bg-cyan-400/10 border border-cyan-400/15 flex items-center justify-center font-mono text-cyan-400 text-lg flex-shrink-0">
-            {{ getIcon(lastVisitedCourse.icon) }}
+            {{ getCourseIconChar(lastVisitedCourse.icon) }}
           </div>
           <div class="flex-1 min-w-0">
             <div class="text-white font-semibold text-sm group-hover:text-cyan-400 transition-colors truncate">

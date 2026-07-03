@@ -279,4 +279,18 @@ export const questions: QuizQuestion[] = [
     explanation: '`kubectl drain` 用于在节点维护前安全地清空节点。它会先将节点标记为不可调度（cordon），然后逐步驱逐（evict）所有 Pod，使其被重新调度到其他可用节点。对于不受 ReplicaSet/Deployment 等控制器管理的独立 Pod，默认会拒绝驱逐（可用 `--force` 强制执行但有数据丢失风险）。完成后使用 `kubectl uncordon` 恢复调度。',
     difficulty: 'advanced',
   },
+  {
+    id: 'kubernetes-021',
+    categoryId: 'kubernetes',
+    type: 'single',
+    question: 'Gateway API 中，哪个资源最适合由应用团队维护，用来声明域名、路径和后端 Service？',
+    options: [
+      { id: 'a', text: 'HTTPRoute', isCorrect: true },
+      { id: 'b', text: 'GatewayClass', isCorrect: false },
+      { id: 'c', text: 'StorageClass', isCorrect: false },
+      { id: 'd', text: 'Node', isCorrect: false },
+    ],
+    explanation: 'Gateway API 将职责拆开：GatewayClass 描述网关实现类型，Gateway 通常由平台团队维护，HTTPRoute 则由应用团队声明域名、路径匹配、Header 匹配、后端 Service 和权重等路由规则。',
+    difficulty: 'advanced',
+  },
 ]

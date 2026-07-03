@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const canvas = ref<HTMLCanvasElement | null>(null)
 let animId = 0
+let resizeHandler: (() => void) | null = null
 
 onMounted(() => {
   const c = canvas.value
@@ -10,12 +11,12 @@ onMounted(() => {
   const ctx = c.getContext('2d')
   if (!ctx) return
 
-  function resize() {
+  resizeHandler = () => {
     c!.width = window.innerWidth
     c!.height = window.innerHeight
   }
-  resize()
-  window.addEventListener('resize', resize)
+  resizeHandler()
+  window.addEventListener('resize', resizeHandler)
 
   const particles: { x: number; y: number; vx: number; vy: number; size: number; alpha: number }[] = []
   for (let i = 0; i < 80; i++) {
@@ -71,6 +72,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(animId)
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+    resizeHandler = null
+  }
 })
 </script>
 

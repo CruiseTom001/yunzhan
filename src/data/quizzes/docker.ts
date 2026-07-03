@@ -279,4 +279,18 @@ export const questions: QuizQuestion[] = [
     explanation: '将 `apt-get update` 和 `apt-get install` 分开写在两个 RUN 指令中，会导致一个常见问题：如果仅修改了 install 行，Docker 会复用之前 `apt-get update` 层的缓存，从而可能使用过期的软件包索引，导致安装失败或安装旧版本。合并后还能减少镜像层数。推荐写法：`RUN apt-get update && apt-get install -y package && rm -rf /var/lib/apt/lists/*`',
     difficulty: 'intermediate',
   },
+  {
+    id: 'docker-021',
+    categoryId: 'docker',
+    type: 'single',
+    question: 'Docker Compose Watch 中，源码变化但依赖没有变化时，通常最适合使用哪种 action？',
+    options: [
+      { id: 'a', text: 'sync，将源码同步到容器并交给框架热更新', isCorrect: true },
+      { id: 'b', text: 'rebuild，每保存一次源码都重建镜像', isCorrect: false },
+      { id: 'c', text: 'remove，删除容器后重新创建', isCorrect: false },
+      { id: 'd', text: 'publish，直接发布到镜像仓库', isCorrect: false },
+    ],
+    explanation: 'Compose Watch 的 `sync` 适合源码、模板、静态资源等频繁变化的文件；依赖文件、Dockerfile 或系统包变化时才应使用 `rebuild`。这样既保持容器化开发环境，又避免每次保存都触发完整镜像构建。',
+    difficulty: 'intermediate',
+  },
 ]

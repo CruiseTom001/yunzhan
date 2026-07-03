@@ -12,6 +12,14 @@ const progressStore = useProgressStore()
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let currentLine = ''
+let mounted = true
+const pendingTimers: ReturnType<typeof setTimeout>[] = []
+
+function defer(fn: () => void, ms: number) {
+  const id = setTimeout(fn, ms)
+  pendingTimers.push(id)
+  return id
+}
 
 function writePrompt() {
   terminal?.write('\x1b[1;32m$\x1b[0m ')
@@ -69,8 +77,9 @@ function handleResize() {
 }
 
 onMounted(async () => {
-  await new Promise(resolve => setTimeout(resolve, 100))
-  if (!terminalEl.value) return
+  await new Promise(resolve => defer(() => resolve(null), 100))
+  // 等待期间组件可能已卸载（用户快速切走路由）
+  if (!mounted || !terminalEl.value) return
 
   terminal = new Terminal({
     cursorBlink: true,
@@ -104,7 +113,7 @@ onMounted(async () => {
   fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
   terminal.open(terminalEl.value)
-  setTimeout(handleResize, 50)
+  defer(handleResize, 50)
 
   for (const line of sandboxWelcomeLines) {
     terminal.writeln(line)
@@ -116,8 +125,12 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  mounted = false
   window.removeEventListener('resize', handleResize)
+  for (const id of pendingTimers) clearTimeout(id)
+  pendingTimers.length = 0
   terminal?.dispose()
+  terminal = null
 })
 </script>
 

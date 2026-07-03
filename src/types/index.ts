@@ -1,8 +1,35 @@
+/**
+ * 课程图标名（对应 lucide-vue-next 的图标组件名）
+ *
+ * 收窄为联合类型：新增课程时若用了未登记的图标名，TS 会编译报错，
+ * 提醒同步更新 src/data/courseIcons.ts 的映射表，避免静默回退到兜底符号。
+ */
+export type CourseIcon =
+  | 'Monitor'
+  | 'GitBranch'
+  | 'Code'
+  | 'Layers'
+  | 'Terminal'
+  | 'Network'
+  | 'Server'
+  | 'Database'
+  | 'Zap'
+  | 'Box'
+  | 'Ship'
+  | 'Eye'
+  | 'Cog'
+  | 'FileText'
+  | 'Shield'
+  | 'Cloud'
+  | 'CloudLightning'
+  | 'RefreshCw'
+  | 'Rocket'
+
 export interface Course {
   id: string
   title: string
   description: string
-  icon: string
+  icon: CourseIcon
   difficulty: 'beginner' | 'intermediate' | 'advanced'
   category: string
   chapters: Chapter[]
@@ -118,6 +145,7 @@ export interface LearningProgress {
   quizRecords: Record<string, QuizRecord>
   achievements: string[]
   lastVisited: string
+  lastRoute: string
   totalTimeSpent: number
   bookmarks: Bookmark[]
   studyDays: string[]

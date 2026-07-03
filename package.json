@@ -9,13 +9,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "prebuild": "node scripts/check-chapter-counts.cjs",
     "build:fast": "vite build",
+    "prebuild:fast": "node scripts/check-chapter-counts.cjs",
     "preview": "vite preview",
     "check": "vue-tsc -b",
     "lint": "eslint . --ext .ts,.vue",
     "lint:fix": "eslint . --ext .ts,.vue --fix",
     "electron:dev": "vite build && electron .",
-    "electron:build": "vite build && electron-builder",
+    "electron:build": "vite build && electron-builder --dir",
+    "electron:installer": "vite build && electron-builder --win nsis",
     "electron:start": "electron ."
   },
   "build": {
@@ -39,6 +42,14 @@
         }
       ],
       "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "云栈",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [
