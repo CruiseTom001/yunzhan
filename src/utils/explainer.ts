@@ -1037,6 +1037,230 @@ const explainDB: Record<string, CommandExplanation> = {
       'git log --oneline          # 查看提交历史',
     ],
   },
+
+  // ========== 端口与文件占用排查 ==========
+  lsof: {
+    command: 'lsof',
+    summary: '列出打开的文件（端口、套接字都被视为文件）',
+    description: 'lsof（List Open Files）可以告诉你"哪个进程占用了哪个端口/文件"。在 Linux 里"一切皆文件"，所以端口、unix socket、管道都能查到归属。排查"端口被占""无法卸载因文件被占"问题时是终极工具。',
+    options: {
+      '-i': '按网络地址过滤（:端口、@host、tcp/udp）',
+      '-P': '禁止把端口号翻译成服务名（按数字显示，更准）',
+      '-n': '禁止把 IP 反解为域名（速度快）',
+      '-u': '按用户名过滤',
+      '+D': '递归查目录下哪些文件被某进程打开',
+    },
+    examples: [
+      'lsof -i :80              # 看 80 端口被谁占用',
+      'lsof -iTCP -sTCP:LISTEN -P -n  # 列所有 TCP 监听',
+      'lsof +D /var/log        # 看谁在写 /var/log（无法 umount 时诊断）',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=linux%20lsof%20%E5%91%BD%E4%BB%A4',
+    demoTitle: '搜索 lsof 命令教程',
+  },
+  // ========== systemd 日志 ==========
+  journalctl: {
+    command: 'journalctl',
+    summary: '查询 systemd 收集的统一日志',
+    description: 'journalctl 是 systemd 自带的日志查看工具，集中收集内核、systemd unit、用户登录等日志，无需四处找 /var/log/xxx。比 tail -f /var/log/syslog 更结构化，可按时间、服务、优先级、启动序号精确过滤。systemctl 管状态、journalctl 看日志，是 systemd 双子星。',
+    options: {
+      '-u': '只看指定 unit 的日志',
+      '--since': '按时间起点过滤（支持 "1 hour ago" / "today" / "2026-07-01"）',
+      '--until': '按时间终点过滤',
+      '-p': '按优先级过滤（err/warning/info，数字 0-7）',
+      '-f': '持续跟踪（类似 tail -f）',
+      '-b': '只看本次启动以来的日志（-b -1 看上次启动）',
+      '-n': '只显示最近 N 条',
+    },
+    examples: [
+      'journalctl -u nginx -f                 # 实时跟踪 nginx 服务日志',
+      'journalctl -p err --since "1 hour ago" # 看最近 1 小时的错误日志',
+      'journalctl -b -1 -u sshd               # 看上次启动期间 sshd 的日志',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=journalctl%20%E6%97%A5%E5%BF%97',
+    demoTitle: '搜索 journalctl 教程',
+  },
+  // ========== 性能监控（sysstat） ==========
+  iostat: {
+    command: 'iostat',
+    summary: '查看磁盘 I/O 与 CPU 统计',
+    description: 'iostat 来自 sysstat 包，按设备报告读写速率、IOPS、await（每次 I/O 平均耗时）、%util（设备忙碌比例），是排查"磁盘慢/IO 高"的首选。await 大说明磁盘响应慢，%util 高说明设备接近饱和。',
+    options: {
+      '-x': '显示扩展统计（含 await、%util，运维必用）',
+      '-d': '只显示设备，不显示 CPU',
+      '-c': '只显示 CPU',
+      '-m': '以 MB/s 而非 KB/s 显示',
+    },
+    examples: [
+      'iostat -x 2           # 每 2 秒输出扩展 I/O 统计',
+      'iostat -x 1 5         # 共输出 5 次后退出',
+      'iostat -dm -x sda sdb # 只看 sda/sdb，单位 MB',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=linux%20iostat',
+    demoTitle: '搜索 iostat 教程',
+  },
+  vmstat: {
+    command: 'vmstat',
+    summary: '查看虚拟内存与进程上下文切换',
+    description: 'vmstat 一次输出能看 CPU（用户/系统/idle）、内存（swap/空闲/缓冲）、进程（运行/睡眠/阻塞）、IO（bi/bo 块读写）。r 列持续大于 CPU 核数通常意味着 CPU 紧张；si/so 持续大于 0 说明正在换页（内存不足）。',
+    examples: [
+      'vmstat 2 5      # 每 2 秒采样 5 次',
+      'vmstat -a 1     # 持续看 active/inactive 内存',
+      'vmstat -s       # 以事件计数形式汇总显示',
+    ],
+  },
+  // ========== 定时任务 ==========
+  crontab: {
+    command: 'crontab',
+    summary: '管理用户级定时任务',
+    description: 'crontab 编辑当前用户的定时任务表。每行格式 分 时 日 月 周 命令，5 个时间字段用 * 表示"任意"。定时任务常用于日志清理、备份、健康检查。系统级定时任务通过 /etc/crontab 或 /etc/cron.* 目录管理，需 root 权限。',
+    options: {
+      '-e': '编辑当前用户的 crontab',
+      '-l': '列出当前用户的 crontab',
+      '-r': '删除当前用户的 crontab（谨慎）',
+      '-u user': '指定用户（需 root 权限）',
+      '-i': '删除前确认提示（与 -r 配合）',
+    },
+    examples: [
+      'crontab -l                          # 查看我的定时任务',
+      'crontab -e                          # 编辑（默认编辑器）',
+      '0 2 * * * /opt/backup.sh            # 每天 2:00 执行备份',
+      '*/5 * * * * /usr/local/bin/health-check  # 每 5 分钟跑一次',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=crontab%20%E5%AE%9A%E6%97%B6%E4%BB%BB%E5%8A%A1',
+    demoTitle: '搜索 crontab 定时任务',
+  },
+  // ========== 远程同步 ==========
+  rsync: {
+    command: 'rsync',
+    summary: '高效的远程/本地文件同步（增量）',
+    description: 'rsync 通过对比源和目标的文件大小+修改时间，只传输变化的部分，因此同步大目录只需几秒。是运维做服务器间同步、备份、发布的首选，远比 scp 复制全量高效。同时保留权限、软链接、时间戳。',
+    options: {
+      '-a': '归档模式，相当于 -rlptgoD（保留权限/链接/时间等，最常用）',
+      '-v': '显示传输的文件列表',
+      '-z': '传输时压缩',
+      '-P': '显示进度并支持断点续传（断网后可继续）',
+      '--delete': '删除目标里源已不存在的文件（镜像式同步，慎用）',
+      '-e ssh': '指定使用的远程 shell（默认就是 ssh）',
+      '-n': 'dry-run，只看不传（验证 --delete 用）',
+    },
+    examples: [
+      'rsync -avz /data/ backup@host:/backup/        # 增量同步到远程',
+      'rsync -avP --delete src/ dest/                # 镜像同步并显示进度',
+      'rsync -avzn --delete src/ dest/               # 预演：会被删除哪些文件',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=rsync%20%E5%90%8C%E6%AD%A5',
+    demoTitle: '搜索 rsync 同步教程',
+  },
+  // ========== DNS 排查 ==========
+  dig: {
+    command: 'dig',
+    summary: 'DNS 查询工具（推荐）',
+    description: 'dig（Domain Information Groper）查询 DNS 记录，输出比 nslookup 更清晰，是排查"域名解析不了"、验证 TTL、查 TXT/SPF/MX 记录的首选。bind-utils/dnsutils 包提供。',
+    options: {
+      '+short': '只输出最简结果（适合脚本）',
+      '@8.8.8.8': '指定查询的 DNS 服务器',
+      'A/MX/TXT/NS/CNAME': '指定记录类型',
+      '-x': '反向查询（IP 转域名）',
+      '+trace': '从根开始递归查询，显示完整解析路径',
+    },
+    examples: [
+      'dig example.com                    # 查 A 记录',
+      'dig @8.8.8.8 example.com +short    # 用 Google DNS 只查结果',
+      'dig MX gmail.com                   # 查 Gmail 的 MX 记录',
+      'dig +trace example.com             # 看完整递归解析过程',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=linux%20dig%20%E5%91%BD%E4%BB%A4',
+    demoTitle: '搜索 dig 命令教程',
+  },
+  nslookup: {
+    command: 'nslookup',
+    summary: '交互/一次性 DNS 查询工具',
+    description: 'nslookup 比 dig 交互友好，支持进入交互模式连续查询。在新系统上推荐用 dig/host 替代，但 nslookup 仍几乎所有系统预装，做应急 DNS 验证很方便。',
+    examples: [
+      'nslookup example.com                # 默认 DNS 查询',
+      'nslookup example.com 8.8.8.8        # 指定 DNS 服务器',
+      'nslookup -type=MX gmail.com         # 查 MX 记录',
+    ],
+  },
+  // ========== 网络链路诊断 ==========
+  traceroute: {
+    command: 'traceroute',
+    summary: '追踪到目标的网络路径',
+    description: 'traceroute 利用 TTL 递增的 ICMP/UDP 包，让路径上每一跳路由器返回"超时"消息，从而还原源到目标经过的所有路由节点。是"为什么连不上/为什么这么慢"的核心诊断工具。Linux 装 traceroute 包。',
+    options: {
+      '-n': '不把 IP 反解为域名（速度快、可读）',
+      '-T': '用 TCP SYN 探测（穿透防火墙/排查 80/443 链路）',
+      '-p': '指定目标端口',
+      '-w': '每跳等待秒数',
+      '-m': '最大跳数（默认 30）',
+    },
+    examples: [
+      'traceroute -n 8.8.8.8              # 看 DNS 服务器路径',
+      'traceroute -T -p 443 github.com    # 用 TCP 看到 443 的链路',
+      'traceroute -n -w 1 example.com      # 缩短每跳等待时间',
+    ],
+  },
+  mtr: {
+    command: 'mtr',
+    summary: 'traceroute + ping 持续监控',
+    description: 'mtr（My Traceroute）合并 traceroute 和 ping：实时刷新每一跳的丢包率和延迟统计，是分析和可视化网络链路最直观的工具。Ctrl+C 退出后输出汇总。',
+    options: {
+      '-n': '不反解 IP 为域名，加快输出',
+      '-c N': '发 N 个包后自动退出（脚本用）',
+      '-r': '一次抽样模式（不刷新，适合脚本）',
+      '-T': '用 TCP 探测（配合 -P 指定端口）',
+      '-i': '发包间隔秒数',
+    },
+    examples: [
+      'mtr 8.8.8.8                  # 持续诊断到 DNS',
+      'mtr -n -c 100 example.com    # 发 100 个包汇总输出',
+      'sudo mtr -T -P 443 github.com # 用 TCP 443 诊断 GitHub 链路',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=linux%20mtr%20%E7%BD%91%E7%BB%9C%E8%AF%8A%E6%96%AD',
+    demoTitle: '搜索 mtr 网络诊断',
+  },
+  // ========== 现代网络配置 ==========
+  ip: {
+    command: 'ip',
+    summary: '现代网络配置（替代 ifconfig/route）',
+    description: 'ip 来自 iproute2 包，是 ifconfig、route、arp 的现代替代品，几乎所有 Linux 自带。运维中 ip a（看地址）、ip route（看路由）、ip link（管网卡）是日常三连。netstat/ss 看端口，ip 看网卡，分工清晰。',
+    options: {
+      'addr/a': '查看/管理 IP 地址',
+      'link/l': '查看/管理链路层（网卡 up/down）',
+      'route/r': '查看/管理路由表',
+      '-br': '简洁一行显示（如 ip -br a）',
+    },
+    examples: [
+      'ip -br a                       # 一行看所有网卡地址',
+      'ip route                       # 看默认路由',
+      'ip link set eth0 down/up       # 关闭/启用网卡',
+      'ip addr add 10.0.0.5/24 dev eth0  # 给网卡加 IP',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=linux%20ip%20%E5%91%BD%E4%BB%A4',
+    demoTitle: '搜索 ip 命令教程',
+  },
+  // ========== 系统调用跟踪 ==========
+  strace: {
+    command: 'strace',
+    summary: '跟踪进程的系统调用',
+    description: 'strace 显示进程发出了哪些系统调用、参数和返回值。是排查"程序卡住/启动失败/读取哪个文件出错"的终极武器。常用于：为什么 sshd 读取某个 ~/.ssh 配置失败、为什么 nginx 崩溃。注意 -p 跟踪运行中进程需 root，且 strace 会让程序明显变慢，只作排查使用。',
+    options: {
+      '-p PID': '附加到运行中的进程',
+      '-f': '跟踪子进程（fork 出来的也算）',
+      '-e file': '只看文件相关调用（最常用过滤器）',
+      '-e network': '只看网络相关调用',
+      '-o file': '输出重定向到文件，不污染终端',
+      '-s N': '字符串截断长度（默认 32，可能不够看出错误信息）',
+    },
+    examples: [
+      'strace -f -e file nginx -t 2>&1 | tail   # 查 nginx -t 读了哪些文件',
+      'sudo strace -p 1234 -e network           # 看 PID 1234 网络调用',
+      'strace -o trace.log -e file ./bin/app     # 启动 app 跟踪并存盘',
+    ],
+    demoUrl: 'https://www.bilibili.com/search?keyword=linux%20strace%20%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8',
+    demoTitle: '搜索 strace 系统调用',
+  },
 }
 
 /**
