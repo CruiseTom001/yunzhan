@@ -4,7 +4,24 @@ const fs = require('fs/promises')
 const path = require('path')
 
 const isDev = !app.isPackaged
-const allowedCommands = new Set(['pwd', 'whoami', 'hostname', 'date', 'ls', 'dir', 'docker'])
+
+// 实验终端白名单：扩为只读/查询类命令集，
+// 让网站讲解的命令能在真实终端跑一遍形成阅读→操作闭环。
+// 故意排除 rm/mv/mkfs/dd/kill -9 等破坏性命令。
+const allowedCommands = new Set([
+  // 信息查看
+  'pwd', 'whoami', 'hostname', 'date', 'id', 'uname', 'uptime', 'echo',
+  // 文件查看（只读）
+  'ls', 'dir', 'cat', 'less', 'head', 'tail', 'stat', 'file', 'wc',
+  // 查找与文本过滤（只读）
+  'find', 'grep', 'which', 'whereis', 'locate',
+  // 进程/资源监控（只读）
+  'ps', 'top', 'free', 'df', 'du',
+  // 网络（只读探测）
+  'ping', 'curl', 'dig', 'nslookup', 'traceroute', 'mtr',
+  // 容器（只读状态）
+  'docker',
+])
 const progressFileName = 'progress.json'
 const backupFileName = 'progress.backup.json'
 
@@ -105,6 +122,12 @@ function registerIpc() {
   ipcMain.handle('progress:save', async (_event, payload) => {
     const { dataDir, progressPath, backupPath, tempPath } = getProgressPaths()
     await fs.mkdir(dataDir, { recursive: true })
+
+    // 深度防御：限制磁盘文件大小，防止异常大的 payload 撑爆 userData
+    const payloadJson = JSON.stringify(payload ?? {})
+    if (payloadJson.length > 10 * 1024 * 1024) {
+      return { ok: false, error: 'payload too large', path: progressPath }
+    }
 
     try {
       await fs.copyFile(progressPath, backupPath)

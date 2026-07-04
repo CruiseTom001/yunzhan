@@ -76,6 +76,14 @@ function handleResize() {
   }
 }
 
+// 与 FloatingTerminal 一致：双 rAF 等布局稳定再 fit，
+// 避免容器尺寸 0 时 fit 把行数算成 0 或留末行被裁。
+function scheduleFit() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => handleResize())
+  })
+}
+
 onMounted(async () => {
   await new Promise(resolve => defer(() => resolve(null), 100))
   // 等待期间组件可能已卸载（用户快速切走路由）
@@ -113,7 +121,7 @@ onMounted(async () => {
   fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
   terminal.open(terminalEl.value)
-  defer(handleResize, 50)
+  scheduleFit()
 
   for (const line of sandboxWelcomeLines) {
     terminal.writeln(line)
@@ -169,5 +177,8 @@ onUnmounted(() => {
   padding: 8px 12px;
   min-height: 280px;
   height: 300px;
+  /* xterm 初始化按 24 行默认渲染，DOM 高度可能短暂大于固定 300px，
+     overflow:hidden 防止末行被裁（与 FloatingTerminal 一致的处理）。 */
+  overflow: hidden;
 }
 </style>

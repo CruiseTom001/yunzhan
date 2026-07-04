@@ -10,6 +10,15 @@ const globalSearch = ref<InstanceType<typeof GlobalSearch> | null>(null)
 const showAI = ref(false)
 const showTerminal = ref(false)
 
+// keep-alive 缓存白名单：
+// - CourseDetailPage：章节阅读含 MarkdownRenderer 的 DOM 注解树、滚动位置，
+//   用户从目录切回详情页时不重新挂载，体验流畅；
+// - CourseListPage：课程列表静态数据，缓存后切回瞬时显示。
+// 不缓存 HomePage：首页统计随 progress 变化，每次进应当反映最新进度。
+// 不缓存 QuizPage/TerminalPage/ProgressPage：这些页面 state 与全局 progress 强绑定，
+// 缓存反而会展示陈旧数据。
+const keepAliveIncludes = ['CourseDetailPage', 'CourseListPage']
+
 function openSearch() {
   globalSearch.value?.open()
 }
@@ -40,7 +49,9 @@ onUnmounted(() => {
     <AppHeader @open-search="openSearch" @toggle-ai="toggleAI" @toggle-terminal="toggleTerminal" />
     <router-view v-slot="{ Component }">
       <transition name="page" mode="out-in">
-        <component :is="Component" />
+        <keep-alive :include="keepAliveIncludes">
+          <component :is="Component" />
+        </keep-alive>
       </transition>
     </router-view>
     <ConceptPopover />

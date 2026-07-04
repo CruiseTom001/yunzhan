@@ -7,6 +7,8 @@ import type { Difficulty } from '@/types'
 import CourseCard from '@/components/common/CourseCard.vue'
 import { useProgressStore } from '@/stores/progress'
 
+defineOptions({ name: 'CourseListPage' })
+
 const router = useRouter()
 const progressStore = useProgressStore()
 const searchQuery = ref('')

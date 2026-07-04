@@ -11,6 +11,8 @@ import { executeSandboxCommand } from '@/utils/terminalSandbox'
 import type { LabTask } from '@/types'
 import type { Course } from '@/types'
 
+defineOptions({ name: 'CourseDetailPage' })
+
 const route = useRoute()
 const router = useRouter()
 const progressStore = useProgressStore()
