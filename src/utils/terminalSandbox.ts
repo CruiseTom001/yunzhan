@@ -22,7 +22,7 @@ export function executeSandboxCommand(command: string): SandboxResult {
         output: [
           '\x1b[1;36m可用命令：\x1b[0m',
           '  ls  pwd  whoami  clear  date  uname  uptime  df  free  ps',
-          '  echo  cat  env  hostname  grep  curl  ping  ss  stat  diff',
+          '  echo  cat  env  hostname  grep  curl  ping  ss  netstat  stat  diff',
           '  sort  uniq  cut  wc  id  useradd  usermod  file  xargs  jobs',
           '  nohup  ulimit',
           '  docker  git  kubectl  systemctl  journalctl',

@@ -19,7 +19,13 @@ const allowedCommands = new Set([
   'ps', 'top', 'free', 'df', 'du',
   // 网络（只读探测）
   'ping', 'curl', 'dig', 'nslookup', 'traceroute', 'mtr',
-  // 容器（只读状态）
+  // systemd 服务查询与日志查看（只读子命令由用户自负）
+  'systemctl', 'journalctl',
+  // Kubernetes 集群只读查询（get/describe/logs 由用户自负）
+  'kubectl',
+  // git 只读子命令（status/log/diff/branch 由用户自负）
+  'git',
+  // 容器（只读状态子命令由用户自负）
   'docker',
 ])
 const progressFileName = 'progress.json'
