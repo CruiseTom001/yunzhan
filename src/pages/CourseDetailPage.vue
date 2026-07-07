@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { defineAsyncComponent, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, FlaskConical, Play, TerminalSquare } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, ArrowRight, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, FlaskConical, Play, RotateCcw, TerminalSquare } from 'lucide-vue-next'
 import { getCourse } from '@/data/courses/all'
 import { useProgressStore } from '@/stores/progress'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue'
 import { loadChapterContent } from '@/utils/contentLoader'
 import { getLabsForChapter } from '@/data/labs'
-import { executeSandboxCommand } from '@/utils/terminalSandbox'
 import type { LabTask } from '@/types'
 import type { Course } from '@/types'
 
@@ -28,6 +27,13 @@ const labEditorContent = ref('')
 let courseLoadSeq = 0
 watch(() => route.params.id, async (idParam) => {
   const id = Array.isArray(idParam) ? idParam[0] : idParam
+  if (!id) {
+    course.value = null
+    chapterContent.value = ''
+    labEditorContent.value = ''
+    loading.value = false
+    return
+  }
   if (id) {
     const mySeq = ++courseLoadSeq
     loading.value = true
@@ -197,17 +203,9 @@ function runLabCommand(command: string) {
 
 function startLab(lab: LabTask) {
   progressStore.startLab(lab.id)
-  const commandsList = lab.steps
-    .map(step => step.command)
-    .filter(Boolean)
-  for (const command of commandsList) {
-    progressStore.recordCommand(command!, simulateLabOutput(command!), 'lab')
-  }
-  labUiRecords.value[lab.id] = progressStore.evaluateLab(lab)
-  const commands = commandsList
-    .join('\n')
-  if (commands) {
-    runLabCommand(commands)
+  const record = progressStore.labRecords[lab.id]
+  if (record) {
+    labUiRecords.value[lab.id] = record
   }
 }
 
@@ -215,12 +213,58 @@ function checkLab(lab: LabTask) {
   labUiRecords.value[lab.id] = progressStore.evaluateLab(lab)
 }
 
+function resetLab(lab: LabTask) {
+  labUiRecords.value[lab.id] = progressStore.resetLab(lab.id)
+}
+
 function labPassed(lab: LabTask) {
   return (labUiRecords.value[lab.id] ?? progressStore.labRecords[lab.id])?.status === 'passed'
 }
 
+function labPassedCount(lab: LabTask) {
+  return lab.checks.filter(check => checkPassed(lab.id, check.id)).length
+}
+
 function checkPassed(labId: string, checkId: string) {
   return Boolean((labUiRecords.value[labId] ?? progressStore.labRecords[labId])?.checkResults?.[checkId])
+}
+
+function checkMessage(labId: string, checkId: string) {
+  return (labUiRecords.value[labId] ?? progressStore.labRecords[labId])?.checkMessages?.[checkId] ?? ''
+}
+
+function lastCheckedLabel(labId: string) {
+  const lastCheckedAt = (labUiRecords.value[labId] ?? progressStore.labRecords[labId])?.lastCheckedAt
+  if (!lastCheckedAt) return ''
+  return new Date(lastCheckedAt).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+function nextCommandTarget(lab: LabTask) {
+  return lab.checks.find(check =>
+    check.type === 'command_in_history' &&
+    !checkPassed(lab.id, check.id) &&
+    check.target,
+  )?.target ?? ''
+}
+
+function runNextLabCommand(lab: LabTask) {
+  const command = nextCommandTarget(lab)
+  if (command) {
+    runLabCommand(command)
+  }
+}
+
+function recentLabCommands(lab: LabTask) {
+  const record = labUiRecords.value[lab.id] ?? progressStore.labRecords[lab.id]
+  const startedAt = record?.startedAt ?? 0
+  if (!startedAt) return []
+  return progressStore.commandHistory
+    .filter(item => item.source === 'lab' && item.createdAt >= startedAt)
+    .slice(0, 3)
 }
 
 function createWorkbenchTemplate() {
@@ -252,9 +296,6 @@ function saveWorkbenchDraft() {
   )
 }
 
-function simulateLabOutput(command: string) {
-  return executeSandboxCommand(command).output
-}
 </script>
 
 <template>
@@ -459,7 +500,7 @@ function simulateLabOutput(command: string) {
                     class="px-2 py-1 rounded text-[10px] font-mono border"
                     :class="labPassed(lab) ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5' : 'text-amber-400 border-amber-400/20 bg-amber-400/5'"
                   >
-                    {{ labPassed(lab) ? 'PASSED' : 'READY' }}
+                    {{ labPassed(lab) ? 'PASSED' : `${labPassedCount(lab)}/${lab.checks.length}` }}
                   </div>
                 </div>
 
@@ -495,11 +536,27 @@ function simulateLabOutput(command: string) {
                     <div
                       v-for="check in lab.checks"
                       :key="check.id"
-                      class="flex items-center gap-2 p-2 rounded border text-xs"
+                      class="p-2 rounded border text-xs"
                       :class="checkPassed(lab.id, check.id) ? 'border-emerald-400/15 bg-emerald-400/5 text-emerald-300' : 'border-white/[0.03] bg-white/[0.01] text-gray-500'"
                     >
-                      <CheckCircle2 class="w-3.5 h-3.5 flex-shrink-0" />
-                      <span>{{ check.label }}</span>
+                      <div class="flex items-center gap-2">
+                        <CheckCircle2
+                          v-if="checkPassed(lab.id, check.id)"
+                          class="w-3.5 h-3.5 flex-shrink-0"
+                        />
+                        <AlertCircle
+                          v-else
+                          class="w-3.5 h-3.5 flex-shrink-0"
+                        />
+                        <span>{{ check.label }}</span>
+                      </div>
+                      <p
+                        v-if="checkMessage(lab.id, check.id)"
+                        class="mt-1 pl-5 text-[10px] leading-relaxed"
+                        :class="checkPassed(lab.id, check.id) ? 'text-emerald-200/70' : 'text-amber-200/70'"
+                      >
+                        {{ checkMessage(lab.id, check.id) }}
+                      </p>
                     </div>
                     <div class="flex gap-2 pt-2">
                       <button
@@ -516,8 +573,44 @@ function simulateLabOutput(command: string) {
                         自动判题
                       </button>
                     </div>
+                    <div class="flex gap-2">
+                      <button
+                        :disabled="!nextCommandTarget(lab)"
+                        @click="runNextLabCommand(lab)"
+                        class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-mono transition-all disabled:opacity-40 disabled:cursor-not-allowed border-cyan-400/15 bg-cyan-400/5 text-cyan-300 hover:bg-cyan-400/10"
+                      >
+                        <Play class="w-3.5 h-3.5" />
+                        Next
+                      </button>
+                      <button
+                        @click="resetLab(lab)"
+                        class="px-3 py-2 rounded-lg border border-white/[0.05] text-gray-500 hover:text-amber-300 hover:bg-amber-400/5 text-xs font-mono transition-all"
+                        title="Reset lab"
+                      >
+                        <RotateCcw class="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div
+                      v-if="recentLabCommands(lab).length"
+                      class="rounded-lg border border-white/[0.03] bg-black/10 p-2 space-y-1"
+                    >
+                      <div class="text-[10px] text-gray-600 font-mono">Recent commands</div>
+                      <div
+                        v-for="item in recentLabCommands(lab)"
+                        :key="`${lab.id}-${item.createdAt}-${item.command}`"
+                        class="truncate text-[10px] text-gray-400 font-mono"
+                      >
+                        $ {{ item.command }}
+                      </div>
+                    </div>
                     <p class="text-[10px] text-gray-600 leading-relaxed pt-1">
                       {{ lab.hints[0] }}
+                    </p>
+                    <p
+                      v-if="lastCheckedLabel(lab.id)"
+                      class="text-[10px] text-gray-600 leading-relaxed"
+                    >
+                      最近判题：{{ lastCheckedLabel(lab.id) }}
                     </p>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { LabTask, LearningProgress, QuizRecord } from '@/types'
+import type { CommandHistoryItem, LabCheck, LabTask, LearningProgress, QuizRecord } from '@/types'
 import {
   loadDesktopProgressSnapshot,
   loadProgressSnapshot,
@@ -237,6 +237,19 @@ export const useProgressStore = defineStore('progress', () => {
     persist()
   }
 
+  function resetLab(labId: string) {
+    if (!progress.value.labRecords) progress.value.labRecords = {}
+    progress.value.labRecords[labId] = {
+      labId,
+      status: 'in_progress',
+      startedAt: Date.now(),
+      checkResults: {},
+      checkMessages: {},
+    }
+    persist()
+    return progress.value.labRecords[labId]
+  }
+
   function evaluateLab(lab: LabTask) {
     if (!progress.value.labRecords) progress.value.labRecords = {}
     const record = progress.value.labRecords[lab.id] ?? {
@@ -246,19 +259,21 @@ export const useProgressStore = defineStore('progress', () => {
       checkResults: {},
     }
 
-    const history = progress.value.commandHistory ?? []
+    if (!record.startedAt) record.startedAt = Date.now()
+    const startedAt = record.startedAt
+    const history = (progress.value.commandHistory ?? [])
+      .filter(item => item.createdAt >= startedAt)
     const results: Record<string, boolean> = {}
+    const messages: Record<string, string> = {}
     for (const check of lab.checks) {
-      if (check.type === 'manual') {
-        results[check.id] = Boolean(record.checkResults[check.id])
-      } else if (check.type === 'command_in_history') {
-        results[check.id] = history.some(item => item.command.includes(check.target))
-      } else if (check.type === 'output_contains') {
-        results[check.id] = history.some(item => item.output.toLowerCase().includes(check.target.toLowerCase()))
-      }
+      const evaluation = evaluateLabCheck(check, record.checkResults, history)
+      results[check.id] = evaluation.passed
+      messages[check.id] = evaluation.message
     }
 
     record.checkResults = results
+    record.checkMessages = messages
+    record.lastCheckedAt = Date.now()
     record.status = Object.values(results).every(Boolean) ? 'passed' : 'in_progress'
     if (record.status === 'passed' && !record.completedAt) {
       record.completedAt = Date.now()
@@ -278,8 +293,64 @@ export const useProgressStore = defineStore('progress', () => {
       checkResults: {},
     }
     record.checkResults[checkId] = passed
+    if (!record.checkMessages) record.checkMessages = {}
+    record.checkMessages[checkId] = passed ? '已手动确认。' : '等待你手动确认这一项。'
     progress.value.labRecords[labId] = record
     persist()
+  }
+
+  function evaluateLabCheck(
+    check: LabCheck,
+    existingResults: Record<string, boolean>,
+    history: CommandHistoryItem[],
+  ) {
+    if (check.type === 'manual') {
+      const passed = Boolean(existingResults[check.id])
+      return {
+        passed,
+        message: passed ? '已手动确认。' : `需要手动确认：${check.label}`,
+      }
+    }
+
+    if (check.type === 'command_in_history') {
+      const matched = history.find(item => item.command.includes(check.target))
+      if (matched) {
+        return {
+          passed: true,
+          message: `已检测到命令：${matched.command}`,
+        }
+      }
+
+      return {
+        passed: false,
+        message: history.length > 0
+          ? `未找到包含 "${check.target}" 的命令。最近执行：${latestCommandSummary(history)}`
+          : `还没有检测到实验开始后的命令，请先运行：${check.target}`,
+      }
+    }
+
+    const target = check.target.toLowerCase()
+    const matchedOutput = history.find(item => item.output.toLowerCase().includes(target))
+    if (matchedOutput) {
+      return {
+        passed: true,
+        message: `已在 "${matchedOutput.command}" 的输出中看到 "${check.target}"。`,
+      }
+    }
+
+    return {
+      passed: false,
+      message: history.length > 0
+        ? `输出中还没有出现 "${check.target}"，请确认命令是否产生预期结果。`
+        : `还没有可检查的输出，请先运行会产生 "${check.target}" 的命令。`,
+    }
+  }
+
+  function latestCommandSummary(history: CommandHistoryItem[]) {
+    return history
+      .slice(0, 3)
+      .map(item => item.command)
+      .join('、')
   }
 
   function reviewCard(cardId: string, quality: 0 | 1 | 2 | 3 | 4 | 5) {
@@ -515,6 +586,7 @@ export const useProgressStore = defineStore('progress', () => {
     trackStudyDay,
     recordCommand,
     startLab,
+    resetLab,
     evaluateLab,
     markManualLabCheck,
     reviewCard,

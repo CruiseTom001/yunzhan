@@ -108,6 +108,8 @@ export interface LabRecord {
   startedAt?: number
   completedAt?: number
   checkResults: Record<string, boolean>
+  checkMessages?: Record<string, string>
+  lastCheckedAt?: number
 }
 
 export interface ReviewCard {
