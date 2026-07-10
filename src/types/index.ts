@@ -79,8 +79,9 @@ export interface CommandHistoryItem {
 export interface LabCheck {
   id: string
   label: string
-  type: 'command_in_history' | 'output_contains' | 'manual'
+  type: 'command_in_history' | 'command_exact' | 'output_contains' | 'output_from_command' | 'manual'
   target: string
+  command?: string
 }
 
 export interface LabStep {

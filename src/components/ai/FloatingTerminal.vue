@@ -16,7 +16,7 @@ const progressStore = useProgressStore()
 const terminalEl = ref<HTMLElement | null>(null)
 const minimized = ref(false)
 const dragging = ref(false)
-const pos = ref({ x: Math.max(window.innerWidth - 620, 24), y: Math.max(window.innerHeight - 420, 88) })
+const pos = ref({ x: Math.max(window.innerWidth - 620, 12), y: Math.max(window.innerHeight - 420, 72) })
 const dragStart = ref({ x: 0, y: 0 })
 const size = ref({ w: 580, h: 380 })
 
@@ -25,9 +25,11 @@ let fitAddon: FitAddon | null = null
 let currentLine = ''
 
 function clampPosition() {
+  const visibleWidth = Math.min(size.value.w, Math.max(window.innerWidth - 24, 280))
+  const visibleHeight = Math.min(size.value.h, Math.max(window.innerHeight - 84, 220))
   pos.value = {
-    x: Math.min(Math.max(pos.value.x, 12), Math.max(window.innerWidth - 120, 12)),
-    y: Math.min(Math.max(pos.value.y, 64), Math.max(window.innerHeight - 80, 64)),
+    x: Math.min(Math.max(pos.value.x, 12), Math.max(window.innerWidth - visibleWidth - 12, 12)),
+    y: Math.min(Math.max(pos.value.y, 64), Math.max(window.innerHeight - visibleHeight - 12, 64)),
   }
 }
 
@@ -142,7 +144,7 @@ function runCommand(cmd: string, source: 'terminal' | 'course' | 'lab' = 'termin
   if (result.clear) {
     terminal.clear()
   }
-  progressStore.recordCommand(cmd, result.output, source)
+  progressStore.recordCommand(cmd, result.output, source, result.exitCode ?? 0)
   if (result.output) {
     for (const line of result.output.split('\n')) {
       terminal.writeln(line)
@@ -265,6 +267,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   resize: both;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 76px);
+  min-width: min(360px, calc(100vw - 24px));
+  min-height: 220px;
 }
 .ft-header {
   display: flex;

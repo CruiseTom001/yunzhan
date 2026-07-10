@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
+import DOMPurify from 'dompurify'
 
 const md = new MarkdownIt({
   html: false,
@@ -20,7 +21,14 @@ const md = new MarkdownIt({
   },
 })
 
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'rel', 'data-term', 'data-testid', 'data-core'],
+  })
+}
+
 export function renderMarkdown(content: string): string {
-  // 兼容历史内容中被批量转义的反引号，否则围栏代码块会退化成普通段落。
-  return md.render(content.replace(/\\`/g, '`'))
+  // Keep old course content compatible when backticks were escaped in bulk.
+  return sanitizeHtml(md.render(content.replace(/\\`/g, '`')))
 }

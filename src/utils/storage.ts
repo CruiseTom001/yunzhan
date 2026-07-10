@@ -2,10 +2,15 @@ import type { LearningProgress } from '@/types'
 
 const STORAGE_KEY = 'ops-school-progress'
 const STORAGE_META_KEY = `${STORAGE_KEY}:meta`
+const STORAGE_BACKUP_KEY = `${STORAGE_KEY}:manual-backup`
 
 export interface ProgressSnapshot {
   progress: LearningProgress
   updatedAt: number
+}
+
+export interface ProgressBackup extends ProgressSnapshot {
+  reason: 'manual' | 'before-import' | 'before-clear'
 }
 
 interface DesktopProgressEnvelope {
@@ -99,6 +104,35 @@ export function clearProgress(): void {
   localStorage.removeItem(STORAGE_KEY)
   localStorage.removeItem(STORAGE_META_KEY)
   void getElectronApi()?.invoke('progress:clear')
+}
+
+export function saveProgressBackup(
+  progress: LearningProgress,
+  reason: ProgressBackup['reason'] = 'manual',
+): ProgressBackup {
+  const backup: ProgressBackup = {
+    progress: normalizeProgress(JSON.parse(JSON.stringify(progress)) as LearningProgress),
+    updatedAt: Date.now(),
+    reason,
+  }
+  localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(backup))
+  return backup
+}
+
+export function loadProgressBackup(): ProgressBackup | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_BACKUP_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ProgressBackup>
+    if (!parsed.progress || typeof parsed.updatedAt !== 'number') return null
+    return {
+      progress: normalizeProgress(parsed.progress),
+      updatedAt: parsed.updatedAt,
+      reason: parsed.reason ?? 'manual',
+    }
+  } catch {
+    return null
+  }
 }
 
 function readLocalUpdatedAt(): number {

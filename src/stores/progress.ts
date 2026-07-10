@@ -2,9 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { CommandHistoryItem, LabCheck, LabTask, LearningProgress, QuizRecord } from '@/types'
 import {
+  clearProgress,
   loadDesktopProgressSnapshot,
+  loadProgressBackup,
   loadProgressSnapshot,
+  normalizeProgress,
   saveProgress,
+  saveProgressBackup,
   saveProgressToLocal,
 } from '@/utils/storage'
 import { allQuestions } from '@/data/quizzes/all'
@@ -19,6 +23,7 @@ export const useProgressStore = defineStore('progress', () => {
   const storageReady = ref(false)
   const storageStatus = ref<'browser' | 'desktop' | 'error'>('browser')
   const storagePath = ref('')
+  const backupUpdatedAt = ref(loadProgressBackup()?.updatedAt ?? 0)
   let latestSavedAt = initialSnapshot.updatedAt
 
   const completedChaptersCount = computed(() =>
@@ -196,7 +201,12 @@ export const useProgressStore = defineStore('progress', () => {
     }
   }
 
-  function recordCommand(command: string, output: string, source: 'terminal' | 'course' | 'lab' = 'terminal') {
+  function recordCommand(
+    command: string,
+    output: string,
+    source: 'terminal' | 'course' | 'lab' = 'terminal',
+    exitCode = 0,
+  ) {
     if (!progress.value.commandHistory) progress.value.commandHistory = []
     const latest = progress.value.commandHistory[0]
     if (
@@ -205,13 +215,14 @@ export const useProgressStore = defineStore('progress', () => {
       Date.now() - latest.createdAt < 1500
     ) {
       latest.output = output || latest.output
+      latest.exitCode = exitCode
       persist()
       return
     }
     progress.value.commandHistory.unshift({
       command,
       output,
-      exitCode: 0,
+      exitCode,
       source,
       createdAt: Date.now(),
     })
@@ -312,12 +323,17 @@ export const useProgressStore = defineStore('progress', () => {
       }
     }
 
-    if (check.type === 'command_in_history') {
+    if (check.type === 'command_in_history' || check.type === 'command_exact') {
+      const normalizedTarget = normalizeLabCommand(check.target)
       const matched = history.find(item => item.command.includes(check.target))
-      if (matched) {
+      const exactMatched = history.find(item =>
+        item.exitCode === 0 && normalizeLabCommand(item.command) === normalizedTarget,
+      )
+      const validMatch = check.type === 'command_exact' ? exactMatched : matched
+      if (validMatch) {
         return {
           passed: true,
-          message: `已检测到命令：${matched.command}`,
+          message: `已检测到成功执行的命令：${validMatch.command}`,
         }
       }
 
@@ -330,11 +346,16 @@ export const useProgressStore = defineStore('progress', () => {
     }
 
     const target = check.target.toLowerCase()
-    const matchedOutput = history.find(item => item.output.toLowerCase().includes(target))
+    const expectedCommand = check.command ? normalizeLabCommand(check.command) : ''
+    const matchedOutput = history.find(item =>
+      item.exitCode === 0 &&
+      item.output.toLowerCase().includes(target) &&
+      (check.type !== 'output_from_command' || normalizeLabCommand(item.command) === expectedCommand),
+    )
     if (matchedOutput) {
       return {
         passed: true,
-        message: `已在 "${matchedOutput.command}" 的输出中看到 "${check.target}"。`,
+        message: `已在指定命令 "${matchedOutput.command}" 的输出中看到 "${check.target}"。`,
       }
     }
 
@@ -344,6 +365,14 @@ export const useProgressStore = defineStore('progress', () => {
         ? `输出中还没有出现 "${check.target}"，请确认命令是否产生预期结果。`
         : `还没有可检查的输出，请先运行会产生 "${check.target}" 的命令。`,
     }
+  }
+
+  function normalizeLabCommand(command: string) {
+    return command
+      .replace(/\s+#.*$/, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
   }
 
   function latestCommandSummary(history: CommandHistoryItem[]) {
@@ -374,6 +403,8 @@ export const useProgressStore = defineStore('progress', () => {
   }
 
   function createSyncSnapshot(deviceName = navigator.userAgent.slice(0, 40)) {
+    const backup = saveProgressBackup(progress.value, 'manual')
+    backupUpdatedAt.value = backup.updatedAt
     if (!progress.value.syncSnapshots) progress.value.syncSnapshots = []
     const payload = JSON.stringify(progress.value)
     const checksum = Array.from(payload).reduce((sum, char) => (sum + char.charCodeAt(0)) % 1000000007, 0).toString(16)
@@ -385,6 +416,57 @@ export const useProgressStore = defineStore('progress', () => {
     })
     progress.value.syncSnapshots = progress.value.syncSnapshots.slice(0, 10)
     persist()
+  }
+
+  function importProgress(payload: unknown) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('进度文件格式无效。')
+    }
+
+    const source = payload as Record<string, unknown>
+    const candidate = source.progress && typeof source.progress === 'object'
+      ? source.progress
+      : source
+
+    if (!hasRecognizableProgressFields(candidate as Record<string, unknown>)) {
+      throw new Error('没有在文件中找到云栈学习进度。')
+    }
+
+    const backup = saveProgressBackup(progress.value, 'before-import')
+    backupUpdatedAt.value = backup.updatedAt
+    progress.value = normalizeProgress(candidate as Partial<LearningProgress>)
+    flushPersist()
+    return progress.value
+  }
+
+  function restoreProgressBackup() {
+    const backup = loadProgressBackup()
+    if (!backup) throw new Error('没有可恢复的本地备份。')
+    progress.value = normalizeProgress(backup.progress)
+    flushPersist()
+    return progress.value
+  }
+
+  function clearAllProgress() {
+    const backup = saveProgressBackup(progress.value, 'before-clear')
+    backupUpdatedAt.value = backup.updatedAt
+    clearProgress()
+    progress.value = normalizeProgress({})
+    latestSavedAt = 0
+    flushPersist()
+  }
+
+  function hasRecognizableProgressFields(value: Record<string, unknown>) {
+    return [
+      'completedChapters',
+      'quizRecords',
+      'achievements',
+      'bookmarks',
+      'studyDays',
+      'commandHistory',
+      'labRecords',
+      'reviewCards',
+    ].some(key => key in value)
   }
 
   function addCommunityDraft(type: 'lab-note' | 'yaml' | 'command', title: string, content: string, tags: string[] = []) {
@@ -553,6 +635,7 @@ export const useProgressStore = defineStore('progress', () => {
     storageReady,
     storageStatus,
     storagePath,
+    backupUpdatedAt,
     completedChaptersCount,
     quizTotalAnswered,
     quizCorrectCount,
@@ -591,6 +674,9 @@ export const useProgressStore = defineStore('progress', () => {
     markManualLabCheck,
     reviewCard,
     createSyncSnapshot,
+    importProgress,
+    restoreProgressBackup,
+    clearAllProgress,
     addCommunityDraft,
     updateUserProfile,
     whenStorageReady,

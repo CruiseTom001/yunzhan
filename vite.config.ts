@@ -7,6 +7,9 @@ const enableInspector = process.env.VITE_ENABLE_INSPECTOR === 'true'
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? 'dev'),
+  },
   // Electron 使用 file:// 协议，需要相对路径
   base: './',
   build: {

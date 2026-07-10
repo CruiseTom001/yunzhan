@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron')
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron')
 const { execFile } = require('child_process')
 const fs = require('fs/promises')
 const path = require('path')
@@ -99,6 +99,7 @@ function registerIpc() {
 
   ipcMain.handle('app:getPath', (_event, name) => app.getPath(name || 'userData'))
   ipcMain.handle('app:getVersion', () => app.getVersion())
+  ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
 
   ipcMain.handle('progress:load', async () => {
     const { progressPath, backupPath } = getProgressPaths()
@@ -176,7 +177,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: '云栈',
-    icon: path.join(__dirname, '../public/favicon.svg'),
+    icon: path.join(__dirname, '../public/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

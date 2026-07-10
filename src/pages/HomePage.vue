@@ -10,6 +10,7 @@ import { useProgressStore } from '@/stores/progress'
 
 const router = useRouter()
 const progressStore = useProgressStore()
+const appVersion = __APP_VERSION__
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
 const activePhase = ref(0)
@@ -469,7 +470,7 @@ const termLines = computed(() => [
           v-for="(f, i) in [
             { icon: Terminal, title: 'Linux 命令', desc: '100+ 命令详解', accent: 'from-emerald-400/10 to-transparent' },
             { icon: Zap, title: '实战练习', desc: '360+ 题目', accent: 'from-amber-400/10 to-transparent' },
-            { icon: Shield, title: '体系化', desc: '19门课程', accent: 'from-cyan-400/10 to-transparent' },
+            { icon: Shield, title: '体系化', desc: '20 门课程', accent: 'from-cyan-400/10 to-transparent' },
             { icon: Cloud, title: '进度追踪', desc: '成就系统', accent: 'from-purple-400/10 to-transparent' },
           ]"
           :key="i"
@@ -506,7 +507,7 @@ const termLines = computed(() => [
     <!-- 底部终端装饰 -->
     <footer class="border-t border-white/[0.03] py-8">
       <div class="max-w-5xl mx-auto px-6 flex items-center justify-between">
-        <span class="text-gray-700 text-xs font-mono">云栈 v1.0.0</span>
+        <span class="text-gray-700 text-xs font-mono">云栈 v{{ appVersion }}</span>
         <span class="text-gray-700 text-xs font-mono">Vue + TypeScript 构建</span>
       </div>
     </footer>

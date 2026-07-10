@@ -11,6 +11,7 @@ const allowedChannels = [
   'terminal:exec',
   'app:getPath',
   'app:getVersion',
+  'app:openDataFolder',
   'progress:load',
   'progress:save',
   'progress:clear',

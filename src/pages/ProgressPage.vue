@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Trophy,
@@ -13,7 +13,11 @@ import {
   ClipboardCheck,
   Cloud,
   Flame,
-  Share2,
+  Download,
+  Upload,
+  RotateCcw,
+  FolderOpen,
+  HardDrive,
 } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
 import { achievements as allAchievements } from '@/data/achievements'
@@ -22,6 +26,11 @@ import { labTasks } from '@/data/labs'
 
 const router = useRouter()
 const progressStore = useProgressStore()
+const importInput = ref<HTMLInputElement | null>(null)
+const dataMessage = ref('')
+const dataMessageError = ref(false)
+const appVersion = ref(__APP_VERSION__)
+const isDesktop = Boolean(window.electronAPI)
 
 const totalChapterCount = Object.values(chapterCounts).reduce((a, b) => a + b, 0)
 
@@ -98,9 +107,10 @@ const syncStatus = computed(() => progressStore.progress.syncSnapshots[0])
 
 function exportProgress() {
   const data = {
+    schemaVersion: 2,
     exportTime: new Date().toISOString(),
     app: '云栈',
-    version: '1.0.0',
+    version: __APP_VERSION__,
     stats: {
       completedCourses: stats.value.completedCourses,
       totalCourses: stats.value.totalCourses,
@@ -111,8 +121,7 @@ function exportProgress() {
       streakDays: progressStore.streakDays,
       totalStudyDays: progressStore.totalStudyDays,
     },
-    completedChapters: progressStore.progress.completedChapters,
-    achievements: progressStore.progress.achievements,
+    progress: progressStore.progress,
     bookmarks: progressStore.bookmarks.map((b) => {
       const course = courseIndex.find((c) => c.id === b.courseId)
       return {
@@ -134,18 +143,48 @@ function exportProgress() {
   URL.revokeObjectURL(url)
 }
 
+async function importProgressFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  try {
+    const payload = JSON.parse(await file.text()) as unknown
+    progressStore.importProgress(payload)
+    dataMessage.value = '进度导入成功，原进度已自动备份。'
+    dataMessageError.value = false
+  } catch (error) {
+    dataMessage.value = error instanceof Error ? error.message : '导入失败，请检查文件。'
+    dataMessageError.value = true
+  } finally {
+    input.value = ''
+  }
+}
+
+function restoreBackup() {
+  try {
+    progressStore.restoreProgressBackup()
+    dataMessage.value = '已恢复最近一次本地备份。'
+    dataMessageError.value = false
+  } catch (error) {
+    dataMessage.value = error instanceof Error ? error.message : '恢复失败。'
+    dataMessageError.value = true
+  }
+}
+
 function createSyncSnapshot() {
   progressStore.createSyncSnapshot()
 }
 
-function shareLearningNote() {
-  progressStore.addCommunityDraft(
-    'lab-note',
-    `学习复盘 ${new Date().toLocaleDateString()}`,
-    `已完成章节 ${stats.value.completedChapters}/${stats.value.totalChapters}，实验 ${stats.value.completedLabs}/${stats.value.totalLabs}。`,
-    ['学习复盘', '云栈'],
-  )
+async function openDataFolder() {
+  await window.electronAPI?.invoke('app:openDataFolder')
 }
+
+onMounted(async () => {
+  if (window.electronAPI) {
+    appVersion.value = await window.electronAPI.invoke<string>('app:getVersion')
+  }
+})
 </script>
 
 <template>
@@ -156,17 +195,32 @@ function shareLearningNote() {
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.02] text-gray-500 text-xs font-mono">
             <Zap class="w-3 h-3" /> 学习面板
           </div>
-          <button
-            @click="exportProgress"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.04] bg-white/[0.01] text-gray-500 hover:text-white hover:border-white/[0.08] text-xs font-mono transition-all"
-          >
-            📥 导出进度
-          </button>
+          <div class="flex items-center gap-2">
+            <input ref="importInput" type="file" accept="application/json,.json" class="hidden" @change="importProgressFile" />
+            <button
+              @click="importInput?.click()"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.04] bg-white/[0.01] text-gray-500 hover:text-white hover:border-white/[0.08] text-xs font-mono transition-all"
+            >
+              <Upload class="w-3.5 h-3.5" /> 导入
+            </button>
+            <button
+              @click="exportProgress"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.04] bg-white/[0.01] text-gray-500 hover:text-white hover:border-white/[0.08] text-xs font-mono transition-all"
+            >
+              <Download class="w-3.5 h-3.5" /> 导出
+            </button>
+          </div>
         </div>
         <h1 class="text-3xl font-bold text-white mb-1">学习进度</h1>
         <p class="text-gray-600 text-sm font-mono">
           {{ progressStore.progress.userProfile.name }} · Lv.{{ progressStore.progress.userProfile.level }} · {{ progressStore.progress.userProfile.targetRole }}
         </p>
+        <div v-if="dataMessage" class="mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs font-mono" :class="dataMessageError ? 'border-red-400/20 bg-red-400/5 text-red-400' : 'border-emerald-400/20 bg-emerald-400/5 text-emerald-400'">
+          <span>{{ dataMessage }}</span>
+          <button v-if="progressStore.backupUpdatedAt" @click="restoreBackup" class="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300">
+            <RotateCcw class="w-3 h-3" /> 恢复备份
+          </button>
+        </div>
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
@@ -360,16 +414,21 @@ function shareLearningNote() {
 
         <section class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4">
           <div class="flex items-center gap-2 mb-3">
-            <Share2 class="w-4 h-4 text-amber-400" />
-            <h2 class="text-white text-sm font-bold font-mono">社区分享草稿</h2>
+            <HardDrive class="w-4 h-4 text-amber-400" />
+            <h2 class="text-white text-sm font-bold font-mono">版本与本地数据</h2>
           </div>
-          <p class="text-gray-600 text-xs leading-relaxed mb-3">
-            先把实验笔记/YAML/命令收藏沉淀为本地草稿，等用户系统上线即可发布到社区。
-          </p>
-          <button @click="shareLearningNote" class="px-3 py-2 rounded-lg bg-amber-400/10 border border-amber-400/15 text-amber-400 text-xs font-mono">
-            生成复盘草稿
+          <div class="space-y-2 text-xs font-mono mb-3">
+            <div class="flex items-center justify-between gap-3"><span class="text-gray-600">当前版本</span><span class="text-white">v{{ appVersion }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span class="text-gray-600">存储模式</span><span class="text-emerald-400">{{ progressStore.storageStatus === 'desktop' ? '桌面双备份' : '浏览器本地' }}</span></div>
+            <div v-if="progressStore.storagePath" class="text-[10px] text-gray-700 truncate" :title="progressStore.storagePath">{{ progressStore.storagePath }}</div>
+          </div>
+          <button
+            :disabled="!isDesktop"
+            @click="openDataFolder"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-400/10 border border-amber-400/15 text-amber-400 text-xs font-mono disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <FolderOpen class="w-3.5 h-3.5" /> 打开数据目录
           </button>
-          <span class="ml-2 text-[10px] text-gray-600 font-mono">{{ progressStore.progress.communityDrafts.length }} 条草稿</span>
         </section>
       </div>
 

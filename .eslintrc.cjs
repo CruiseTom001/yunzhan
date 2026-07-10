@@ -16,6 +16,9 @@ module.exports = {
     ecmaVersion: 'latest',
     sourceType: 'module',
   },
+  globals: {
+    __APP_VERSION__: 'readonly',
+  },
   rules: {
     'vue/multi-word-component-names': 'off',
     'vue/no-v-html': 'off',

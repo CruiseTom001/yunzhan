@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { BookOpen, PenTool, BarChart3, Menu, X, Home, Search, Sun, Moon, Bot, Terminal } from 'lucide-vue-next'
+import { BookOpen, PenTool, BarChart3, Menu, X, Home, Search, Sun, Moon, Bot, Terminal, Brain } from 'lucide-vue-next'
 import { useTheme } from '@/stores/theme'
 
 const router = useRouter()
@@ -19,6 +19,7 @@ const navItems = [
   { path: '/', label: '首页', icon: Home },
   { path: '/courses', label: '课程', icon: BookOpen },
   { path: '/quiz', label: '问答', icon: PenTool },
+  { path: '/review', label: '复习', icon: Brain },
   { path: '/progress', label: '进度', icon: BarChart3 },
   { path: '/terminal', label: '终端', icon: Terminal },
 ]

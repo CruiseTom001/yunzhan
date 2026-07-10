@@ -1,7 +1,7 @@
 {
   "name": "yunzhan",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "云栈 - 云计算从入门到精通",
   "author": "云栈 <hello@yunzhan.dev>",
   "type": "module",
@@ -16,6 +16,9 @@
     "check": "vue-tsc -b",
     "lint": "eslint . --ext .ts,.vue",
     "lint:fix": "eslint . --ext .ts,.vue --fix",
+    "icon:windows": "node scripts/generate-windows-icon.mjs",
+    "release:check": "npm run check && npm run lint && npm run build",
+    "release:windows": "npm run release:check && npm run icon:windows && electron-builder --win nsis",
     "electron:dev": "vite build && electron .",
     "electron:build": "vite build && electron-builder --dir",
     "electron:installer": "vite build && electron-builder --win nsis",
@@ -24,6 +27,7 @@
   "build": {
     "appId": "com.yunzhan.app",
     "productName": "云栈",
+    "artifactName": "云栈-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -33,6 +37,7 @@
       "public/**/*"
     ],
     "win": {
+      "icon": "public/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -66,6 +71,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.11",
     "highlight.js": "^11.9.0",
     "lucide-vue-next": "^0.511.0",
     "markdown-it": "^14.1.0",
@@ -87,7 +93,9 @@
     "electron-builder": "^25.1.0",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.20.1",
+    "png-to-ico": "^3.0.2",
     "postcss": "^8.4.35",
+    "sharp": "^0.35.3",
     "tailwindcss": "^3.4.1",
     "typescript": "~5.5.4",
     "unplugin-vue-dev-locator": "^1.0.0",

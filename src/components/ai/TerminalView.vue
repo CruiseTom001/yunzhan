@@ -31,7 +31,7 @@ function runCommand(cmd: string) {
   if (result.clear) {
     terminal.clear()
   }
-  progressStore.recordCommand(cmd, result.output, 'terminal')
+  progressStore.recordCommand(cmd, result.output, 'terminal', result.exitCode ?? 0)
   if (result.output) {
     for (const line of result.output.split('\n')) {
       terminal.writeln(line)

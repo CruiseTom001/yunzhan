@@ -246,7 +246,7 @@ onUnmounted(() => {
       <div class="popover-summary">{{ popover.entry.summary }}</div>
 
       <!-- 详细说明 -->
-      <div class="popover-desc" v-html="popover.entry.description.replace(/\n/g, '<br>')"></div>
+      <div class="popover-desc">{{ popover.entry.description }}</div>
 
       <!-- 实操提示 -->
       <div v-if="popover.entry.tips" class="popover-tips">
@@ -355,6 +355,7 @@ onUnmounted(() => {
   color: #cbd5e1;
   line-height: 1.65;
   margin-bottom: 0.6em;
+  white-space: pre-line;
 }
 
 .popover-desc :deep(code) {

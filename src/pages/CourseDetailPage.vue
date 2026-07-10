@@ -245,7 +245,7 @@ function lastCheckedLabel(labId: string) {
 
 function nextCommandTarget(lab: LabTask) {
   return lab.checks.find(check =>
-    check.type === 'command_in_history' &&
+    (check.type === 'command_in_history' || check.type === 'command_exact') &&
     !checkPassed(lab.id, check.id) &&
     check.target,
   )?.target ?? ''

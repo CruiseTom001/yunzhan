@@ -1,6 +1,7 @@
 export interface SandboxResult {
   output: string
   clear?: boolean
+  exitCode?: number
 }
 
 type NodeKind = 'dir' | 'file' | 'link'
@@ -774,6 +775,10 @@ function executeSimpleSystemCommand(main: string, fullCmd: string, tokens: strin
       return { output: 'Securing the MySQL server deployment.\nVALIDATE PASSWORD component: configured\nRemove anonymous users? y\nReload privilege tables? y\nAll done!' }
     case 'mysql':
       return { output: fullCmd.includes('-e') ? 'Variable_name\tValue\nThreads_connected\t12' : 'mysql  Ver 8.0.36 for Linux on x86_64\nConnection id: 42\nServer version: 8.0.36 MySQL Community Server' }
+    case 'python':
+    case 'python3':
+      if (fullCmd.includes('--version')) return { output: 'Python 3.12.4' }
+      return { output: 'status=healthy\ncpu_percent=2.8\nmemory_percent=29.6\ndisk_percent=32.0' }
     case 'redis-cli':
       if (fullCmd.toUpperCase().includes('PING')) return { output: 'PONG' }
       if (fullCmd.toUpperCase().includes('DBSIZE')) return { output: '1024' }
@@ -966,7 +971,7 @@ export function executeSandboxCommand(command: string): SandboxResult {
         '  ping curl wget ssh scp df du free uname hostname ss netstat lsof iostat vmstat',
         '  tar zip unzip apt yum dpkg snap systemctl journalctl docker git kubectl crontab rsync',
         '  dig nslookup traceroute mtr ip strace tcpdump iptables ufw firewall-cmd certbot',
-        '  terraform ansible ansible-playbook ansible-galaxy redis-cli mysql nginx clear',
+        '  terraform ansible ansible-playbook ansible-galaxy redis-cli mysql nginx python clear',
         '',
         '\x1b[2m这是浏览器内的训练沙盒，不会改动你的真实电脑文件。\x1b[0m',
       ].join('\n'),
@@ -998,5 +1003,5 @@ export function executeSandboxCommand(command: string): SandboxResult {
   const platformResult = executePlatformCommand(main, fullCmd)
   if (platformResult) return platformResult
 
-  return { output: `${YELLOW}未找到命令：${main || '(空命令)'}${RESET}\n输入 ${CYAN}help${RESET} 查看可用模拟命令。` }
+  return { output: `${YELLOW}未找到命令：${main || '(空命令)'}${RESET}\n输入 ${CYAN}help${RESET} 查看可用模拟命令。`, exitCode: 127 }
 }
