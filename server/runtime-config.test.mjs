@@ -28,6 +28,19 @@ describe('runtime config', () => {
     expect(config.secureCookie).toBe(true)
   })
 
+  it('adds Vercel deployment and production URLs as allowed origins', () => {
+    const config = loadRuntimeConfig({
+      ...productionEnvironment,
+      RENDER_EXTERNAL_URL: '',
+      VERCEL_URL: 'yunzhan-preview.vercel.app',
+      VERCEL_PROJECT_PRODUCTION_URL: 'yunzhan.vercel.app',
+    })
+    expect([...config.allowedOrigins]).toEqual([
+      'https://yunzhan-preview.vercel.app',
+      'https://yunzhan.vercel.app',
+    ])
+  })
+
   it('rejects non-HTTPS and path-bearing production origins', () => {
     expect(() => loadRuntimeConfig({
       ...productionEnvironment,
@@ -36,6 +49,14 @@ describe('runtime config', () => {
     expect(() => loadRuntimeConfig({
       ...productionEnvironment,
       RENDER_EXTERNAL_URL: 'https://yunzhan-example.onrender.com/app',
+    })).toThrow('无效来源')
+  })
+
+  it('rejects malformed Vercel hostnames', () => {
+    expect(() => loadRuntimeConfig({
+      ...productionEnvironment,
+      RENDER_EXTERNAL_URL: '',
+      VERCEL_URL: 'https://yunzhan.vercel.app',
     })).toThrow('无效来源')
   })
 

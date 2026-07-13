@@ -22,6 +22,7 @@
     "server:migrate": "node server/migrate.mjs",
     "server:create-admin": "node server/create-admin.mjs",
     "server:check": "node scripts/check-server-syntax.mjs",
+    "vercel:build": "npm run server:migrate && npm run build",
     "check": "vue-tsc -b",
     "policy:check": "node scripts/check-source-policy.mjs",
     "lint": "eslint . --ext .ts,.vue --max-warnings 0",

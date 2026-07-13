@@ -4,7 +4,11 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const targets = [path.join(root, 'server'), path.join(root, 'electron')]
+const targets = [
+  path.join(root, 'api'),
+  path.join(root, 'server'),
+  path.join(root, 'electron'),
+]
 const extensions = new Set(['.mjs', '.cjs'])
 
 async function collectFiles(directory) {

@@ -843,17 +843,21 @@ app.use((error, _request, response, _next) => {
   response.status(statusCode).json({ error: statusCode >= 500 ? '服务器内部错误。' : error.message })
 })
 
-const server = app.listen(port, () => {
-  console.info(`云栈账号服务已启动：http://127.0.0.1:${port}`)
-})
-
-async function shutdown(signal) {
-  console.info(`收到 ${signal}，正在关闭账号服务。`)
-  server.close(async () => {
-    await pool.end()
-    process.exit(0)
+if (process.env.VERCEL !== '1') {
+  const server = app.listen(port, () => {
+    console.info(`云栈账号服务已启动：http://127.0.0.1:${port}`)
   })
+
+  async function shutdown(signal) {
+    console.info(`收到 ${signal}，正在关闭账号服务。`)
+    server.close(async () => {
+      await pool.end()
+      process.exit(0)
+    })
+  }
+
+  process.on('SIGINT', () => void shutdown('SIGINT'))
+  process.on('SIGTERM', () => void shutdown('SIGTERM'))
 }
 
-process.on('SIGINT', () => void shutdown('SIGINT'))
-process.on('SIGTERM', () => void shutdown('SIGTERM'))
+export default app

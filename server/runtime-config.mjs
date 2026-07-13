@@ -21,6 +21,13 @@ function normalizeOrigin(value, production) {
   }
 }
 
+function readVercelOrigin(hostname) {
+  if (hostname === undefined || hostname === '') return undefined
+  if (typeof hostname !== 'string' || hostname.length > 253) return null
+  if (hostname.includes('/') || hostname.includes('@') || hostname.includes(':')) return null
+  return `https://${hostname}`
+}
+
 function readAllowedOrigins(environment, production) {
   const configuredOrigins = (environment.APP_ORIGINS ?? '')
     .split(',')
@@ -29,13 +36,15 @@ function readAllowedOrigins(environment, production) {
   const rawOrigins = [
     ...configuredOrigins,
     environment.RENDER_EXTERNAL_URL?.trim(),
-  ].filter(Boolean)
+    readVercelOrigin(environment.VERCEL_URL?.trim()),
+    readVercelOrigin(environment.VERCEL_PROJECT_PRODUCTION_URL?.trim()),
+  ].filter(origin => origin !== undefined && origin !== '')
   const effectiveOrigins = rawOrigins.length > 0 || production
     ? rawOrigins
     : LOCAL_DEVELOPMENT_ORIGINS
   const normalizedOrigins = effectiveOrigins.map(origin => normalizeOrigin(origin, production))
   if (normalizedOrigins.some(origin => origin === null)) {
-    throw new Error('APP_ORIGINS 或 RENDER_EXTERNAL_URL 包含无效来源。')
+    throw new Error('部署环境包含无效来源。')
   }
   if (normalizedOrigins.length === 0) {
     throw new Error('生产环境必须配置至少一个 HTTPS 来源。')

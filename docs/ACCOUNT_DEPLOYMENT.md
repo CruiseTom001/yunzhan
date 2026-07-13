@@ -12,15 +12,15 @@ GitHub Pages 只能托管静态文件，不能独立运行账号 API 和 Postgre
 
 ## 推荐上线架构
 
-当前仓库提供 `render.yaml`，推荐使用以下同域方案：
+当前推荐使用以下同域方案：
 
-- Render Web Service：构建 Vue 前端并运行 Express API，统一通过一个 HTTPS 域名访问。
+- Vercel：构建 Vue 前端并通过 Vercel Function 运行 Express API，统一通过一个 HTTPS 域名访问。
 - Neon PostgreSQL：保存账号、会话、学习进度、审计记录与删除备份。
 - Resend：发送邮箱注册验证码。
 
-同域部署可让 `HttpOnly` 会话 Cookie 保持 `SameSite=Lax`，避免无自定义域名时跨站 Cookie 被浏览器拦截。Render 会自动提供 `RENDER_EXTERNAL_URL`，服务端将其加入精确 CORS 白名单。
+同域部署可让 `HttpOnly` 会话 Cookie 保持 `SameSite=Lax`，避免无自定义域名时跨站 Cookie 被浏览器拦截。Vercel 会提供当前部署域名和生产域名，服务端将两者加入精确 CORS 白名单。
 
-Render Blueprint 创建时需要填写以下秘密变量，真实值不得提交到 Git：
+Vercel 项目创建时需要填写以下秘密变量，真实值不得提交到 Git：
 
 ```text
 DATABASE_URL=Neon 提供的 PostgreSQL 连接串
@@ -29,9 +29,9 @@ RESEND_FROM_EMAIL=云栈 <verify@已验证域名>
 BOOTSTRAP_ADMIN_PASSWORD=首次超管随机强密码
 ```
 
-启动命令会先执行幂等数据库迁移，再启动服务；首次成功部署后，`initialDeployHook` 会创建 `CruiseTom001` 超管账号。创建完成后应从 Render 环境变量中删除 `BOOTSTRAP_ADMIN_PASSWORD`。
+Vercel 构建命令会先执行幂等数据库迁移，再构建前端。首次成功部署后单独运行 `npm run server:create-admin` 创建超管，创建完成后应从云端环境变量中删除 `BOOTSTRAP_ADMIN_PASSWORD`。
 
-免费 Render Web Service 空闲后会休眠，适合上线验证与小规模试用；正式持续运营应升级为不会休眠的实例。不要使用 30 天后过期的 Render 免费 PostgreSQL，建议使用 Neon 免费 PostgreSQL 或付费托管数据库。
+仓库仍保留 `render.yaml` 作为传统常驻 Node 服务的备选部署配置；当前网络环境下优先使用 Vercel。数据库继续使用 Neon，避免把账号数据绑定到短期数据库实例。
 
 ## 首次本地启动
 
