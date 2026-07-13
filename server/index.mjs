@@ -10,6 +10,7 @@ import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
 import { sendRegistrationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
+import { loadRuntimeConfig } from './runtime-config.mjs'
 import {
   isRecord,
   normalizeEmail,
@@ -27,18 +28,18 @@ import {
 } from './validation.mjs'
 
 const app = express()
-const port = Number.parseInt(process.env.PORT ?? '8787', 10)
+const runtimeConfig = loadRuntimeConfig()
+const {
+  allowElectronFileOrigin,
+  allowedOrigins,
+  port,
+  sameSite,
+  secureCookie,
+  serveStatic,
+  trustProxy,
+} = runtimeConfig
 const sessionCookieName = 'yunzhan_session'
 const sessionDurationMs = 7 * 24 * 60 * 60 * 1000
-const allowedOrigins = new Set(
-  (process.env.APP_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173')
-    .split(',')
-    .map(origin => origin.trim())
-    .filter(Boolean),
-)
-const allowElectronFileOrigin = process.env.ALLOW_ELECTRON_FILE_ORIGIN === 'true'
-const secureCookie = process.env.COOKIE_SECURE === 'true'
-const sameSite = process.env.COOKIE_SAME_SITE === 'none' ? 'none' : 'lax'
 const loginAttempts = new Map()
 const MAX_LOGIN_ATTEMPT_KEYS = 10_000
 const EMAIL_CODE_TTL_MS = 10 * 60 * 1000
@@ -46,11 +47,7 @@ const EMAIL_CODE_COOLDOWN_SECONDS = 60
 const EMAIL_CODE_MAX_PER_HOUR = 5
 const EMAIL_CODE_MAX_PER_IP_HOUR = 20
 
-if (sameSite === 'none' && !secureCookie) {
-  throw new Error('COOKIE_SAME_SITE=none 时必须同时配置 COOKIE_SECURE=true。')
-}
-
-app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : false)
+app.set('trust proxy', trustProxy ? 1 : false)
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }))
 app.use(express.json({ limit: '2mb', strict: true }))
 app.use(cookieParser())
@@ -70,7 +67,9 @@ app.use(cors({
 }))
 
 app.use((request, response, next) => {
-  response.setHeader('Cache-Control', 'no-store')
+  if (request.path.startsWith('/api/')) {
+    response.setHeader('Cache-Control', 'no-store')
+  }
   const method = request.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
     next()
@@ -813,15 +812,21 @@ app.get('/api/admin/users/:id/progress', requireAuth, requireSuperAdmin, asyncRo
   })
 }))
 
-if (process.env.SERVE_STATIC === 'true') {
+if (serveStatic) {
   const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
   const distDirectory = path.resolve(currentDirectory, '../dist')
-  app.use(express.static(distDirectory, { index: 'index.html' }))
+  const assetsDirectory = path.join(distDirectory, 'assets')
+  app.use('/assets', express.static(assetsDirectory, {
+    immutable: true,
+    maxAge: '1y',
+  }))
+  app.use(express.static(distDirectory, { index: 'index.html', maxAge: 0 }))
   app.use((request, response, next) => {
     if (request.method !== 'GET' || request.path.startsWith('/api/')) {
       next()
       return
     }
+    response.setHeader('Cache-Control', 'no-store')
     response.sendFile(path.join(distDirectory, 'index.html'))
   })
 }

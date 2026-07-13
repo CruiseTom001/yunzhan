@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: yunzhan-cruisetom001
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm run server:production
+    initialDeployHook: npm run server:create-admin
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SERVE_STATIC
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAME_SITE
+        value: lax
+      - key: ALLOW_ELECTRON_FILE_ORIGIN
+        value: "false"
+      - key: DB_SSL
+        value: "true"
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: DATABASE_URL
+        sync: false
+      - key: EMAIL_CODE_SECRET
+        generateValue: true
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        value: CruiseTom001
+      - key: BOOTSTRAP_ADMIN_DISPLAY_NAME
+        value: 云栈管理员
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false

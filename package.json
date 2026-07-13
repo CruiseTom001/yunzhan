@@ -4,6 +4,9 @@
   "version": "1.1.0",
   "description": "云栈 - 云计算从入门到精通",
   "author": "云栈 <hello@yunzhan.dev>",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -15,6 +18,7 @@
     "preview": "vite preview",
     "server:dev": "node --watch server/index.mjs",
     "server:start": "node server/index.mjs",
+    "server:production": "node server/migrate.mjs && node server/index.mjs",
     "server:migrate": "node server/migrate.mjs",
     "server:create-admin": "node server/create-admin.mjs",
     "server:check": "node scripts/check-server-syntax.mjs",
