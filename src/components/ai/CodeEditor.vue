@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import * as monaco from 'monaco-editor'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import 'monaco-editor/esm/vs/basic-languages/shell/shell.contribution.js'
+import 'monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution.js'
 
 const props = defineProps<{
   content: string
@@ -20,45 +18,32 @@ const emit = defineEmits<{
 
 const editorEl = ref<HTMLElement | null>(null)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
+let changeSubscription: monaco.IDisposable | null = null
 
-;(self as any).MonacoEnvironment = {
-  getWorker(_: string, label: string) {
-    if (label === 'json') return new jsonWorker()
-    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker()
-    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker()
-    if (label === 'typescript' || label === 'javascript') return new tsWorker()
+globalThis.MonacoEnvironment = {
+  getWorker() {
     return new editorWorker()
   },
 }
 
-// 语言映射
 const langMap: Record<string, string> = {
   bash: 'shell',
   sh: 'shell',
   yaml: 'yaml',
   yml: 'yaml',
-  dockerfile: 'dockerfile',
-  docker: 'dockerfile',
-  json: 'json',
-  js: 'javascript',
-  ts: 'typescript',
-  py: 'python',
-  python: 'python',
-  nginx: 'nginx',
-  sql: 'sql',
-  ini: 'ini',
-  toml: 'toml',
-  md: 'markdown',
+}
+
+function resolveLanguage(language?: string): string {
+  if (!language) return 'plaintext'
+  return langMap[language.toLowerCase()] ?? 'plaintext'
 }
 
 onMounted(() => {
   if (!editorEl.value) return
 
-  const lang = langMap[props.language || ''] || props.language || 'plaintext'
-
   editor = monaco.editor.create(editorEl.value, {
     value: props.content,
-    language: lang,
+    language: resolveLanguage(props.language),
     theme: 'vs-dark',
     readOnly: props.readonly,
     minimap: { enabled: false },
@@ -72,7 +57,7 @@ onMounted(() => {
     tabSize: 2,
   })
 
-  editor.onDidChangeModelContent(() => {
+  changeSubscription = editor.onDidChangeModelContent(() => {
     emit('change', editor?.getValue() || '')
   })
 })
@@ -85,11 +70,16 @@ watch(() => props.content, (val) => {
 
 watch(() => props.language, (lang) => {
   if (editor) {
-    monaco.editor.setModelLanguage(
-      editor.getModel()!,
-      langMap[lang || ''] || lang || 'plaintext'
-    )
+    const model = editor.getModel()
+    if (model) monaco.editor.setModelLanguage(model, resolveLanguage(lang))
   }
+})
+
+onUnmounted(() => {
+  changeSubscription?.dispose()
+  changeSubscription = null
+  editor?.dispose()
+  editor = null
 })
 </script>
 

@@ -23,6 +23,7 @@ import { courseIndex, chapterCounts } from '@/data/courses/index'
 import { achievements as allAchievements } from '@/data/achievements'
 import { useProgressStore } from '@/stores/progress'
 import { labTasks } from '@/data/labs'
+import AnimatedNumber from '@/components/common/AnimatedNumber.vue'
 
 const router = useRouter()
 const progressStore = useProgressStore()
@@ -31,8 +32,10 @@ const dataMessage = ref('')
 const dataMessageError = ref(false)
 const appVersion = ref(__APP_VERSION__)
 const isDesktop = Boolean(window.electronAPI)
+const MAX_PROGRESS_IMPORT_BYTES = 5 * 1024 * 1024
 
 const totalChapterCount = Object.values(chapterCounts).reduce((a, b) => a + b, 0)
+const MILESTONES = [25, 50, 75, 100] as const
 
 const stats = computed(() => ({
   completedChapters: progressStore.completedChaptersCount,
@@ -48,6 +51,24 @@ const stats = computed(() => ({
   totalLabs: labTasks.length,
   dueReviews: progressStore.dueReviewCards.length,
 }))
+
+const overallProgressPercent = computed(() => (
+  totalChapterCount > 0
+    ? Math.round((progressStore.completedChaptersCount / totalChapterCount) * 100)
+    : 0
+))
+
+const currentMilestone = computed(() => {
+  const value = [...MILESTONES].reverse().find(milestone => overallProgressPercent.value >= milestone)
+  if (!value) return null
+  const messages: Record<(typeof MILESTONES)[number], string> = {
+    25: '基础航线已建立，继续巩固核心技能。',
+    50: '学习旅程已过半，开始进入进阶实战。',
+    75: '已抵达高级阶段，距离全栈通关只差最后一程。',
+    100: '全部学习航线已完成，云栈技能树全部点亮。',
+  }
+  return { value, message: messages[value] }
+})
 
 const courseProgress = computed(() =>
   courseIndex.map((c) => {
@@ -149,6 +170,9 @@ async function importProgressFile(event: Event) {
   if (!file) return
 
   try {
+    if (file.size > MAX_PROGRESS_IMPORT_BYTES) {
+      throw new Error('进度文件超过 5 MB，已拒绝导入。')
+    }
     const payload = JSON.parse(await file.text()) as unknown
     progressStore.importProgress(payload)
     dataMessage.value = '进度导入成功，原进度已自动备份。'
@@ -223,40 +247,56 @@ onMounted(async () => {
         </div>
       </div>
 
+      <section
+        v-if="currentMilestone"
+        class="milestone-banner mb-6"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="milestone-value">{{ currentMilestone.value }}%</div>
+        <div class="min-w-0 flex-1">
+          <div class="text-emerald-300 text-xs font-mono font-semibold">学习里程碑已达成</div>
+          <p class="text-gray-500 text-xs mt-1">{{ currentMilestone.message }}</p>
+        </div>
+        <div class="milestone-track" aria-hidden="true">
+          <span :style="{ width: `${overallProgressPercent}%` }" />
+        </div>
+      </section>
+
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
-        <div class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4">
+        <div class="progress-stat-card bg-white/[0.01] border border-white/[0.04] rounded-xl p-4" style="--stat-index: 0">
           <div class="flex items-center gap-2 mb-2">
             <BookOpen class="w-3.5 h-3.5 text-cyan-400" />
             <span class="text-gray-600 text-[10px] font-mono">课程</span>
           </div>
-          <span class="text-2xl font-bold text-white font-mono">{{ stats.completedCourses }}</span>
+          <AnimatedNumber :value="stats.completedCourses" class="text-2xl font-bold text-white font-mono" />
           <span class="text-gray-700 text-xs font-mono ml-1">/ {{ stats.totalCourses }}</span>
         </div>
 
-        <div class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4">
+        <div class="progress-stat-card bg-white/[0.01] border border-white/[0.04] rounded-xl p-4" style="--stat-index: 1">
           <div class="flex items-center gap-2 mb-2">
             <Trophy class="w-3.5 h-3.5 text-amber-400" />
             <span class="text-gray-600 text-[10px] font-mono">章节</span>
           </div>
-          <span class="text-2xl font-bold text-white font-mono">{{ stats.completedChapters }}</span>
+          <AnimatedNumber :value="stats.completedChapters" class="text-2xl font-bold text-white font-mono" />
           <span class="text-gray-700 text-xs font-mono ml-1">/ {{ stats.totalChapters }}</span>
         </div>
 
-        <div class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4">
+        <div class="progress-stat-card bg-white/[0.01] border border-white/[0.04] rounded-xl p-4" style="--stat-index: 2">
           <div class="flex items-center gap-2 mb-2">
             <Target class="w-3.5 h-3.5 text-emerald-400" />
             <span class="text-gray-600 text-[10px] font-mono">准确率</span>
           </div>
-          <span class="text-2xl font-bold text-white font-mono">{{ stats.quizAccuracy }}%</span>
+          <span class="text-2xl font-bold text-white font-mono"><AnimatedNumber :value="stats.quizAccuracy" />%</span>
           <span class="text-gray-700 text-xs font-mono ml-1">({{ stats.totalQuestions }})</span>
         </div>
 
-        <div class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4">
+        <div class="progress-stat-card bg-white/[0.01] border border-white/[0.04] rounded-xl p-4" style="--stat-index: 3">
           <div class="flex items-center gap-2 mb-2">
             <Award class="w-3.5 h-3.5 text-purple-400" />
             <span class="text-gray-600 text-[10px] font-mono">成就</span>
           </div>
-          <span class="text-2xl font-bold text-white font-mono">{{ earnedAchievements.length }}</span>
+          <AnimatedNumber :value="earnedAchievements.length" class="text-2xl font-bold text-white font-mono" />
           <span class="text-gray-700 text-xs font-mono ml-1">/ {{ allAchievements.length }}</span>
         </div>
       </div>
@@ -268,7 +308,7 @@ onMounted(async () => {
             <span class="w-3 h-3 rounded-full bg-cyan-400 flex-shrink-0"></span>
             <span class="text-gray-600 text-[10px] font-mono">连续</span>
           </div>
-          <span class="text-2xl font-bold text-white font-mono">{{ progressStore.streakDays }}</span>
+          <AnimatedNumber :value="progressStore.streakDays" class="text-2xl font-bold text-white font-mono" />
           <span class="text-gray-700 text-xs font-mono ml-1">天连续</span>
         </div>
 
@@ -277,7 +317,7 @@ onMounted(async () => {
             <span class="w-3 h-3 rounded-full bg-amber-400 flex-shrink-0"></span>
             <span class="text-gray-600 text-[10px] font-mono">学习天数</span>
           </div>
-          <span class="text-2xl font-bold text-white font-mono">{{ progressStore.totalStudyDays }}</span>
+          <AnimatedNumber :value="progressStore.totalStudyDays" class="text-2xl font-bold text-white font-mono" />
           <span class="text-gray-700 text-xs font-mono ml-1">天总共</span>
         </div>
 
@@ -306,11 +346,12 @@ onMounted(async () => {
           </div>
           <div class="grid grid-cols-7 gap-1.5">
             <div
-              v-for="day in heatmapDays"
+              v-for="(day, dayIndex) in heatmapDays"
               :key="day.date"
               :title="day.date"
-              class="aspect-square rounded border"
+              class="heatmap-day aspect-square rounded border"
               :class="day.studied ? 'bg-emerald-400/40 border-emerald-300/40' : 'bg-white/[0.015] border-white/[0.03]'"
+              :style="{ '--heatmap-index': dayIndex }"
             ></div>
           </div>
         </section>
@@ -325,7 +366,7 @@ onMounted(async () => {
           </div>
           <div class="h-2 bg-white/[0.03] rounded-full overflow-hidden mb-3">
             <div
-              class="h-full bg-emerald-400/70 rounded-full"
+              class="progress-flow h-full bg-emerald-400/70 rounded-full"
               :style="{ width: `${stats.totalLabs ? Math.round((stats.completedLabs / stats.totalLabs) * 100) : 0}%` }"
             ></div>
           </div>
@@ -439,7 +480,8 @@ onMounted(async () => {
             v-for="cp in courseProgress"
             :key="cp.id"
             @click="router.push(`/course/${cp.id}`)"
-            class="group flex items-center gap-3 bg-white/[0.01] border border-white/[0.04] rounded-lg p-3 cursor-pointer hover:bg-white/[0.02] hover:border-white/[0.06] transition-all"
+            class="course-progress-row group flex items-center gap-3 bg-white/[0.01] border border-white/[0.04] rounded-lg p-3 cursor-pointer hover:bg-white/[0.02] hover:border-white/[0.06] transition-all"
+            :class="{ 'course-progress-complete': cp.pct === 100 }"
           >
             <div class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-xs font-mono font-bold" :class="cp.pct === 100 ? 'bg-emerald-400/5 text-emerald-400 border border-emerald-400/15' : 'bg-cyan-400/5 text-cyan-400 border border-cyan-400/15'">
               {{ cp.pct }}%
@@ -448,7 +490,7 @@ onMounted(async () => {
               <h3 class="text-white font-medium text-sm mb-1">{{ cp.title }}</h3>
               <div class="h-1 bg-white/[0.03] rounded-full overflow-hidden">
                 <div
-                  class="h-full rounded-full transition-all"
+                  class="progress-flow h-full rounded-full transition-all"
                   :class="cp.pct === 100 ? 'bg-emerald-400/60' : 'bg-cyan-400/60'"
                   :style="{ width: `${cp.pct}%` }"
                 ></div>
@@ -503,3 +545,122 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.progress-stat-card {
+  opacity: 0;
+  animation: stat-card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--stat-index) * 70ms) forwards;
+}
+
+.milestone-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  padding: 14px 16px 17px;
+  border: 1px solid rgb(52 211 153 / 0.2);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgb(52 211 153 / 0.07), rgb(34 211 238 / 0.025));
+  animation: milestone-in 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.milestone-value {
+  color: #6ee7b7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  text-shadow: 0 0 18px rgb(52 211 153 / 0.34);
+}
+
+.milestone-track {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.milestone-track span,
+.progress-flow {
+  display: block;
+  height: 100%;
+  transform-origin: left;
+  animation: progress-grow 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.milestone-track span {
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+  box-shadow: 0 0 12px rgb(52 211 153 / 0.35);
+}
+
+.heatmap-day {
+  opacity: 0;
+  animation: heatmap-light 0.35s ease-out calc(var(--heatmap-index) * 28ms) forwards;
+}
+
+.course-progress-row {
+  position: relative;
+  overflow: hidden;
+}
+
+.course-progress-complete::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(100deg, transparent 20%, rgb(52 211 153 / 0.09) 50%, transparent 78%);
+  transform: translateX(-100%);
+  animation: completed-course-scan 1.2s ease-out 0.2s both;
+}
+
+@keyframes stat-card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes milestone-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes progress-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes heatmap-light {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes completed-course-scan {
+  0% { opacity: 0; transform: translateX(-100%); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+@media (max-width: 640px) {
+  .milestone-banner {
+    align-items: flex-start;
+  }
+
+  .milestone-value {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-stat-card,
+  .milestone-banner,
+  .milestone-track span,
+  .progress-flow,
+  .heatmap-day,
+  .course-progress-complete::after {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+</style>

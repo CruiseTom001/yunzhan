@@ -1,6 +1,15 @@
 import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
+import hljs from 'highlight.js/lib/core'
+import bash from 'highlight.js/lib/languages/bash'
+import nginx from 'highlight.js/lib/languages/nginx'
+import yaml from 'highlight.js/lib/languages/yaml'
 import DOMPurify from 'dompurify'
+
+hljs.registerLanguage('bash', bash)
+hljs.registerAliases(['sh', 'shell'], { languageName: 'bash' })
+hljs.registerLanguage('nginx', nginx)
+hljs.registerLanguage('yaml', yaml)
+hljs.registerAliases('yml', { languageName: 'yaml' })
 
 const md = new MarkdownIt({
   html: false,

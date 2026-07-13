@@ -18,10 +18,17 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-highlight': ['highlight.js'],
           'vendor-markdown': ['markdown-it'],
           'vendor-lucide': ['lucide-vue-next'],
         },
+      },
+    },
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.YUNZHAN_API_PROXY_TARGET ?? 'http://127.0.0.1:8787',
+        changeOrigin: false,
       },
     },
   },

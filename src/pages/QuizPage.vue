@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CheckCircle2,
@@ -47,6 +47,11 @@ const showResult = ref(false)
 const currentStreak = ref(0)
 const answeredCount = ref(0)
 const correctCount = ref(0)
+const answerFeedback = ref<'correct' | 'wrong' | null>(null)
+const showPerfectCelebration = ref(false)
+const PERFECT_CELEBRATION_DURATION_MS = 2200
+let answerFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+let perfectCelebrationTimer: ReturnType<typeof setTimeout> | null = null
 
 const questions = computed(() => {
   if (selectedCategory.value === 'all') return allQuestions
@@ -105,12 +110,41 @@ function selectOption(optionId: string) {
     currentStreak.value = 0
   }
 
+  triggerAnswerFeedback(isCorrect.value ? 'correct' : 'wrong')
+
   progressStore.recordQuizAnswer(currentQuestion.value!.id, isCorrect.value)
 
   if (currentStreak.value === 10) progressStore.unlockAchievement('quiz-streak-10')
   if (currentStreak.value === 20) progressStore.unlockAchievement('quiz-streak-20')
   if (accuracy.value >= 80) progressStore.unlockAchievement('quiz-score-80')
   if (accuracy.value >= 95) progressStore.unlockAchievement('quiz-score-95')
+
+  const reachedLastQuestion = currentIndex.value === questions.value.length - 1
+  if (reachedLastQuestion && correctCount.value === answeredCount.value) {
+    triggerPerfectCelebration()
+  }
+}
+
+function triggerAnswerFeedback(status: 'correct' | 'wrong') {
+  if (answerFeedbackTimer) {
+    clearTimeout(answerFeedbackTimer)
+  }
+  answerFeedback.value = status
+  answerFeedbackTimer = setTimeout(() => {
+    answerFeedback.value = null
+    answerFeedbackTimer = null
+  }, 650)
+}
+
+function triggerPerfectCelebration() {
+  if (perfectCelebrationTimer) {
+    clearTimeout(perfectCelebrationTimer)
+  }
+  showPerfectCelebration.value = true
+  perfectCelebrationTimer = setTimeout(() => {
+    showPerfectCelebration.value = false
+    perfectCelebrationTimer = null
+  }, PERFECT_CELEBRATION_DURATION_MS)
 }
 
 function nextQuestion() {
@@ -128,6 +162,7 @@ function restart() {
   currentStreak.value = 0
   answeredCount.value = 0
   correctCount.value = 0
+  showPerfectCelebration.value = false
 }
 
 function getOptionClass(optionId: string) {
@@ -143,6 +178,15 @@ function getOptionClass(optionId: string) {
     return 'border-red-400/30 bg-red-400/5'
   return 'border-white/[0.02] bg-white/[0.005] opacity-30'
 }
+
+onUnmounted(() => {
+  if (answerFeedbackTimer) {
+    clearTimeout(answerFeedbackTimer)
+  }
+  if (perfectCelebrationTimer) {
+    clearTimeout(perfectCelebrationTimer)
+  }
+})
 </script>
 
 <template>
@@ -199,7 +243,14 @@ function getOptionClass(optionId: string) {
           ></div>
         </div>
 
-        <div v-if="currentQuestion" class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-6 mb-4">
+        <div
+          v-if="currentQuestion"
+          class="quiz-question-panel bg-white/[0.01] border border-white/[0.04] rounded-xl p-6 mb-4"
+          :class="{
+            'quiz-feedback-correct': answerFeedback === 'correct',
+            'quiz-feedback-wrong': answerFeedback === 'wrong',
+          }"
+        >
           <div class="flex items-center gap-2 mb-3">
             <span
               :class="[
@@ -230,6 +281,8 @@ function getOptionClass(optionId: string) {
                 'flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-200',
                 getOptionClass(option.id),
                 showResult ? 'cursor-default' : 'cursor-pointer',
+                answerFeedback === 'correct' && option.isCorrect ? 'quiz-option-correct' : '',
+                answerFeedback === 'wrong' && option.id === selectedAnswer ? 'quiz-option-wrong' : '',
               ]"
             >
               <span
@@ -252,23 +305,25 @@ function getOptionClass(optionId: string) {
             </button>
           </div>
 
-          <div
-            v-if="showResult"
-            :class="[
-              'mt-4 p-4 rounded-lg border',
-              isCorrect
-                ? 'bg-emerald-400/[0.03] border-emerald-400/15'
-                : 'bg-red-400/[0.03] border-red-400/15',
-            ]"
-          >
-            <div class="flex items-center gap-2 mb-1.5">
-              <component :is="isCorrect ? CheckCircle2 : XCircle" :class="['w-4 h-4', isCorrect ? 'text-emerald-400' : 'text-red-400']" />
-              <span :class="['font-medium text-xs font-mono', isCorrect ? 'text-emerald-400' : 'text-red-400']">
-                {{ isCorrect ? '回答正确' : '回答错误' }}
-              </span>
+          <Transition name="answer-explanation">
+            <div
+              v-if="showResult"
+              :class="[
+                'mt-4 p-4 rounded-lg border',
+                isCorrect
+                  ? 'bg-emerald-400/[0.03] border-emerald-400/15'
+                  : 'bg-red-400/[0.03] border-red-400/15',
+              ]"
+            >
+              <div class="flex items-center gap-2 mb-1.5">
+                <component :is="isCorrect ? CheckCircle2 : XCircle" :class="['w-4 h-4', isCorrect ? 'text-emerald-400' : 'text-red-400']" />
+                <span :class="['font-medium text-xs font-mono', isCorrect ? 'text-emerald-400' : 'text-red-400']">
+                  {{ isCorrect ? '回答正确' : '回答错误' }}
+                </span>
+              </div>
+              <p class="text-gray-400 text-xs leading-relaxed">{{ currentQuestion.explanation }}</p>
             </div>
-            <p class="text-gray-400 text-xs leading-relaxed">{{ currentQuestion.explanation }}</p>
-          </div>
+          </Transition>
         </div>
 
         <div class="flex items-center justify-between">
@@ -300,5 +355,169 @@ function getOptionClass(optionId: string) {
         </div>
       </template>
     </div>
+
+    <Teleport to="body">
+      <Transition name="perfect-fade">
+        <div v-if="showPerfectCelebration" class="perfect-celebration" role="status" aria-live="polite">
+          <div class="perfect-rays" aria-hidden="true">
+            <span v-for="ray in 12" :key="ray" :style="{ '--ray-index': ray - 1 }" />
+          </div>
+          <Award class="perfect-award" aria-hidden="true" />
+          <strong>PERFECT SCORE</strong>
+          <span>{{ correctCount }}/{{ answeredCount }} 全部回答正确</span>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.quiz-feedback-correct {
+  animation: quiz-correct-pulse 0.65s ease-out;
+}
+
+.quiz-feedback-wrong {
+  animation: quiz-wrong-panel 0.42s ease-out;
+}
+
+.quiz-option-correct {
+  animation: quiz-correct-option 0.65s ease-out;
+}
+
+.quiz-option-wrong {
+  animation: quiz-wrong-option 0.38s ease-out;
+}
+
+.answer-explanation-enter-active,
+.answer-explanation-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.answer-explanation-enter-from,
+.answer-explanation-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.perfect-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  overflow: hidden;
+  pointer-events: none;
+  color: #fde68a;
+  background: radial-gradient(circle at center, rgb(251 191 36 / 0.13), transparent 34%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.perfect-celebration strong {
+  color: #fbbf24;
+  font-size: 24px;
+  letter-spacing: 0;
+  text-shadow: 0 0 28px rgb(251 191 36 / 0.55);
+  animation: perfect-title 2.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.perfect-celebration > span:last-child {
+  color: #d1fae5;
+  font-size: 12px;
+}
+
+.perfect-award {
+  width: 42px;
+  height: 42px;
+  filter: drop-shadow(0 0 18px rgb(251 191 36 / 0.45));
+  animation: perfect-award 2.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.perfect-rays {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+}
+
+.perfect-rays span {
+  position: absolute;
+  width: 3px;
+  height: 96px;
+  border-radius: 2px;
+  background: linear-gradient(to top, rgb(251 191 36 / 0.8), transparent);
+  transform-origin: 50% 0;
+  transform: rotate(calc(var(--ray-index) * 30deg)) translateY(52px);
+  animation: perfect-ray 1.4s ease-out both;
+}
+
+.perfect-fade-enter-active,
+.perfect-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.perfect-fade-enter-from,
+.perfect-fade-leave-to {
+  opacity: 0;
+}
+
+@keyframes quiz-correct-pulse {
+  0% { box-shadow: 0 0 0 rgb(52 211 153 / 0); }
+  40% { border-color: rgb(52 211 153 / 0.42); box-shadow: 0 0 32px rgb(52 211 153 / 0.12); }
+  100% { box-shadow: 0 0 0 rgb(52 211 153 / 0); }
+}
+
+@keyframes quiz-wrong-panel {
+  0%, 100% { transform: translateX(0); }
+  32% { transform: translateX(-3px); }
+  68% { transform: translateX(2px); }
+}
+
+@keyframes quiz-correct-option {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.012); box-shadow: 0 0 22px rgb(52 211 153 / 0.12); }
+  100% { transform: scale(1); }
+}
+
+@keyframes quiz-wrong-option {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  55% { transform: translateX(4px); }
+  78% { transform: translateX(-2px); }
+}
+
+@keyframes perfect-title {
+  0% { opacity: 0; transform: translateY(10px) scale(0.86); }
+  18%, 76% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.97); }
+}
+
+@keyframes perfect-award {
+  0% { opacity: 0; transform: scale(0.4) rotate(-18deg); }
+  24%, 78% { opacity: 1; transform: scale(1) rotate(0); }
+  100% { opacity: 0; transform: scale(0.92) rotate(8deg); }
+}
+
+@keyframes perfect-ray {
+  0% { opacity: 0; height: 20px; }
+  28% { opacity: 0.9; }
+  100% { opacity: 0; height: 150px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quiz-feedback-correct,
+  .quiz-feedback-wrong,
+  .quiz-option-correct,
+  .quiz-option-wrong,
+  .perfect-celebration strong,
+  .perfect-award,
+  .perfect-rays span {
+    animation: none;
+  }
+
+  .perfect-rays {
+    display: none;
+  }
+}
+</style>

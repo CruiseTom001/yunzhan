@@ -21,14 +21,16 @@ interface AIResponse {
 }
 
 const API_URL = 'https://api.deepseek.com/v1/chat/completions'
+const REQUEST_TIMEOUT_MS = 30_000
+const STREAM_TIMEOUT_MS = 120_000
+let sessionApiKey = ''
 
-// 从 localStorage 读取 API Key
 function getApiKey(): string {
-  return localStorage.getItem('ai-api-key') || ''
+  return sessionApiKey
 }
 
 export function setApiKey(key: string) {
-  localStorage.setItem('ai-api-key', key)
+  sessionApiKey = key.trim()
 }
 
 export function hasApiKey(): boolean {
@@ -55,6 +57,7 @@ async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
         max_tokens: 1500,
         stream: false,
       }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
 
     if (!response.ok) {
@@ -62,10 +65,11 @@ async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
       return { content: '', error: `API 错误: ${response.status} — ${err.slice(0, 100)}` }
     }
 
-    const data = await response.json()
-    return { content: data.choices?.[0]?.message?.content || '' }
-  } catch (e: any) {
-    return { content: '', error: `网络错误: ${e.message}` }
+    const data: unknown = await response.json()
+    return { content: readDeepSeekContent(data, 'message') }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '未知网络错误'
+    return { content: '', error: `网络错误: ${message}` }
   }
 }
 
@@ -237,6 +241,7 @@ export async function* streamAsk(question: string): AsyncGenerator<string> {
       max_tokens: 2000,
       stream: true,
     }),
+    signal: AbortSignal.timeout(STREAM_TIMEOUT_MS),
   })
 
   if (!response.ok) {
@@ -263,8 +268,8 @@ export async function* streamAsk(question: string): AsyncGenerator<string> {
         const data = line.slice(6)
         if (data === '[DONE]') return
         try {
-          const json = JSON.parse(data)
-          const content = json.choices?.[0]?.delta?.content
+          const json: unknown = JSON.parse(data)
+          const content = readDeepSeekContent(json, 'delta')
           if (content) yield content
         } catch {
           // Ignore malformed streaming chunks and continue reading later chunks.
@@ -272,4 +277,17 @@ export async function* streamAsk(question: string): AsyncGenerator<string> {
       }
     }
   }
+}
+
+function readDeepSeekContent(payload: unknown, field: 'message' | 'delta'): string {
+  if (!isRecord(payload) || !Array.isArray(payload.choices)) return ''
+  const choice = payload.choices[0]
+  if (!isRecord(choice)) return ''
+  const container = choice[field]
+  if (!isRecord(container)) return ''
+  return typeof container.content === 'string' ? container.content : ''
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

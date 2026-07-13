@@ -1,38 +1,28 @@
 const { app, BrowserWindow, ipcMain, session, shell } = require('electron')
-const { execFile } = require('child_process')
 const fs = require('fs/promises')
+const fsSync = require('fs')
 const path = require('path')
 
 const isDev = !app.isPackaged
 
-// 实验终端白名单：扩为只读/查询类命令集，
-// 让网站讲解的命令能在真实终端跑一遍形成阅读→操作闭环。
-// 故意排除 rm/mv/mkfs/dd/kill -9 等破坏性命令。
-const allowedCommands = new Set([
-  // 信息查看
-  'pwd', 'whoami', 'hostname', 'date', 'id', 'uname', 'uptime', 'echo',
-  // 文件查看（只读）
-  'ls', 'dir', 'cat', 'less', 'head', 'tail', 'stat', 'file', 'wc',
-  // 查找与文本过滤（只读）
-  'find', 'grep', 'which', 'whereis', 'locate',
-  // 进程/资源监控（只读）
-  'ps', 'top', 'free', 'df', 'du',
-  // 网络（只读探测）
-  'ping', 'curl', 'dig', 'nslookup', 'traceroute', 'mtr',
-  // systemd 服务查询与日志查看（只读子命令由用户自负）
-  'systemctl', 'journalctl',
-  // Kubernetes 集群只读查询（get/describe/logs 由用户自负）
-  'kubectl',
-  // git 只读子命令（status/log/diff/branch 由用户自负）
-  'git',
-  // 容器（只读状态子命令由用户自负）
-  'docker',
-])
 const progressFileName = 'progress.json'
 const backupFileName = 'progress.backup.json'
+const accountIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function getProgressPaths() {
-  const dataDir = app.getPath('userData')
+function normalizeAccountId(value) {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string' || !accountIdPattern.test(value)) {
+    throw new Error('invalid account id')
+  }
+  return value.toLowerCase()
+}
+
+function getProgressPaths(accountId = null) {
+  const userDataDir = app.getPath('userData')
+  const normalizedAccountId = normalizeAccountId(accountId)
+  const dataDir = normalizedAccountId
+    ? path.join(userDataDir, 'accounts', normalizedAccountId)
+    : userDataDir
   return {
     dataDir,
     progressPath: path.join(dataDir, progressFileName),
@@ -42,17 +32,53 @@ function getProgressPaths() {
 }
 
 function createContentSecurityPolicy() {
+  const configuredApiOrigin = getConfiguredApiOrigin()
+  const developmentConnections = isDev
+    ? ' http://localhost:5173 http://127.0.0.1:5173 http://localhost:8787 http://127.0.0.1:8787 ws://localhost:5173 ws://127.0.0.1:5173'
+    : ''
+  const apiConnection = configuredApiOrigin ? ` ${configuredApiOrigin}` : ''
   return [
     "default-src 'self'",
-    isDev ? "connect-src 'self' http://localhost:5173 http://127.0.0.1:5173 ws://localhost:5173 ws://127.0.0.1:5173 https://api.deepseek.com" : "connect-src 'self' https://api.deepseek.com",
-    "script-src 'self' 'unsafe-eval'",
+    `connect-src 'self' https://api.deepseek.com${developmentConnections}${apiConnection}`,
+    isDev ? "script-src 'self' 'unsafe-eval'" : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "object-src 'none'",
+    "form-action 'self'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
   ].join('; ')
+}
+
+function getConfiguredApiOrigin() {
+  const value = process.env.YUNZHAN_API_ORIGIN || readApiOriginFromConfig()
+  if (!value) return isDev ? 'http://127.0.0.1:8787' : ''
+  try {
+    const target = new URL(value)
+    if (target.protocol !== 'https:' && !(isDev && target.protocol === 'http:')) {
+      console.warn('Ignored insecure YUNZHAN_API_ORIGIN.')
+      return ''
+    }
+    return target.origin
+  } catch {
+    console.warn('Ignored invalid YUNZHAN_API_ORIGIN.')
+    return ''
+  }
+}
+
+function readApiOriginFromConfig() {
+  const configPath = path.join(__dirname, 'api-config.json')
+  try {
+    const stats = fsSync.statSync(configPath)
+    if (stats.size > 2048) return ''
+    const parsed = JSON.parse(fsSync.readFileSync(configPath, 'utf8'))
+    return parsed && typeof parsed === 'object' && typeof parsed.apiOrigin === 'string'
+      ? parsed.apiOrigin.trim()
+      : ''
+  } catch {
+    return ''
+  }
 }
 
 function registerSecurityHeaders() {
@@ -67,42 +93,13 @@ function registerSecurityHeaders() {
   })
 }
 
-function parseCommand(input) {
-  const parts = String(input || '').trim().split(/\s+/).filter(Boolean)
-  const command = parts[0]
-  const args = parts.slice(1).filter(arg => !/[;&|`$<>]/.test(arg))
-  return { command, args }
-}
-
 function registerIpc() {
-  ipcMain.handle('terminal:exec', async (_event, input) => {
-    const { command, args } = parseCommand(input)
-    if (!command || !allowedCommands.has(command)) {
-      return { exitCode: 127, stdout: '', stderr: `命令不在实验白名单中: ${command || '(empty)'}` }
-    }
-
-    return new Promise((resolve) => {
-      execFile(command, args, {
-        cwd: app.getPath('temp'),
-        timeout: 8000,
-        windowsHide: true,
-        maxBuffer: 1024 * 128,
-      }, (error, stdout, stderr) => {
-        resolve({
-          exitCode: error && typeof error.code === 'number' ? error.code : 0,
-          stdout,
-          stderr,
-        })
-      })
-    })
-  })
-
-  ipcMain.handle('app:getPath', (_event, name) => app.getPath(name || 'userData'))
   ipcMain.handle('app:getVersion', () => app.getVersion())
+  ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
   ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
 
-  ipcMain.handle('progress:load', async () => {
-    const { progressPath, backupPath } = getProgressPaths()
+  ipcMain.handle('progress:load', async (_event, accountId) => {
+    const { progressPath, backupPath } = getProgressPaths(accountId)
     const readJson = async (filePath, source) => {
       const raw = await fs.readFile(filePath, 'utf8')
       return {
@@ -127,11 +124,14 @@ function registerIpc() {
   })
 
   ipcMain.handle('progress:save', async (_event, payload) => {
-    const { dataDir, progressPath, backupPath, tempPath } = getProgressPaths()
+    // 深度防御：限制磁盘文件大小，防止异常大的 payload 撑爆 userData
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !payload.progress) {
+      return { ok: false, error: 'invalid progress payload' }
+    }
+    const { dataDir, progressPath, backupPath, tempPath } = getProgressPaths(payload.accountId)
     await fs.mkdir(dataDir, { recursive: true })
 
-    // 深度防御：限制磁盘文件大小，防止异常大的 payload 撑爆 userData
-    const payloadJson = JSON.stringify(payload ?? {})
+    const payloadJson = JSON.stringify(payload)
     if (payloadJson.length > 10 * 1024 * 1024) {
       return { ok: false, error: 'payload too large', path: progressPath }
     }
@@ -145,9 +145,9 @@ function registerIpc() {
     }
 
     const envelope = {
+      ...payload,
       version: 1,
       updatedAt: Date.now(),
-      ...payload,
     }
     await fs.writeFile(tempPath, JSON.stringify(envelope, null, 2), 'utf8')
     await fs.rename(tempPath, progressPath)
@@ -159,8 +159,8 @@ function registerIpc() {
     }
   })
 
-  ipcMain.handle('progress:clear', async () => {
-    const { progressPath, backupPath, tempPath } = getProgressPaths()
+  ipcMain.handle('progress:clear', async (_event, accountId) => {
+    const { progressPath, backupPath, tempPath } = getProgressPaths(accountId)
     await Promise.allSettled([
       fs.rm(progressPath, { force: true }),
       fs.rm(backupPath, { force: true }),
@@ -168,6 +168,32 @@ function registerIpc() {
     ])
     return { ok: true }
   })
+}
+
+function isExternalWebUrl(url) {
+  try {
+    const protocol = new URL(url).protocol
+    return protocol === 'https:' || protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function openExternalWebUrl(url) {
+  if (!isExternalWebUrl(url)) return
+  void shell.openExternal(url).catch(error => {
+    console.warn('Failed to open external URL:', error)
+  })
+}
+
+function isAllowedAppNavigation(url) {
+  try {
+    const target = new URL(url)
+    if (!isDev) return target.protocol === 'file:'
+    return target.origin === 'http://localhost:5173' || target.origin === 'http://127.0.0.1:5173'
+  } catch {
+    return false
+  }
 }
 
 function createWindow() {
@@ -186,6 +212,17 @@ function createWindow() {
       webSecurity: true,
       allowRunningInsecureContent: false,
     },
+  })
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalWebUrl(url)
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedAppNavigation(url)) return
+    event.preventDefault()
+    openExternalWebUrl(url)
   })
 
   // 隐藏菜单栏（生产环境）

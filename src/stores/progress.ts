@@ -3,14 +3,25 @@ import { ref, computed } from 'vue'
 import type { CommandHistoryItem, LabCheck, LabTask, LearningProgress, QuizRecord } from '@/types'
 import {
   clearProgress,
+  hasMigratedLegacyProgress,
   loadDesktopProgressSnapshot,
+  loadLegacyProgressSnapshot,
   loadProgressBackup,
   loadProgressSnapshot,
+  isValidProgressPayload,
+  markLegacyProgressMigrated,
   normalizeProgress,
   saveProgress,
   saveProgressBackup,
   saveProgressToLocal,
+  setProgressStorageScope,
 } from '@/utils/storage'
+import {
+  CloudProgressConflictError,
+  loadCloudProgress,
+  mergeLearningProgress,
+  saveCloudProgress,
+} from '@/utils/cloudSync'
 import { allQuestions } from '@/data/quizzes/all'
 import type { QuizQuestion } from '@/types'
 
@@ -18,13 +29,21 @@ import type { QuizQuestion } from '@/types'
 const questionMap: Map<string, QuizQuestion> = new Map(allQuestions.map((q) => [q.id, q]))
 
 export const useProgressStore = defineStore('progress', () => {
-  const initialSnapshot = loadProgressSnapshot()
+  const legacySnapshot = loadLegacyProgressSnapshot()
+  const initialSnapshot = legacySnapshot
   const progress = ref<LearningProgress>(initialSnapshot.progress)
   const storageReady = ref(false)
   const storageStatus = ref<'browser' | 'desktop' | 'error'>('browser')
   const storagePath = ref('')
   const backupUpdatedAt = ref(loadProgressBackup()?.updatedAt ?? 0)
+  const activeAccountId = ref<string | null>(null)
+  const cloudSyncStatus = ref<'idle' | 'syncing' | 'synced' | 'error'>('idle')
+  const cloudSyncMessage = ref('')
+  const cloudLastSyncedAt = ref(0)
   let latestSavedAt = initialSnapshot.updatedAt
+  let cloudVersion = 0
+  let cloudReady = false
+  let cloudSaveQueue = Promise.resolve()
 
   const completedChaptersCount = computed(() =>
     Object.values(progress.value.completedChapters).reduce((sum, ch) => sum + ch.length, 0),
@@ -325,15 +344,13 @@ export const useProgressStore = defineStore('progress', () => {
 
     if (check.type === 'command_in_history' || check.type === 'command_exact') {
       const normalizedTarget = normalizeLabCommand(check.target)
-      const matched = history.find(item => item.command.includes(check.target))
       const exactMatched = history.find(item =>
         item.exitCode === 0 && normalizeLabCommand(item.command) === normalizedTarget,
       )
-      const validMatch = check.type === 'command_exact' ? exactMatched : matched
-      if (validMatch) {
+      if (exactMatched) {
         return {
           passed: true,
-          message: `已检测到成功执行的命令：${validMatch.command}`,
+          message: `已检测到成功执行的命令：${exactMatched.command}`,
         }
       }
 
@@ -419,17 +436,17 @@ export const useProgressStore = defineStore('progress', () => {
   }
 
   function importProgress(payload: unknown) {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    if (!isRecord(payload)) {
       throw new Error('进度文件格式无效。')
     }
 
-    const source = payload as Record<string, unknown>
-    const candidate = source.progress && typeof source.progress === 'object'
-      ? source.progress
-      : source
+    const candidate = isRecord(payload.progress) ? payload.progress : payload
 
-    if (!hasRecognizableProgressFields(candidate as Record<string, unknown>)) {
+    if (!hasRecognizableProgressFields(candidate)) {
       throw new Error('没有在文件中找到云栈学习进度。')
+    }
+    if (!isValidProgressPayload(candidate)) {
+      throw new Error('进度文件包含无效字段或数据类型，已拒绝导入。')
     }
 
     const backup = saveProgressBackup(progress.value, 'before-import')
@@ -467,6 +484,10 @@ export const useProgressStore = defineStore('progress', () => {
       'labRecords',
       'reviewCards',
     ].some(key => key in value)
+  }
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 
   function addCommunityDraft(type: 'lab-note' | 'yaml' | 'command', title: string, content: string, tags: string[] = []) {
@@ -554,6 +575,45 @@ export const useProgressStore = defineStore('progress', () => {
    */
   const PERSIST_DEBOUNCE_MS = 300
   let persistTimer: ReturnType<typeof setTimeout> | null = null
+  let storageHydration: Promise<void> = Promise.resolve()
+
+  function cloneProgress(value: LearningProgress) {
+    return normalizeProgress(JSON.parse(JSON.stringify(value)) as unknown)
+  }
+
+  function queueCloudSnapshot(value: LearningProgress) {
+    const accountId = activeAccountId.value
+    if (!cloudReady || !accountId) return
+    const snapshot = cloneProgress(value)
+    cloudSaveQueue = cloudSaveQueue.then(async () => {
+      if (activeAccountId.value !== accountId) return
+      cloudSyncStatus.value = 'syncing'
+      cloudSyncMessage.value = ''
+      try {
+        const result = await saveCloudProgress(snapshot, cloudVersion)
+        cloudVersion = result.version
+        cloudLastSyncedAt.value = result.updatedAt
+        cloudSyncStatus.value = 'synced'
+      } catch (error: unknown) {
+        if (error instanceof CloudProgressConflictError && error.snapshot.progress) {
+          const merged = mergeLearningProgress(snapshot, error.snapshot.progress)
+          const retryResult = await saveCloudProgress(merged, error.snapshot.version)
+          cloudVersion = retryResult.version
+          cloudLastSyncedAt.value = retryResult.updatedAt
+          if (activeAccountId.value === accountId) {
+            progress.value = merged
+            latestSavedAt = Date.now()
+            saveProgressToLocal(merged, latestSavedAt)
+          }
+          cloudSyncStatus.value = 'synced'
+          cloudSyncMessage.value = '已合并其他设备的最新进度。'
+          return
+        }
+        cloudSyncStatus.value = 'error'
+        cloudSyncMessage.value = error instanceof Error ? error.message : '云端进度同步失败。'
+      }
+    })
+  }
 
   function flushPersist() {
     if (persistTimer) {
@@ -561,6 +621,7 @@ export const useProgressStore = defineStore('progress', () => {
       persistTimer = null
     }
     latestSavedAt = saveProgress(progress.value)
+    queueCloudSnapshot(progress.value)
   }
 
   function persist() {
@@ -568,6 +629,7 @@ export const useProgressStore = defineStore('progress', () => {
     persistTimer = setTimeout(() => {
       persistTimer = null
       latestSavedAt = saveProgress(progress.value)
+      queueCloudSnapshot(progress.value)
     }, PERSIST_DEBOUNCE_MS)
   }
 
@@ -579,16 +641,13 @@ export const useProgressStore = defineStore('progress', () => {
     })
   }
 
-  const storageHydration = hydrateDesktopStorage()
-
-  async function hydrateDesktopStorage() {
+  async function hydrateDesktopStorage(markReady = true) {
     try {
       const desktopSnapshot = await loadDesktopProgressSnapshot()
       if (!desktopSnapshot) {
         if (latestSavedAt > 0 || hasLearningData(progress.value)) {
           flushPersist()
         }
-        storageReady.value = true
         return
       }
 
@@ -606,11 +665,96 @@ export const useProgressStore = defineStore('progress', () => {
       console.warn('Failed to hydrate desktop progress:', error)
       storageStatus.value = 'error'
     } finally {
-      // 确保 hydration 期间任何被防抖挂起的写入都已落盘，
-      // 否则 main.ts 在 await whenStorageReady() 后恢复路由时可能读到旧状态
       flushPersist()
+      if (markReady) storageReady.value = true
+    }
+  }
+
+  async function bindAccount(accountId: string, displayName: string) {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    cloudReady = false
+    storageReady.value = false
+    storageStatus.value = 'browser'
+    storagePath.value = ''
+    activeAccountId.value = accountId
+    setProgressStorageScope(accountId)
+
+    const localSnapshot = loadProgressSnapshot()
+    progress.value = localSnapshot.progress
+    latestSavedAt = localSnapshot.updatedAt
+    backupUpdatedAt.value = loadProgressBackup()?.updatedAt ?? 0
+
+    storageHydration = hydrateDesktopStorage(false)
+    await storageHydration
+
+    try {
+      const cloudSnapshot = await loadCloudProgress()
+      cloudVersion = cloudSnapshot.version
+      cloudLastSyncedAt.value = cloudSnapshot.updatedAt
+      const scopedHasData = hasLearningData(progress.value)
+      let cloudNeedsUpdate = false
+      const shouldMigrateLegacy = !cloudSnapshot.hasProgress
+        && !scopedHasData
+        && !hasMigratedLegacyProgress()
+        && hasLearningData(legacySnapshot.progress)
+
+      if (cloudSnapshot.progress) {
+        const merged = scopedHasData
+          ? mergeLearningProgress(progress.value, cloudSnapshot.progress)
+          : cloudSnapshot.progress
+        cloudNeedsUpdate = JSON.stringify(merged) !== JSON.stringify(cloudSnapshot.progress)
+        progress.value = merged
+      } else if (shouldMigrateLegacy) {
+        progress.value = cloneProgress(legacySnapshot.progress)
+        markLegacyProgressMigrated()
+        cloudSyncMessage.value = '已将原本机学习进度迁移到当前账号。'
+      }
+
+      progress.value.userProfile = {
+        ...progress.value.userProfile,
+        id: accountId,
+        name: displayName,
+      }
+      latestSavedAt = saveProgress(progress.value)
+      cloudReady = true
+      if (!cloudSnapshot.hasProgress || shouldMigrateLegacy || cloudNeedsUpdate) {
+        queueCloudSnapshot(progress.value)
+      } else {
+        cloudSyncStatus.value = 'synced'
+      }
+    } catch (error: unknown) {
+      cloudReady = true
+      cloudSyncStatus.value = 'error'
+      cloudSyncMessage.value = error instanceof Error ? error.message : '云端进度加载失败，当前使用本地缓存。'
+      progress.value.userProfile = {
+        ...progress.value.userProfile,
+        id: accountId,
+        name: displayName,
+      }
+      latestSavedAt = saveProgress(progress.value)
+    } finally {
       storageReady.value = true
     }
+  }
+
+  async function unbindAccount() {
+    if (activeAccountId.value) {
+      flushPersist()
+      await cloudSaveQueue
+    }
+    cloudReady = false
+    cloudVersion = 0
+    cloudSyncStatus.value = 'idle'
+    cloudSyncMessage.value = ''
+    cloudLastSyncedAt.value = 0
+    activeAccountId.value = null
+    setProgressStorageScope(null)
+    progress.value = normalizeProgress({})
+    latestSavedAt = 0
+    storageReady.value = true
   }
 
   function whenStorageReady() {
@@ -626,6 +770,7 @@ export const useProgressStore = defineStore('progress', () => {
       value.studyDays.length > 0 ||
       value.commandHistory.length > 0 ||
       Object.keys(value.labRecords).length > 0 ||
+      value.totalTimeSpent > 0 ||
       Boolean(value.lastVisited || value.lastRoute)
     )
   }
@@ -636,6 +781,10 @@ export const useProgressStore = defineStore('progress', () => {
     storageStatus,
     storagePath,
     backupUpdatedAt,
+    activeAccountId,
+    cloudSyncStatus,
+    cloudSyncMessage,
+    cloudLastSyncedAt,
     completedChaptersCount,
     quizTotalAnswered,
     quizCorrectCount,
@@ -679,6 +828,8 @@ export const useProgressStore = defineStore('progress', () => {
     clearAllProgress,
     addCommunityDraft,
     updateUserProfile,
+    bindAccount,
+    unbindAccount,
     whenStorageReady,
   }
 })

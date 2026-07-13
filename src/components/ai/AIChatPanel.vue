@@ -103,11 +103,17 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function saveApiKey() {
-  setApiKey(apiKeyInput.value.trim())
+  const key = apiKeyInput.value.trim()
+  if (!key) {
+    messages.value.push({ role: 'assistant', content: '请输入有效的 API Key。' })
+    return
+  }
+  setApiKey(key)
+  apiKeyInput.value = ''
   showApiConfig.value = false
   messages.value.push({
     role: 'assistant',
-    content: 'API Key 已保存，现在可以使用在线 AI 分析能力。',
+    content: 'API Key 仅保存在当前会话内，不会写入磁盘。现在可以使用在线 AI 分析能力。',
   })
 }
 
@@ -146,7 +152,7 @@ watch(messages, () => {
 
         <div v-if="showApiConfig" class="ai-api-config">
           <p class="text-xs text-gray-500 mb-2">
-            输入 DeepSeek API Key（<a href="https://platform.deepseek.com" target="_blank" rel="noreferrer" class="text-cyan-400">获取 Key</a>）
+            输入 DeepSeek API Key，仅当前会话有效，不会写入磁盘（<a href="https://platform.deepseek.com" target="_blank" rel="noreferrer" class="text-cyan-400">获取 Key</a>）
           </p>
           <div class="flex gap-2">
             <input

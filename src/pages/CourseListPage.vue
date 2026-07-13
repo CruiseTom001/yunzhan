@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Filter } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
@@ -14,6 +14,8 @@ const progressStore = useProgressStore()
 const searchQuery = ref('')
 const selectedDifficulty = ref<Difficulty | 'all'>('all')
 const selectedCategory = ref<string>('all')
+const courseGrid = ref<HTMLElement | null>(null)
+let courseRevealObserver: IntersectionObserver | null = null
 
 const categories = computed(() => {
   const cats = new Map<string, string>()
@@ -45,9 +47,45 @@ function getCourseProgress(id: string): number {
   return total > 0 ? Math.round((completed / total) * 100) : 0
 }
 
+function getCompletedChapterCount(id: string): number {
+  return progressStore.progress.completedChapters[id]?.length ?? 0
+}
+
 function goToCourse(id: string) {
   router.push(`/course/${id}`)
 }
+
+function observeCourseCards() {
+  const cards = courseGrid.value?.querySelectorAll<HTMLElement>('[data-course-entry]') ?? []
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    cards.forEach(card => card.classList.add('is-visible'))
+    return
+  }
+
+  cards.forEach(card => courseRevealObserver?.observe(card))
+}
+
+onMounted(() => {
+  courseRevealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return
+      entry.target.classList.add('is-visible')
+      courseRevealObserver?.unobserve(entry.target)
+    })
+  }, { threshold: 0.08, rootMargin: '0px 0px -36px' })
+  observeCourseCards()
+})
+
+watch(filteredCourses, async () => {
+  await nextTick()
+  observeCourseCards()
+})
+
+onUnmounted(() => {
+  courseRevealObserver?.disconnect()
+  courseRevealObserver = null
+})
 </script>
 
 <template>
@@ -114,15 +152,52 @@ function goToCourse(id: string) {
         <p class="text-gray-600 font-mono text-sm">没有找到匹配的课程</p>
       </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <CourseCard
-          v-for="course in filteredCourses"
+      <div v-else ref="courseGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div
+          v-for="(course, visualIndex) in filteredCourses"
           :key="course.id"
-          :course="course"
-          :progress="getCourseProgress(course.id)"
-          @click="goToCourse"
-        />
+          data-course-entry
+          class="course-entry"
+          :style="{ '--course-index': visualIndex % 6 }"
+        >
+          <CourseCard
+            :course="course"
+            :progress="getCourseProgress(course.id)"
+            :completed-count="getCompletedChapterCount(course.id)"
+            @click="goToCourse"
+          />
+        </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.course-entry {
+  height: 100%;
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.course-entry.is-visible {
+  animation: course-entry-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--course-index) * 55ms) forwards;
+}
+
+.course-entry :deep(> *) {
+  height: 100%;
+}
+
+@keyframes course-entry-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-entry,
+  .course-entry.is-visible {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+</style>

@@ -221,7 +221,7 @@ function enhanceCodeBlocks() {
       demoBtn.title = demo.title
       demoBtn.addEventListener('click', (e) => {
         e.stopPropagation()
-        window.open(demo.url, '_blank')
+        window.open(demo.url, '_blank', 'noopener,noreferrer')
       })
       btnGroup.appendChild(demoBtn)
     }

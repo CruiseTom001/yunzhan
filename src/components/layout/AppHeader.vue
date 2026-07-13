@@ -1,13 +1,52 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { BookOpen, PenTool, BarChart3, Menu, X, Home, Search, Sun, Moon, Bot, Terminal, Brain } from 'lucide-vue-next'
+import {
+  BarChart3,
+  BookOpen,
+  Bot,
+  Brain,
+  Cloud,
+  CloudOff,
+  Home,
+  LoaderCircle,
+  LogOut,
+  Menu,
+  Moon,
+  PenTool,
+  Search,
+  ShieldCheck,
+  Sun,
+  Terminal,
+  UserRound,
+  X,
+} from 'lucide-vue-next'
+import { useAuthStore } from '@/stores/auth'
+import { useProgressStore } from '@/stores/progress'
 import { useTheme } from '@/stores/theme'
 
 const router = useRouter()
 const route = useRoute()
 const mobileMenuOpen = ref(false)
+const accountMenuOpen = ref(false)
+const accountMenuRoot = ref<HTMLElement | null>(null)
+const loggingOut = ref(false)
 const { theme, toggleTheme } = useTheme()
+const authStore = useAuthStore()
+const progressStore = useProgressStore()
+
+const syncLabel = computed(() => {
+  if (progressStore.cloudSyncStatus === 'syncing') return '正在同步'
+  if (progressStore.cloudSyncStatus === 'synced') return '云端已同步'
+  if (progressStore.cloudSyncStatus === 'error') return '同步异常'
+  return '等待同步'
+})
+
+const syncIcon = computed(() => {
+  if (progressStore.cloudSyncStatus === 'syncing') return LoaderCircle
+  if (progressStore.cloudSyncStatus === 'error') return CloudOff
+  return Cloud
+})
 
 const emit = defineEmits<{
   openSearch: []
@@ -26,8 +65,32 @@ const navItems = [
 
 function navigate(path: string) {
   mobileMenuOpen.value = false
-  router.push(path)
+  accountMenuOpen.value = false
+  void router.push(path)
 }
+
+async function logout() {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try {
+    await progressStore.unbindAccount()
+    await authStore.logout()
+  } finally {
+    loggingOut.value = false
+    accountMenuOpen.value = false
+    mobileMenuOpen.value = false
+    await router.replace('/login')
+  }
+}
+
+function handleDocumentClick(event: MouseEvent) {
+  if (accountMenuRoot.value && event.target instanceof Node && !accountMenuRoot.value.contains(event.target)) {
+    accountMenuOpen.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', handleDocumentClick))
+onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
 </script>
 
 <template>
@@ -93,9 +156,61 @@ function navigate(path: string) {
           <component :is="item.icon" class="w-3.5 h-3.5" />
           {{ item.label }}
         </button>
+
+        <div ref="accountMenuRoot" class="relative ml-1 pl-2 border-l border-white/[0.04]">
+          <button
+            type="button"
+            class="flex items-center gap-2 h-9 max-w-40 px-2.5 rounded-md text-gray-400 hover:text-white hover:bg-white/[0.03]"
+            :aria-expanded="accountMenuOpen"
+            aria-haspopup="menu"
+            title="账号菜单"
+            @click="accountMenuOpen = !accountMenuOpen"
+          >
+            <UserRound class="w-4 h-4 shrink-0 text-cyan-400" />
+            <span class="text-xs truncate">{{ authStore.user?.displayName }}</span>
+          </button>
+
+          <div
+            v-if="accountMenuOpen"
+            class="absolute right-0 mt-2 w-64 rounded-md border border-white/[0.08] bg-[#0c0f18] shadow-2xl overflow-hidden"
+            role="menu"
+          >
+            <div class="px-4 py-3 border-b border-white/[0.06]">
+              <div class="text-sm text-gray-200 truncate">{{ authStore.user?.displayName }}</div>
+              <div class="text-xs text-gray-600 font-mono truncate mt-0.5">{{ authStore.user?.username }}</div>
+              <div class="flex items-center gap-2 mt-2 text-xs" :class="progressStore.cloudSyncStatus === 'error' ? 'text-amber-400' : 'text-emerald-400'">
+                <component :is="syncIcon" class="w-3.5 h-3.5" :class="{ 'animate-spin': progressStore.cloudSyncStatus === 'syncing' }" />
+                {{ syncLabel }}
+              </div>
+              <p v-if="progressStore.cloudSyncMessage" class="text-[11px] text-gray-600 mt-1 leading-4">
+                {{ progressStore.cloudSyncMessage }}
+              </p>
+            </div>
+            <button
+              v-if="authStore.isSuperAdmin"
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
+              @click="navigate('/admin/users')"
+            >
+              <ShieldCheck class="w-4 h-4" />
+              用户管理
+            </button>
+            <button type="button" class="account-menu-item text-red-300" role="menuitem" :disabled="loggingOut" @click="logout">
+              <LoaderCircle v-if="loggingOut" class="w-4 h-4 animate-spin" />
+              <LogOut v-else class="w-4 h-4" />
+              退出登录
+            </button>
+          </div>
+        </div>
       </div>
 
-      <button class="md:hidden text-gray-500 hover:text-white" @click="mobileMenuOpen = !mobileMenuOpen">
+      <button
+        class="md:hidden text-gray-500 hover:text-white"
+        :aria-expanded="mobileMenuOpen"
+        aria-label="打开导航菜单"
+        @click="mobileMenuOpen = !mobileMenuOpen"
+      >
         <Menu v-if="!mobileMenuOpen" class="w-5 h-5" />
         <X v-else class="w-5 h-5" />
       </button>
@@ -119,6 +234,39 @@ function navigate(path: string) {
         <component :is="item.icon" class="w-4 h-4" />
         {{ item.label }}
       </button>
+      <div class="border-t border-white/[0.05] mt-2 pt-3 px-3">
+        <div class="flex items-center gap-3 mb-3">
+          <UserRound class="w-4 h-4 text-cyan-400" />
+          <div class="min-w-0">
+            <div class="text-sm text-gray-300 truncate">{{ authStore.user?.displayName }}</div>
+            <div class="text-[11px] text-gray-600 font-mono truncate">{{ authStore.user?.username }}</div>
+          </div>
+        </div>
+        <button
+          v-if="authStore.isSuperAdmin"
+          type="button"
+          class="mobile-account-action"
+          @click="navigate('/admin/users')"
+        >
+          <ShieldCheck class="w-4 h-4" />
+          用户管理
+        </button>
+        <button type="button" class="mobile-account-action text-red-300" :disabled="loggingOut" @click="logout">
+          <LoaderCircle v-if="loggingOut" class="w-4 h-4 animate-spin" />
+          <LogOut v-else class="w-4 h-4" />
+          退出登录
+        </button>
+      </div>
     </div>
   </header>
 </template>
+
+<style scoped>
+.account-menu-item {
+  @apply w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-400 hover:text-white hover:bg-white/[0.035] disabled:opacity-50;
+}
+
+.mobile-account-action {
+  @apply w-full flex items-center gap-3 py-2.5 text-sm text-gray-400 disabled:opacity-50;
+}
+</style>

@@ -4,6 +4,12 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/pages/LoginPage.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('@/pages/HomePage.vue'),
@@ -47,6 +53,12 @@ const router = createRouter({
       path: '/terminal',
       name: 'terminal',
       component: () => import('@/pages/TerminalPage.vue'),
+    },
+    {
+      path: '/admin/users',
+      name: 'adminUsers',
+      component: () => import('@/pages/AdminUsersPage.vue'),
+      meta: { requiresSuperAdmin: true },
     },
     {
       path: '/:pathMatch(.*)*',

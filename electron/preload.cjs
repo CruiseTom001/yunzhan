@@ -8,9 +8,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 // 白名单通道：每项都必须在 main.cjs 的 registerIpc() 中注册了对应 handler，
 // 否则调用会报 "No handler registered"。
 const allowedChannels = [
-  'terminal:exec',
-  'app:getPath',
   'app:getVersion',
+  'app:getApiBaseUrl',
   'app:openDataFolder',
   'progress:load',
   'progress:save',

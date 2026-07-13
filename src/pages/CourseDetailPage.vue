@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { defineAsyncComponent, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertCircle, ArrowLeft, ArrowRight, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, FlaskConical, Play, RotateCcw, TerminalSquare } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, ArrowRight, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, Download, FlaskConical, Play, Rocket, RotateCcw, Share2, TerminalSquare, Trophy, X } from 'lucide-vue-next'
 import { getCourse } from '@/data/courses/all'
 import { useProgressStore } from '@/stores/progress'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer.vue'
 import { loadChapterContent } from '@/utils/contentLoader'
+import {
+  createCourseCertificateBlob,
+  downloadCertificateBlob,
+  getCertificateFileName,
+  type CourseCertificateData,
+} from '@/utils/courseCertificate'
 import { getLabsForChapter } from '@/data/labs'
 import type { LabTask } from '@/types'
 import type { Course } from '@/types'
@@ -110,6 +116,41 @@ const hasNext = computed(() => chapterIndex.value < totalChapters.value - 1)
 const sidebarOpen = ref(true)
 const scrollProgress = ref(0)
 const showBackToTop = ref(false)
+const showCelebration = ref(false)
+const celebrationMode = ref<'chapter' | 'course'>('chapter')
+const showCourseCompletion = ref(false)
+const certificateStatus = ref('')
+const certificateStatusError = ref(false)
+const certificateBusy = ref(false)
+const labFeedback = ref<{ labId: string; status: 'passed' | 'incomplete' } | null>(null)
+const chapterMotion = ref<'next' | 'previous' | null>(null)
+
+interface CelebrationParticle {
+  id: number
+  x: number
+  y: number
+  delay: number
+  color: string
+}
+
+const CELEBRATION_DURATION_MS = 1800
+const CELEBRATION_PARTICLE_COLORS = ['cyan', 'emerald', 'violet', 'amber'] as const
+const celebrationParticles: CelebrationParticle[] = Array.from({ length: 28 }, (_, index) => {
+  const angle = (Math.PI * 2 * index) / 28
+  const distance = 108 + (index % 5) * 16
+
+  return {
+    id: index,
+    x: Math.round(Math.cos(angle) * distance),
+    y: Math.round(Math.sin(angle) * distance),
+    delay: (index % 7) * 24,
+    color: CELEBRATION_PARTICLE_COLORS[index % CELEBRATION_PARTICLE_COLORS.length],
+  }
+})
+let celebrationTimer: ReturnType<typeof setTimeout> | null = null
+let courseCompletionTimer: ReturnType<typeof setTimeout> | null = null
+let labFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+let chapterMotionTimer: ReturnType<typeof setTimeout> | null = null
 
 function updateScrollProgress() {
   const el = document.documentElement
@@ -129,13 +170,39 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', updateScrollProgress)
+  if (celebrationTimer) {
+    clearTimeout(celebrationTimer)
+  }
+  if (courseCompletionTimer) {
+    clearTimeout(courseCompletionTimer)
+  }
+  if (labFeedbackTimer) {
+    clearTimeout(labFeedbackTimer)
+  }
+  if (chapterMotionTimer) {
+    clearTimeout(chapterMotionTimer)
+  }
 })
 
 watch(chapterIndex, () => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 })
 
+function triggerChapterMotion(direction: 'next' | 'previous') {
+  if (chapterMotionTimer) {
+    clearTimeout(chapterMotionTimer)
+  }
+  chapterMotion.value = direction
+  chapterMotionTimer = setTimeout(() => {
+    chapterMotion.value = null
+    chapterMotionTimer = null
+  }, 420)
+}
+
 function goToChapter(index: number) {
+  if (index !== chapterIndex.value) {
+    triggerChapterMotion(index > chapterIndex.value ? 'next' : 'previous')
+  }
   router.push(`/course/${route.params.id}/chapter/${index}`)
 }
 
@@ -156,6 +223,99 @@ const courseProgress = computed(() => {
   const completed = progressStore.progress.completedChapters[course.value.id]?.length ?? 0
   return totalChapters.value > 0 ? Math.round((completed / totalChapters.value) * 100) : 0
 })
+
+const completedDateLabel = computed(() => new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(new Date()))
+
+function formatStudyTime(seconds: number) {
+  if (seconds < 60) return '不足 1 分钟'
+  const totalMinutes = Math.floor(seconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes} 分钟`
+  return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
+}
+
+const studyTimeLabel = computed(() => formatStudyTime(progressStore.progress.totalTimeSpent))
+
+function getCertificateData(): CourseCertificateData | null {
+  const currentCourse = course.value
+  if (!currentCourse) return null
+  const dateKey = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  return {
+    learnerName: progressStore.progress.userProfile.name || '本地学习者',
+    courseTitle: currentCourse.title,
+    completedChapters: totalChapters.value,
+    studyTimeLabel: studyTimeLabel.value,
+    streakDays: progressStore.streakDays,
+    completedDate: completedDateLabel.value,
+    certificateId: `YZ-${currentCourse.id.toUpperCase()}-${dateKey}`,
+  }
+}
+
+async function buildCertificate() {
+  const certificateData = getCertificateData()
+  if (!certificateData || !course.value) return null
+  const blob = await createCourseCertificateBlob(certificateData)
+  return {
+    blob,
+    fileName: getCertificateFileName(course.value.title),
+  }
+}
+
+async function saveCertificate() {
+  certificateBusy.value = true
+  certificateStatus.value = ''
+  certificateStatusError.value = false
+  try {
+    const result = await buildCertificate()
+    if (!result) return
+    downloadCertificateBlob(result.blob, result.fileName)
+    certificateStatus.value = '证书图片已保存。'
+  } catch (error: unknown) {
+    certificateStatusError.value = true
+    certificateStatus.value = error instanceof Error ? error.message : '证书图片生成失败。'
+  } finally {
+    certificateBusy.value = false
+  }
+}
+
+async function shareCertificate() {
+  certificateBusy.value = true
+  certificateStatus.value = ''
+  certificateStatusError.value = false
+  try {
+    const result = await buildCertificate()
+    if (!result || !course.value) return
+    const file = new File([result.blob], result.fileName, { type: 'image/png' })
+    const shareData = {
+      title: `${course.value.title}通关证书`,
+      text: `我已完成云栈的「${course.value.title}」课程。`,
+      files: [file],
+    }
+    const canShareFile = typeof navigator.share === 'function'
+      && (typeof navigator.canShare !== 'function' || navigator.canShare(shareData))
+    if (canShareFile) {
+      await navigator.share(shareData)
+      certificateStatus.value = '证书分享面板已打开。'
+    } else {
+      downloadCertificateBlob(result.blob, result.fileName)
+      certificateStatus.value = '当前环境不支持直接分享，已改为保存证书图片。'
+    }
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      certificateStatus.value = '已取消分享。'
+    } else {
+      certificateStatusError.value = true
+      certificateStatus.value = error instanceof Error ? error.message : '证书分享失败。'
+    }
+  } finally {
+    certificateBusy.value = false
+  }
+}
 
 const isBookmarked = computed(() => {
   if (!course.value) return false
@@ -185,12 +345,45 @@ function showConfirmModal(action: 'complete' | 'uncomplete') {
   showConfirm.value = true
 }
 
+function getCelebrationParticleStyle(particle: CelebrationParticle): Record<string, string> {
+  return {
+    '--burst-x': `${particle.x}px`,
+    '--burst-y': `${particle.y}px`,
+    '--burst-delay': `${particle.delay}ms`,
+  }
+}
+
+function triggerCelebration(mode: 'chapter' | 'course') {
+  if (celebrationTimer) {
+    clearTimeout(celebrationTimer)
+  }
+  if (courseCompletionTimer) {
+    clearTimeout(courseCompletionTimer)
+    courseCompletionTimer = null
+  }
+
+  celebrationMode.value = mode
+  showCelebration.value = true
+  celebrationTimer = setTimeout(() => {
+    showCelebration.value = false
+    celebrationTimer = null
+  }, CELEBRATION_DURATION_MS)
+  if (mode === 'course') {
+    courseCompletionTimer = setTimeout(() => {
+      showCourseCompletion.value = true
+      courseCompletionTimer = null
+    }, CELEBRATION_DURATION_MS + 120)
+  }
+}
+
 function handleConfirm() {
   if (!course.value) return
   if (confirmAction.value === 'complete') {
     progressStore.markChapterComplete(course.value.id, chapterIndex.value)
+    triggerCelebration(courseProgress.value === 100 ? 'course' : 'chapter')
   } else {
     progressStore.unmarkChapterComplete(course.value.id, chapterIndex.value)
+    showCourseCompletion.value = false
   }
   showConfirm.value = false
 }
@@ -210,7 +403,25 @@ function startLab(lab: LabTask) {
 }
 
 function checkLab(lab: LabTask) {
-  labUiRecords.value[lab.id] = progressStore.evaluateLab(lab)
+  const previousStatus = (labUiRecords.value[lab.id] ?? progressStore.labRecords[lab.id])?.status
+  const result = progressStore.evaluateLab(lab)
+  labUiRecords.value[lab.id] = result
+
+  if (labFeedbackTimer) {
+    clearTimeout(labFeedbackTimer)
+  }
+  labFeedback.value = {
+    labId: lab.id,
+    status: result.status === 'passed' ? 'passed' : 'incomplete',
+  }
+  labFeedbackTimer = setTimeout(() => {
+    labFeedback.value = null
+    labFeedbackTimer = null
+  }, result.status === 'passed' && previousStatus !== 'passed' ? 1800 : 650)
+}
+
+function getLabFeedbackStatus(labId: string) {
+  return labFeedback.value?.labId === labId ? labFeedback.value.status : null
 }
 
 function resetLab(lab: LabTask) {
@@ -413,6 +624,8 @@ function saveWorkbenchDraft() {
       :class="[
         'transition-all duration-300 pt-6 pb-16',
         sidebarOpen ? 'ml-64' : 'ml-0',
+        chapterMotion === 'next' ? 'chapter-motion-next' : '',
+        chapterMotion === 'previous' ? 'chapter-motion-previous' : '',
       ]"
     >
       <div class="max-w-3xl mx-auto px-6 md:px-8">
@@ -484,8 +697,30 @@ function saveWorkbenchDraft() {
               <article
                 v-for="lab in currentLabs"
                 :key="lab.id"
-                class="border border-white/[0.04] bg-black/10 rounded-lg p-4"
+                class="lab-card relative overflow-hidden border border-white/[0.04] bg-black/10 rounded-lg p-4"
+                :class="{
+                  'lab-card-passed': getLabFeedbackStatus(lab.id) === 'passed',
+                  'lab-card-incomplete': getLabFeedbackStatus(lab.id) === 'incomplete',
+                }"
               >
+                <div
+                  v-if="getLabFeedbackStatus(lab.id) === 'passed'"
+                  class="lab-success-scan"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <CheckCircle2 class="w-3.5 h-3.5" />
+                  实验验证通过
+                </div>
+                <div
+                  v-if="getLabFeedbackStatus(lab.id) === 'passed'"
+                  class="lab-deploy-success"
+                  aria-hidden="true"
+                >
+                  <Rocket class="w-5 h-5" />
+                  <strong>DEPLOYMENT OK</strong>
+                  <span>部署成功</span>
+                </div>
                 <div class="flex items-start justify-between gap-4 mb-3">
                   <div>
                     <div class="flex items-center gap-2 mb-1">
@@ -509,7 +744,9 @@ function saveWorkbenchDraft() {
                     <div
                       v-for="(step, index) in lab.steps"
                       :key="`${lab.id}-step-${index}`"
-                      class="flex items-start gap-3 p-3 rounded-lg bg-white/[0.015] border border-white/[0.03]"
+                      class="lab-step flex items-start gap-3 p-3 rounded-lg bg-white/[0.015] border border-white/[0.03]"
+                      :class="{ 'lab-step-complete': getLabFeedbackStatus(lab.id) === 'passed' }"
+                      :style="{ '--lab-step-index': index }"
                     >
                       <span class="w-6 h-6 rounded bg-emerald-400/10 text-emerald-400 text-xs font-mono flex items-center justify-center flex-shrink-0">
                         {{ index + 1 }}
@@ -646,6 +883,16 @@ function saveWorkbenchDraft() {
             </div>
           </section>
 
+          <div v-if="courseProgress === 100" class="flex justify-center mt-8">
+            <button
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-400/20 bg-amber-400/5 text-amber-300 hover:bg-amber-400/10 text-xs font-mono transition-colors"
+              @click="showCourseCompletion = true"
+            >
+              <Trophy class="w-4 h-4" />
+              查看课程通关成果
+            </button>
+          </div>
+
           <!-- 章节底部：标记已学完 -->
           <div class="flex justify-center mt-8 mb-6">
             <button
@@ -748,7 +995,111 @@ function saveWorkbenchDraft() {
       </Transition>
     </Teleport>
 
+    <Teleport to="body">
+      <Transition name="confirm-fade">
+        <div
+          v-if="showCourseCompletion"
+          class="course-completion-backdrop"
+          @click.self="showCourseCompletion = false"
+        >
+          <section
+            class="course-completion-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="course-completion-title"
+          >
+            <button
+              class="course-completion-close"
+              title="关闭课程通关成果"
+              aria-label="关闭课程通关成果"
+              @click="showCourseCompletion = false"
+            >
+              <X class="w-4 h-4" />
+            </button>
+
+            <div class="course-completion-emblem" aria-hidden="true">
+              <Trophy class="w-7 h-7" />
+            </div>
+            <span class="course-completion-kicker">COURSE COMPLETE</span>
+            <h2 id="course-completion-title">{{ course?.title }}通关</h2>
+            <p>课程进度已保存，可以生成证书图片留存或分享。</p>
+
+            <div class="course-completion-stats">
+              <div>
+                <span>累计活跃学习</span>
+                <strong>{{ studyTimeLabel }}</strong>
+              </div>
+              <div>
+                <span>完成章节</span>
+                <strong>{{ totalChapters }}/{{ totalChapters }}</strong>
+              </div>
+              <div>
+                <span>连续学习</span>
+                <strong>{{ progressStore.streakDays }} 天</strong>
+              </div>
+            </div>
+
+            <div class="course-completion-actions">
+              <button :disabled="certificateBusy" @click="saveCertificate">
+                <Download class="w-4 h-4" />
+                {{ certificateBusy ? '生成中...' : '保存证书' }}
+              </button>
+              <button class="course-share-button" :disabled="certificateBusy" @click="shareCertificate">
+                <Share2 class="w-4 h-4" />
+                分享图片
+              </button>
+            </div>
+            <p
+              v-if="certificateStatus"
+              class="course-certificate-status"
+              :class="certificateStatusError ? 'course-certificate-status-error' : ''"
+              role="status"
+              aria-live="polite"
+            >
+              {{ certificateStatus }}
+            </p>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- 回顶部按钮 -->
+    <Teleport to="body">
+      <Transition name="celebration-fade">
+        <div
+          v-if="showCelebration"
+          class="celebration-overlay"
+          role="status"
+          aria-live="polite"
+        >
+          <div class="celebration-burst" aria-hidden="true">
+            <span class="celebration-ring celebration-ring-primary" />
+            <span class="celebration-ring celebration-ring-secondary" />
+            <span
+              v-for="particle in celebrationParticles"
+              :key="particle.id"
+              class="celebration-particle"
+              :class="`celebration-particle-${particle.color}`"
+              :style="getCelebrationParticleStyle(particle)"
+            />
+          </div>
+          <div class="celebration-message">
+            <Trophy v-if="celebrationMode === 'course'" class="celebration-trophy" aria-hidden="true" />
+            <span class="celebration-prompt">
+              {{ celebrationMode === 'course' ? '$ course --complete' : '$ progress --complete' }}
+            </span>
+            <strong>{{ celebrationMode === 'course' ? 'COURSE COMPLETE' : 'CHAPTER COMPLETE' }}</strong>
+            <span>
+              {{ celebrationMode === 'course' ? `${course?.title ?? '课程'}全部章节已完成` : '本章进度已保存' }}
+            </span>
+            <span v-if="celebrationMode === 'course'" class="celebration-summary">
+              {{ totalChapters }}/{{ totalChapters }} 章节 · 100%
+            </span>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <Transition name="fade">
       <button
         v-if="showBackToTop"
@@ -780,5 +1131,480 @@ function saveWorkbenchDraft() {
 .confirm-fade-enter-from,
 .confirm-fade-leave-to {
   opacity: 0;
+}
+
+.chapter-motion-next {
+  animation: chapter-slide-next 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chapter-motion-previous {
+  animation: chapter-slide-previous 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lab-card::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  opacity: 0;
+}
+
+.lab-card-passed {
+  animation: lab-success-pulse 0.8s ease-out;
+}
+
+.lab-card-passed::after {
+  background: linear-gradient(105deg, transparent 15%, rgb(52 211 153 / 0.13) 48%, transparent 80%);
+  animation: lab-scan 1.15s ease-out;
+}
+
+.lab-card-incomplete {
+  animation: lab-incomplete-shake 0.38s ease-out;
+}
+
+.lab-success-scan {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid rgb(52 211 153 / 0.25);
+  border-radius: 6px;
+  color: #6ee7b7;
+  background: rgb(6 78 59 / 0.72);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  animation: lab-status-in 1.8s ease both;
+}
+
+.lab-deploy-success {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  min-width: 156px;
+  padding: 12px 18px;
+  border: 1px solid rgb(52 211 153 / 0.32);
+  border-radius: 8px;
+  color: #6ee7b7;
+  background: rgb(3 18 16 / 0.94);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.45), 0 0 28px rgb(52 211 153 / 0.12);
+  place-items: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: lab-deploy-success 1.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.lab-deploy-success strong {
+  margin-top: 6px;
+  color: #d1fae5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.lab-deploy-success span {
+  margin-top: 2px;
+  color: #6ee7b7;
+  font-size: 10px;
+}
+
+.lab-step-complete {
+  animation: lab-step-light 0.55s ease-out calc(var(--lab-step-index) * 90ms) both;
+}
+
+.course-completion-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.course-completion-panel {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 40px);
+  padding: 28px;
+  overflow-y: auto;
+  border: 1px solid rgb(34 211 238 / 0.22);
+  border-radius: 12px;
+  color: #cbd5e1;
+  background: #090d16;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 0.7), 0 0 40px rgb(34 211 238 / 0.08);
+  text-align: center;
+}
+
+.course-completion-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748b;
+}
+
+.course-completion-close:hover {
+  color: #f8fafc;
+  background: rgb(255 255 255 / 0.05);
+}
+
+.course-completion-emblem {
+  display: inline-flex;
+  width: 54px;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  border: 1px solid rgb(251 191 36 / 0.24);
+  border-radius: 50%;
+  color: #fbbf24;
+  background: rgb(251 191 36 / 0.07);
+  box-shadow: 0 0 30px rgb(251 191 36 / 0.1);
+}
+
+.course-completion-kicker {
+  display: block;
+  color: #67e8f9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}
+
+.course-completion-panel h2 {
+  margin-top: 5px;
+  color: #f8fafc;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.course-completion-panel > p {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.course-completion-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.course-completion-stats > div {
+  min-width: 0;
+  padding: 12px 8px;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 0.018);
+}
+
+.course-completion-stats span,
+.course-completion-stats strong {
+  display: block;
+}
+
+.course-completion-stats span {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.course-completion-stats strong {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+}
+
+.course-completion-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.course-completion-actions button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgb(34 211 238 / 0.2);
+  border-radius: 7px;
+  color: #67e8f9;
+  background: rgb(34 211 238 / 0.06);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.course-completion-actions button:hover:not(:disabled) {
+  background: rgb(34 211 238 / 0.11);
+}
+
+.course-completion-actions button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.course-completion-actions .course-share-button {
+  border-color: rgb(52 211 153 / 0.22);
+  color: #6ee7b7;
+  background: rgb(52 211 153 / 0.06);
+}
+
+.course-certificate-status {
+  margin-top: 12px !important;
+  color: #6ee7b7 !important;
+}
+
+.course-certificate-status-error {
+  color: #fca5a5 !important;
+}
+
+.celebration-trophy {
+  width: 28px;
+  height: 28px;
+  color: #fbbf24;
+  filter: drop-shadow(0 0 12px rgb(251 191 36 / 0.45));
+  animation: trophy-arrive 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.celebration-summary {
+  padding-top: 3px;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+}
+
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgb(34 211 238 / 0.11), transparent 38%);
+  animation: celebration-flash 1.8s ease-out both;
+}
+
+.celebration-burst {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+}
+
+.celebration-ring {
+  position: absolute;
+  inset: -48px;
+  border: 1px solid rgb(34 211 238 / 0.8);
+  border-radius: 50%;
+  box-shadow: 0 0 24px rgb(34 211 238 / 0.2);
+  animation: celebration-ring 1.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.celebration-ring-secondary {
+  inset: -30px;
+  border-color: rgb(52 211 153 / 0.75);
+  animation-delay: 120ms;
+}
+
+.celebration-particle {
+  position: absolute;
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.35);
+  animation: celebration-particle 1.25s cubic-bezier(0.16, 1, 0.3, 1) var(--burst-delay) both;
+}
+
+.celebration-particle-cyan { color: #22d3ee; }
+.celebration-particle-emerald { color: #34d399; }
+.celebration-particle-violet { color: #a78bfa; }
+.celebration-particle-amber { color: #fbbf24; }
+
+.celebration-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 18px 24px;
+  border: 1px solid rgb(34 211 238 / 0.38);
+  border-radius: 8px;
+  background: rgb(6 6 11 / 0.94);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.52), 0 0 42px rgb(34 211 238 / 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: center;
+  animation: celebration-message 1.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.celebration-message strong {
+  color: #67e8f9;
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-shadow: 0 0 20px rgb(34 211 238 / 0.45);
+}
+
+.celebration-message > span:last-child {
+  color: #a7f3d0;
+  font-size: 12px;
+}
+
+.celebration-prompt {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.celebration-fade-enter-active,
+.celebration-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.celebration-fade-enter-from,
+.celebration-fade-leave-to {
+  opacity: 0;
+}
+
+@keyframes celebration-flash {
+  0% { background-color: rgb(34 211 238 / 0); }
+  16% { background-color: rgb(34 211 238 / 0.035); }
+  100% { background-color: transparent; }
+}
+
+@keyframes chapter-slide-next {
+  0% { opacity: 0.45; transform: translateX(16px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes chapter-slide-previous {
+  0% { opacity: 0.45; transform: translateX(-16px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes lab-success-pulse {
+  0% { border-color: rgb(255 255 255 / 0.04); box-shadow: 0 0 0 rgb(52 211 153 / 0); }
+  35% { border-color: rgb(52 211 153 / 0.5); box-shadow: 0 0 28px rgb(52 211 153 / 0.14); }
+  100% { border-color: rgb(52 211 153 / 0.2); box-shadow: 0 0 0 rgb(52 211 153 / 0); }
+}
+
+@keyframes lab-scan {
+  0% { opacity: 0; transform: translateX(-80%); }
+  22% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(80%); }
+}
+
+@keyframes lab-incomplete-shake {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-4px); border-color: rgb(251 191 36 / 0.3); }
+  65% { transform: translateX(3px); }
+}
+
+@keyframes lab-status-in {
+  0% { opacity: 0; transform: translateY(-6px); }
+  12%, 72% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes lab-deploy-success {
+  0% { opacity: 0; transform: translate(-50%, -44%) scale(0.88); }
+  16%, 68% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -56%) scale(0.97); }
+}
+
+@keyframes lab-step-light {
+  0% { border-color: rgb(255 255 255 / 0.03); background: rgb(255 255 255 / 0.015); }
+  55% { border-color: rgb(52 211 153 / 0.3); background: rgb(52 211 153 / 0.08); }
+  100% { border-color: rgb(52 211 153 / 0.12); background: rgb(52 211 153 / 0.025); }
+}
+
+@keyframes trophy-arrive {
+  0% { opacity: 0; transform: translateY(8px) scale(0.6) rotate(-8deg); }
+  55% { opacity: 1; transform: translateY(0) scale(1.12) rotate(3deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes celebration-ring {
+  0% { opacity: 0; transform: scale(0.25); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: scale(3.2); }
+}
+
+@keyframes celebration-particle {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.35) rotate(0deg); }
+  14% { opacity: 1; }
+  75% { opacity: 0.85; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--burst-x)), calc(-50% + var(--burst-y))) scale(1) rotate(155deg); }
+}
+
+@keyframes celebration-message {
+  0% { opacity: 0; transform: translateY(10px) scale(0.92); }
+  16% { opacity: 1; transform: translateY(0) scale(1); }
+  76% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
+
+@media (max-width: 480px) {
+  .celebration-message {
+    max-width: calc(100vw - 40px);
+    padding: 16px 18px;
+  }
+
+  .celebration-message strong {
+    font-size: 16px;
+  }
+
+  .course-completion-panel {
+    padding: 24px 16px 18px;
+  }
+
+  .course-completion-panel h2 {
+    font-size: 20px;
+  }
+
+  .course-completion-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .course-completion-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celebration-overlay,
+  .celebration-message,
+  .celebration-trophy,
+  .chapter-motion-next,
+  .chapter-motion-previous,
+  .lab-card-passed,
+  .lab-card-incomplete,
+  .lab-step-complete,
+  .lab-success-scan,
+  .lab-deploy-success {
+    animation: none;
+  }
+
+  .celebration-ring,
+  .celebration-particle,
+  .lab-card::after,
+  .lab-deploy-success {
+    display: none;
+  }
 }
 </style>
