@@ -587,6 +587,15 @@ onMounted(() => {
   @apply h-10 rounded-md border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white outline-none focus:border-cyan-400/50 disabled:opacity-50;
 }
 
+.form-field select {
+  color-scheme: dark;
+}
+
+.form-field select option {
+  color: #ffffff;
+  background-color: #0c0f18;
+}
+
 .form-field small {
   @apply text-[11px] text-gray-600;
 }
