@@ -39,8 +39,8 @@ const {
 } = runtimeConfig
 const sessionCookieName = 'yunzhan_session'
 const sessionDurationMs = 7 * 24 * 60 * 60 * 1000
-const loginAttempts = new Map()
-const MAX_LOGIN_ATTEMPT_KEYS = 10_000
+const LOGIN_ATTEMPT_LIMIT = 5
+const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000
 const EMAIL_CODE_TTL_MS = 10 * 60 * 1000
 const EMAIL_CODE_COOLDOWN_SECONDS = 60
 const EMAIL_CODE_MAX_PER_HOUR = 5
@@ -149,6 +149,10 @@ function summarizeProgress(payload) {
   }
 }
 
+function hasOnlyKeys(value, allowedKeys) {
+  return isRecord(value) && Object.keys(value).every(key => allowedKeys.has(key))
+}
+
 async function writeAudit(client, actorUserId, action, targetUserId, metadata = {}) {
   await client.query(
     `INSERT INTO audit_logs (actor_user_id, action, target_user_id, metadata)
@@ -164,14 +168,19 @@ async function requireAuth(request, response, next) {
     return
   }
 
+  const tokenHash = hashSessionToken(token)
   const result = await pool.query(
-    `SELECT u.*
-       FROM sessions s
+    `WITH active_session AS (
+       UPDATE sessions
+          SET last_used_at = NOW()
+        WHERE token_hash = $1 AND expires_at > NOW()
+       RETURNING id, user_id
+     )
+     SELECT u.*, s.id AS session_id
+       FROM active_session s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1
-        AND s.expires_at > NOW()
-        AND u.status = 'active'`,
-    [hashSessionToken(token)],
+      WHERE u.status = 'active'`,
+    [tokenHash],
   )
   const user = result.rows[0]
   if (!user) {
@@ -181,6 +190,8 @@ async function requireAuth(request, response, next) {
   }
 
   request.auth = toPublicUser(user)
+  request.sessionId = user.session_id
+  request.sessionTokenHash = tokenHash
   next()
 }
 
@@ -192,41 +203,52 @@ function requireSuperAdmin(request, response, next) {
   next()
 }
 
-function getLoginAttemptKey(request, username) {
-  return `${request.ip}:${username}`
-}
-
 function getRequestIp(request) {
   return typeof request.ip === 'string' && request.ip.length <= 128 ? request.ip : 'unknown'
 }
 
-function isLoginRateLimited(key) {
-  const now = Date.now()
-  const record = loginAttempts.get(key)
-  if (!record || record.resetAt <= now) {
-    loginAttempts.delete(key)
-    return false
-  }
-  return record.count >= 5
+function readUserAgent(request) {
+  const userAgent = request.get('user-agent')
+  return typeof userAgent === 'string' ? userAgent.trim().slice(0, 256) : ''
 }
 
-function recordLoginFailure(key) {
-  const now = Date.now()
-  if (loginAttempts.size >= MAX_LOGIN_ATTEMPT_KEYS && !loginAttempts.has(key)) {
-    for (const [storedKey, record] of loginAttempts) {
-      if (record.resetAt <= now) loginAttempts.delete(storedKey)
-    }
-    if (loginAttempts.size >= MAX_LOGIN_ATTEMPT_KEYS) {
-      const oldestKey = loginAttempts.keys().next().value
-      if (typeof oldestKey === 'string') loginAttempts.delete(oldestKey)
-    }
-  }
-  const current = loginAttempts.get(key)
-  if (!current || current.resetAt <= now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 })
-    return
-  }
-  current.count += 1
+function getLoginAttemptKey(request, identifier) {
+  return crypto
+    .createHash('sha256')
+    .update(`${getRequestIp(request)}\u0000${identifier}`)
+    .digest('hex')
+}
+
+async function isLoginRateLimited(key) {
+  const result = await pool.query(
+    `SELECT attempt_count
+       FROM login_attempts
+      WHERE attempt_key = $1 AND reset_at > NOW()`,
+    [key],
+  )
+  return (result.rows[0]?.attempt_count ?? 0) >= LOGIN_ATTEMPT_LIMIT
+}
+
+async function recordLoginFailure(key) {
+  await pool.query(
+    `INSERT INTO login_attempts (attempt_key, attempt_count, reset_at)
+     VALUES ($1, 1, $2)
+     ON CONFLICT (attempt_key) DO UPDATE
+       SET attempt_count = CASE
+             WHEN login_attempts.reset_at <= NOW() THEN 1
+             ELSE LEAST(login_attempts.attempt_count + 1, $3)
+           END,
+           reset_at = CASE
+             WHEN login_attempts.reset_at <= NOW() THEN EXCLUDED.reset_at
+             ELSE login_attempts.reset_at
+           END,
+           updated_at = NOW()`,
+    [key, new Date(Date.now() + LOGIN_ATTEMPT_WINDOW_MS), LOGIN_ATTEMPT_LIMIT],
+  )
+}
+
+async function clearLoginFailures(key) {
+  await pool.query('DELETE FROM login_attempts WHERE attempt_key = $1', [key])
 }
 
 async function ensureAdminContinuity(client, targetUser, nextRole, nextStatus) {
@@ -430,9 +452,9 @@ app.post('/api/auth/register', asyncRoute(async (request, response) => {
         [activeChallenge.id],
       )
       await client.query(
-        `INSERT INTO sessions (token_hash, user_id, expires_at)
-         VALUES ($1, $2, $3)`,
-        [hashSessionToken(token), user.id, expiresAt],
+        `INSERT INTO sessions (id, token_hash, user_id, user_agent, expires_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [randomUUID(), hashSessionToken(token), user.id, readUserAgent(request), expiresAt],
       )
       await writeAudit(client, user.id, 'auth.register', user.id, { emailVerified: true })
       return { status: 'created', user }
@@ -588,13 +610,13 @@ app.post('/api/auth/login', asyncRoute(async (request, response) => {
   const username = email ? null : validateUsername(request.body.username)
   const password = validatePassword(request.body.password)
   const attemptKey = getLoginAttemptKey(request, normalizedIdentifier.slice(0, 254))
-  if (isLoginRateLimited(attemptKey)) {
+  if (await isLoginRateLimited(attemptKey)) {
     response.status(429).json({ error: '登录失败次数过多，请 15 分钟后再试。' })
     return
   }
 
   if ((!username && !email) || !password) {
-    recordLoginFailure(attemptKey)
+    await recordLoginFailure(attemptKey)
     response.status(401).json({ error: '用户名或密码错误，或账号已停用。' })
     return
   }
@@ -605,20 +627,20 @@ app.post('/api/auth/login', asyncRoute(async (request, response) => {
   const user = result.rows[0]
   const passwordMatches = user ? await bcrypt.compare(password, user.password_hash) : false
   if (!user || !passwordMatches || user.status !== 'active') {
-    recordLoginFailure(attemptKey)
+    await recordLoginFailure(attemptKey)
     response.status(401).json({ error: '用户名或密码错误，或账号已停用。' })
     return
   }
 
-  loginAttempts.delete(attemptKey)
+  await clearLoginFailures(attemptKey)
   const token = randomBytes(32).toString('base64url')
   const expiresAt = new Date(Date.now() + sessionDurationMs)
   await withTransaction(async (client) => {
     await client.query('DELETE FROM sessions WHERE expires_at <= NOW()')
     await client.query(
-      `INSERT INTO sessions (token_hash, user_id, expires_at)
-       VALUES ($1, $2, $3)`,
-      [hashSessionToken(token), user.id, expiresAt],
+      `INSERT INTO sessions (id, token_hash, user_id, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), hashSessionToken(token), user.id, readUserAgent(request), expiresAt],
     )
     await client.query('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [user.id])
     await writeAudit(client, user.id, 'auth.login', user.id)
@@ -630,6 +652,334 @@ app.post('/api/auth/login', asyncRoute(async (request, response) => {
 app.post('/api/auth/logout', requireAuth, asyncRoute(async (request, response) => {
   const token = request.cookies[sessionCookieName]
   await pool.query('DELETE FROM sessions WHERE token_hash = $1', [hashSessionToken(token)])
+  clearSessionCookie(response)
+  response.json({ ok: true })
+}))
+
+app.patch('/api/account/profile', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['username', 'displayName'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '资料参数无效。' })
+    return
+  }
+  const username = request.body.username === undefined ? undefined : validateUsername(request.body.username)
+  const displayName = request.body.displayName === undefined
+    ? undefined
+    : validateDisplayName(request.body.displayName)
+  if (
+    (request.body.username !== undefined && !username)
+    || (request.body.displayName !== undefined && !displayName)
+    || (username === undefined && displayName === undefined)
+  ) {
+    response.status(400).json({ error: '用户名或显示名称不符合要求。' })
+    return
+  }
+
+  try {
+    const updatedUser = await withTransaction(async (client) => {
+      const fields = []
+      const values = []
+      const addField = (column, value) => {
+        values.push(value)
+        fields.push(`${column} = $${values.length}`)
+      }
+      if (username !== undefined) addField('username', username)
+      if (displayName !== undefined) addField('display_name', displayName)
+      fields.push('updated_at = NOW()')
+      values.push(request.auth.id)
+      const result = await client.query(
+        `UPDATE users SET ${fields.join(', ')} WHERE id = $${values.length} RETURNING *`,
+        values,
+      )
+      await writeAudit(client, request.auth.id, 'account.profile.update', request.auth.id, {
+        displayNameChanged: displayName !== undefined && displayName !== request.auth.displayName,
+        usernameChanged: username !== undefined && username !== request.auth.username,
+      })
+      return result.rows[0]
+    })
+    response.json({ user: toPublicUser(updatedUser) })
+  } catch (error) {
+    if (error?.code === '23505') {
+      response.status(409).json({ error: '用户名已存在。' })
+      return
+    }
+    throw error
+  }
+}))
+
+app.post('/api/account/password', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['currentPassword', 'newPassword'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '密码参数无效。' })
+    return
+  }
+  const currentPassword = validatePassword(request.body.currentPassword)
+  const newPassword = validatePassword(request.body.newPassword)
+  if (!currentPassword || !newPassword) {
+    response.status(400).json({ error: '当前密码或新密码不符合要求。' })
+    return
+  }
+
+  const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [request.auth.id])
+  const passwordHash = result.rows[0]?.password_hash
+  const currentPasswordMatches = passwordHash ? await bcrypt.compare(currentPassword, passwordHash) : false
+  if (!currentPasswordMatches) {
+    response.status(401).json({ error: '当前密码错误。' })
+    return
+  }
+  if (await bcrypt.compare(newPassword, passwordHash)) {
+    response.status(409).json({ error: '新密码不能与当前密码相同。' })
+    return
+  }
+
+  const newPasswordHash = await bcrypt.hash(newPassword, 12)
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE users
+          SET password_hash = $2, password_changed_at = NOW(), updated_at = NOW()
+        WHERE id = $1`,
+      [request.auth.id, newPasswordHash],
+    )
+    await client.query(
+      'DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2',
+      [request.auth.id, request.sessionTokenHash],
+    )
+    await writeAudit(client, request.auth.id, 'account.password.update', request.auth.id)
+  })
+  response.json({ ok: true })
+}))
+
+app.post('/api/account/email/code', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['email', 'currentPassword'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '邮箱参数无效。' })
+    return
+  }
+  const email = validateEmail(request.body.email)
+  const currentPassword = validatePassword(request.body.currentPassword)
+  if (!email || !currentPassword) {
+    response.status(400).json({ error: '新邮箱或当前密码不符合要求。' })
+    return
+  }
+  if (email === request.auth.email) {
+    response.status(409).json({ error: '新邮箱不能与当前邮箱相同。' })
+    return
+  }
+  const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [request.auth.id])
+  const passwordMatches = userResult.rows[0]
+    ? await bcrypt.compare(currentPassword, userResult.rows[0].password_hash)
+    : false
+  if (!passwordMatches) {
+    response.status(401).json({ error: '当前密码错误。' })
+    return
+  }
+
+  const prepared = await prepareEmailChallenge({
+    email,
+    purpose: 'email_change',
+    requestIp: getRequestIp(request),
+    canSend: async client => (await client.query('SELECT 1 FROM users WHERE email = $1', [email])).rowCount === 0,
+  })
+  await deliverEmailChallenge({ ...prepared, email })
+  response.json({
+    ok: true,
+    cooldownSeconds: EMAIL_CODE_COOLDOWN_SECONDS,
+    message: '如果该邮箱可以绑定，验证码将发送到新邮箱。',
+  })
+}))
+
+app.post('/api/account/email', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['email', 'code', 'currentPassword'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '邮箱验证参数无效。' })
+    return
+  }
+  const email = validateEmail(request.body.email)
+  const code = validateVerificationCode(request.body.code)
+  const currentPassword = validatePassword(request.body.currentPassword)
+  if (!email || !code || !currentPassword) {
+    response.status(400).json({ error: '新邮箱、验证码或当前密码不符合要求。' })
+    return
+  }
+
+  try {
+    const updatedUser = await withTransaction(async (client) => {
+      const challengeResult = await client.query(
+        `SELECT id, purpose, code_digest, attempt_count
+           FROM email_verification_challenges
+          WHERE email = $1
+            AND purpose = 'email_change'
+            AND delivery_status = 'sent'
+            AND consumed_at IS NULL
+            AND expires_at > NOW()
+          ORDER BY created_at DESC
+          LIMIT 1
+          FOR UPDATE`,
+        [email],
+      )
+      const challenge = challengeResult.rows[0]
+      if (!challenge || challenge.attempt_count >= 5) return null
+      if (!verifyEmailChallengeCode(challenge, email, code)) {
+        await client.query(
+          `UPDATE email_verification_challenges
+              SET attempt_count = LEAST(attempt_count + 1, 5),
+                  consumed_at = CASE WHEN attempt_count + 1 >= 5 THEN NOW() ELSE consumed_at END
+            WHERE id = $1`,
+          [challenge.id],
+        )
+        return null
+      }
+
+      const userResult = await client.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [request.auth.id])
+      const user = userResult.rows[0]
+      if (!user || !await bcrypt.compare(currentPassword, user.password_hash)) return null
+      const result = await client.query(
+        `UPDATE users
+            SET email = $2, email_verified_at = NOW(), updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [request.auth.id, email],
+      )
+      await client.query(
+        `UPDATE email_verification_challenges
+            SET consumed_at = NOW()
+          WHERE email = $1 AND purpose = 'email_change' AND consumed_at IS NULL`,
+        [email],
+      )
+      await writeAudit(client, request.auth.id, 'account.email.update', request.auth.id)
+      return result.rows[0]
+    })
+    if (!updatedUser) {
+      response.status(400).json({ error: '验证码无效、已过期，或当前密码错误。' })
+      return
+    }
+    response.json({ user: toPublicUser(updatedUser) })
+  } catch (error) {
+    if (error?.code === '23505') {
+      response.status(409).json({ error: '该邮箱已被其他账号使用。' })
+      return
+    }
+    throw error
+  }
+}))
+
+app.get('/api/account/sessions', requireAuth, asyncRoute(async (request, response) => {
+  const result = await pool.query(
+    `SELECT id, user_agent, created_at, last_used_at, expires_at
+       FROM sessions
+      WHERE user_id = $1 AND expires_at > NOW()
+      ORDER BY last_used_at DESC`,
+    [request.auth.id],
+  )
+  response.json({
+    sessions: result.rows.map(row => ({
+      id: row.id,
+      userAgent: row.user_agent ?? '',
+      current: row.id === request.sessionId,
+      createdAt: new Date(row.created_at).getTime(),
+      lastUsedAt: new Date(row.last_used_at).getTime(),
+      expiresAt: new Date(row.expires_at).getTime(),
+    })),
+  })
+}))
+
+app.delete('/api/account/sessions/others', requireAuth, asyncRoute(async (request, response) => {
+  const result = await withTransaction(async (client) => {
+    const deleted = await client.query(
+      'DELETE FROM sessions WHERE user_id = $1 AND id <> $2',
+      [request.auth.id, request.sessionId],
+    )
+    await writeAudit(client, request.auth.id, 'account.sessions.revoke_others', request.auth.id, {
+      revokedCount: deleted.rowCount,
+    })
+    return deleted.rowCount
+  })
+  response.json({ ok: true, revokedCount: result })
+}))
+
+app.delete('/api/account/sessions/:id', requireAuth, asyncRoute(async (request, response) => {
+  const sessionId = validateUuid(request.params.id)
+  if (!sessionId) {
+    response.status(400).json({ error: '会话 ID 无效。' })
+    return
+  }
+  const result = await withTransaction(async (client) => {
+    const deleted = await client.query(
+      'DELETE FROM sessions WHERE id = $1 AND user_id = $2 RETURNING id',
+      [sessionId, request.auth.id],
+    )
+    if (deleted.rowCount === 0) return false
+    await writeAudit(client, request.auth.id, 'account.session.revoke', request.auth.id, {
+      currentSession: sessionId === request.sessionId,
+    })
+    return true
+  })
+  if (!result) {
+    response.status(404).json({ error: '会话不存在。' })
+    return
+  }
+  if (sessionId === request.sessionId) clearSessionCookie(response)
+  response.json({ ok: true, currentSessionRevoked: sessionId === request.sessionId })
+}))
+
+app.get('/api/account/export', requireAuth, asyncRoute(async (request, response) => {
+  const result = await pool.query(
+    `SELECT payload, version, updated_at
+       FROM user_progress
+      WHERE user_id = $1`,
+    [request.auth.id],
+  )
+  const progress = result.rows[0]
+  response.json({
+    account: request.auth,
+    progress: progress?.payload ?? null,
+    progressVersion: progress?.version ?? 0,
+    progressUpdatedAt: progress?.updated_at ? new Date(progress.updated_at).getTime() : null,
+    exportedAt: Date.now(),
+  })
+}))
+
+app.delete('/api/account', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['currentPassword', 'confirmation'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '注销参数无效。' })
+    return
+  }
+  const currentPassword = validatePassword(request.body.currentPassword)
+  const confirmation = typeof request.body.confirmation === 'string' ? request.body.confirmation.trim() : ''
+  if (!currentPassword || confirmation !== request.auth.username) {
+    response.status(400).json({ error: '密码或用户名确认不正确。' })
+    return
+  }
+
+  const deleted = await withTransaction(async (client) => {
+    const userResult = await client.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [request.auth.id])
+    const user = userResult.rows[0]
+    if (!user || !await bcrypt.compare(currentPassword, user.password_hash)) return false
+    await ensureAdminContinuity(client, user, 'user', 'disabled')
+    const progressResult = await client.query(
+      'SELECT * FROM user_progress WHERE user_id = $1',
+      [request.auth.id],
+    )
+    await client.query(
+      `INSERT INTO deleted_user_backups
+        (original_user_id, deleted_by, user_snapshot, progress_snapshot)
+       VALUES ($1, $2, $3::JSONB, $4::JSONB)`,
+      [
+        request.auth.id,
+        request.auth.id,
+        JSON.stringify(user),
+        progressResult.rows[0] ? JSON.stringify(progressResult.rows[0]) : null,
+      ],
+    )
+    await writeAudit(client, request.auth.id, 'account.delete', request.auth.id, { username: user.username })
+    await client.query('DELETE FROM users WHERE id = $1', [request.auth.id])
+    return true
+  })
+  if (!deleted) {
+    response.status(401).json({ error: '当前密码错误。' })
+    return
+  }
   clearSessionCookie(response)
   response.json({ ok: true })
 }))
@@ -719,6 +1069,75 @@ app.put('/api/progress', requireAuth, asyncRoute(async (request, response) => {
     ok: true,
     version: result.saved.version,
     updatedAt: new Date(result.saved.updated_at).getTime(),
+  })
+}))
+
+app.get('/api/admin/audit-logs', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const { limit, offset } = parsePagination(request.query)
+  const query = typeof request.query.query === 'string' ? request.query.query.trim().slice(0, 64) : ''
+  const action = typeof request.query.action === 'string' ? request.query.action.trim().slice(0, 64) : ''
+  if (action && !/^[a-z0-9._-]+$/.test(action)) {
+    response.status(400).json({ error: '审计动作筛选条件无效。' })
+    return
+  }
+  const search = `%${query}%`
+  const parameters = [action, search, limit, offset]
+  const [logsResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT l.id, l.action, l.metadata, l.created_at,
+              actor.id AS actor_id, actor.username AS actor_username,
+              actor.display_name AS actor_display_name,
+              target.id AS target_id, target.username AS target_username,
+              target.display_name AS target_display_name
+         FROM audit_logs l
+         LEFT JOIN users actor ON actor.id = l.actor_user_id
+         LEFT JOIN users target ON target.id = l.target_user_id
+        WHERE ($1 = '' OR l.action = $1)
+          AND ($2 = '%%'
+            OR l.action ILIKE $2
+            OR actor.username ILIKE $2
+            OR actor.display_name ILIKE $2
+            OR target.username ILIKE $2
+            OR target.display_name ILIKE $2)
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT $3 OFFSET $4`,
+      parameters,
+    ),
+    pool.query(
+      `SELECT COUNT(*)::INTEGER AS count
+         FROM audit_logs l
+         LEFT JOIN users actor ON actor.id = l.actor_user_id
+         LEFT JOIN users target ON target.id = l.target_user_id
+        WHERE ($1 = '' OR l.action = $1)
+          AND ($2 = '%%'
+            OR l.action ILIKE $2
+            OR actor.username ILIKE $2
+            OR actor.display_name ILIKE $2
+            OR target.username ILIKE $2
+            OR target.display_name ILIKE $2)`,
+      [action, search],
+    ),
+  ])
+  response.json({
+    logs: logsResult.rows.map(row => ({
+      id: String(row.id),
+      action: row.action,
+      metadata: isRecord(row.metadata) ? row.metadata : {},
+      createdAt: new Date(row.created_at).getTime(),
+      actor: row.actor_id ? {
+        id: row.actor_id,
+        username: row.actor_username,
+        displayName: row.actor_display_name,
+      } : null,
+      target: row.target_id ? {
+        id: row.target_id,
+        username: row.target_username,
+        displayName: row.target_display_name,
+      } : null,
+    })),
+    total: countResult.rows[0].count,
+    limit,
+    offset,
   })
 }))
 

@@ -2,6 +2,11 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { AuthUser, UserRole, UserStatus } from '@/types/auth'
 import { ApiError, apiRequest } from '@/utils/apiClient'
+import {
+  changeAccountPassword,
+  confirmEmailChange,
+  updateAccountProfile,
+} from '@/utils/accountApi'
 
 export interface RegistrationInput {
   email: string
@@ -188,6 +193,36 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(input: { username: string; displayName: string }) {
+    const updatedUser = await updateAccountProfile(input)
+    user.value = updatedUser
+    return updatedUser
+  }
+
+  async function changePassword(input: { currentPassword: string; newPassword: string }) {
+    await changeAccountPassword(input)
+  }
+
+  async function changeEmail(input: { email: string; code: string; currentPassword: string }) {
+    const updatedUser = await confirmEmailChange(input)
+    user.value = updatedUser
+    return updatedUser
+  }
+
+  function applySecurityUpdate(updatedUser: AuthUser | null) {
+    if (updatedUser) {
+      user.value = updatedUser
+    } else {
+      clearLocalSession()
+    }
+  }
+
+  function clearLocalSession() {
+    user.value = null
+    status.value = 'anonymous'
+    errorMessage.value = ''
+  }
+
   return {
     user,
     status,
@@ -201,5 +236,10 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     resetPassword,
     logout,
+    updateProfile,
+    changePassword,
+    changeEmail,
+    applySecurityUpdate,
+    clearLocalSession,
   }
 })

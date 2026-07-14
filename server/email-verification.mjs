@@ -3,7 +3,7 @@ import crypto, { randomInt, randomUUID } from 'node:crypto'
 const VERIFICATION_CODE_MAX = 1_000_000
 const VERIFICATION_CODE_LENGTH = 6
 const MINIMUM_SECRET_LENGTH = 32
-const EMAIL_CHALLENGE_PURPOSES = new Set(['registration', 'password_reset'])
+const EMAIL_CHALLENGE_PURPOSES = new Set(['registration', 'password_reset', 'email_change'])
 
 function readVerificationSecret() {
   const secret = process.env.EMAIL_CODE_SECRET

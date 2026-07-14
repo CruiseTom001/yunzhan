@@ -61,6 +61,17 @@ const router = createRouter({
       meta: { requiresSuperAdmin: true },
     },
     {
+      path: '/account',
+      name: 'account',
+      component: () => import('@/pages/AccountPage.vue'),
+    },
+    {
+      path: '/admin/audit',
+      name: 'adminAudit',
+      component: () => import('@/pages/AdminAuditPage.vue'),
+      meta: { requiresSuperAdmin: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
       component: () => import('@/pages/NotFoundPage.vue'),

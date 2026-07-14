@@ -8,6 +8,11 @@ const MAX_SMTP_FROM_LENGTH = 320
 const SMTP_HOST_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 const VERIFICATION_CODE_PATTERN = /^\d{6}$/
 const EMAIL_PURPOSE_CONTENT = Object.freeze({
+  email_change: {
+    heading: '云栈邮箱变更',
+    introduction: '你的邮箱变更验证码是：',
+    subject: '云栈邮箱变更验证码',
+  },
   password_reset: {
     heading: '云栈密码重置',
     introduction: '你的密码重置验证码是：',

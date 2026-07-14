@@ -14,7 +14,9 @@ import {
   Menu,
   Moon,
   PenTool,
+  ScrollText,
   Search,
+  Settings,
   ShieldCheck,
   Sun,
   Terminal,
@@ -187,6 +189,15 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
               </p>
             </div>
             <button
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
+              @click="navigate('/account')"
+            >
+              <Settings class="w-4 h-4" />
+              账号设置
+            </button>
+            <button
               v-if="authStore.isSuperAdmin"
               type="button"
               class="account-menu-item"
@@ -195,6 +206,16 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
             >
               <ShieldCheck class="w-4 h-4" />
               用户管理
+            </button>
+            <button
+              v-if="authStore.isSuperAdmin"
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
+              @click="navigate('/admin/audit')"
+            >
+              <ScrollText class="w-4 h-4" />
+              审计日志
             </button>
             <button type="button" class="account-menu-item text-red-300" role="menuitem" :disabled="loggingOut" @click="logout">
               <LoaderCircle v-if="loggingOut" class="w-4 h-4 animate-spin" />
@@ -243,6 +264,14 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
           </div>
         </div>
         <button
+          type="button"
+          class="mobile-account-action"
+          @click="navigate('/account')"
+        >
+          <Settings class="w-4 h-4" />
+          账号设置
+        </button>
+        <button
           v-if="authStore.isSuperAdmin"
           type="button"
           class="mobile-account-action"
@@ -250,6 +279,15 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
         >
           <ShieldCheck class="w-4 h-4" />
           用户管理
+        </button>
+        <button
+          v-if="authStore.isSuperAdmin"
+          type="button"
+          class="mobile-account-action"
+          @click="navigate('/admin/audit')"
+        >
+          <ScrollText class="w-4 h-4" />
+          审计日志
         </button>
         <button type="button" class="mobile-account-action text-red-300" :disabled="loggingOut" @click="logout">
           <LoaderCircle v-if="loggingOut" class="w-4 h-4 animate-spin" />

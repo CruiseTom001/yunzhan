@@ -147,4 +147,50 @@ describe('email verification challenge', () => {
     expect(deliveredMessage.text).toContain('654321')
     expect(deliveredMessage.text).toContain('密码重置')
   })
+
+  it('keeps email_change purpose isolated from registration and password reset', () => {
+    const challenge = createEmailChallenge('learner@example.com', '127.0.0.1', 'email_change')
+
+    expect(challenge.purpose).toBe('email_change')
+    expect(verifyEmailChallengeCode({
+      id: challenge.id,
+      code_digest: challenge.codeDigest,
+      purpose: 'registration',
+    }, 'learner@example.com', challenge.code)).toBe(false)
+    expect(verifyEmailChallengeCode({
+      id: challenge.id,
+      code_digest: challenge.codeDigest,
+      purpose: 'password_reset',
+    }, 'learner@example.com', challenge.code)).toBe(false)
+    expect(verifyEmailChallengeCode({
+      id: challenge.id,
+      code_digest: challenge.codeDigest,
+      purpose: challenge.purpose,
+    }, 'learner@example.com', challenge.code)).toBe(true)
+  })
+
+  it('sends email_change code through SMTP with dedicated content', async () => {
+    configureTestSmtp()
+    let deliveredMessage
+    const createTransport = () => ({
+      async sendMail(message) {
+        deliveredMessage = message
+        return {
+          accepted: ['learner@example.com'],
+          messageId: '<email-change@example.com>',
+          rejected: [],
+        }
+      },
+    })
+
+    await sendVerificationCode({
+      to: 'learner@example.com',
+      code: '321654',
+      purpose: 'email_change',
+    }, { createTransport })
+
+    expect(deliveredMessage.subject).toBe('云栈邮箱变更验证码')
+    expect(deliveredMessage.text).toContain('321654')
+    expect(deliveredMessage.text).toContain('邮箱变更验证码')
+  })
 })
