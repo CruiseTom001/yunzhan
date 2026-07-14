@@ -5,7 +5,7 @@
 - Web/Electron 客户端只保存账号隔离的本地缓存，不保存密码、Token 或 API Key。
 - 登录会话使用随机不透明 Token；浏览器只接收 `HttpOnly` Cookie，数据库仅保存 Token 的 SHA-256 摘要。
 - PostgreSQL 保存账号、云端学习进度、操作审计、删除用户备份和最近 20 个进度历史版本。
-- Resend API 负责发送邮箱注册验证码；API Key 只存在于服务端环境变量。
+- SMTP 服务负责发送邮箱注册验证码；邮箱授权码只存在于服务端环境变量。
 - 超管可以创建、查询、编辑、停用和删除用户，并查看用户课程进度；不能删除自己，也不能停用或降级最后一个可用超管。
 
 GitHub Pages 只能托管静态文件，不能独立运行账号 API 和 PostgreSQL。账号版应部署到支持 Node.js 与 PostgreSQL 的服务器，或将静态前端与 API 分开部署。
@@ -16,7 +16,7 @@ GitHub Pages 只能托管静态文件，不能独立运行账号 API 和 Postgre
 
 - Vercel：构建 Vue 前端并通过 Vercel Function 运行 Express API，统一通过一个 HTTPS 域名访问。
 - Neon PostgreSQL：保存账号、会话、学习进度、审计记录与删除备份。
-- Resend：发送邮箱注册验证码。
+- QQ 邮箱 SMTP：在没有自有域名的初期阶段发送邮箱注册验证码。
 
 同域部署可让 `HttpOnly` 会话 Cookie 保持 `SameSite=Lax`，避免无自定义域名时跨站 Cookie 被浏览器拦截。Vercel 会提供当前部署域名和生产域名，服务端将两者加入精确 CORS 白名单。
 
@@ -24,8 +24,12 @@ Vercel 项目创建时需要填写以下秘密变量，真实值不得提交到 
 
 ```text
 DATABASE_URL=Neon 提供的 PostgreSQL 连接串
-RESEND_API_KEY=Resend Sending access API Key
-RESEND_FROM_EMAIL=云栈 <verify@已验证域名>
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=发件 QQ 邮箱
+SMTP_PASSWORD=QQ 邮箱生成的客户端授权码
+SMTP_FROM=云栈 <发件 QQ 邮箱>
 BOOTSTRAP_ADMIN_PASSWORD=首次超管随机强密码
 ```
 
@@ -45,8 +49,12 @@ BOOTSTRAP_ADMIN_USERNAME=admin
 BOOTSTRAP_ADMIN_DISPLAY_NAME=云栈管理员
 BOOTSTRAP_ADMIN_PASSWORD=至少10位且包含字母和数字
 EMAIL_CODE_SECRET=至少32字符的随机密钥
-RESEND_API_KEY=re_开头的发送专用密钥
-RESEND_FROM_EMAIL=云栈 <verify@mail.example.com>
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=sender@qq.com
+SMTP_PASSWORD=QQ邮箱客户端授权码
+SMTP_FROM=云栈 <sender@qq.com>
 ```
 
 3. 启动数据库并初始化：
@@ -58,7 +66,7 @@ npm run server:create-admin
 ```
 
 4. 创建成功后，从 `.env` 删除 `BOOTSTRAP_ADMIN_PASSWORD`。创建脚本不会覆盖同名账号。
-5. 配置 Resend：在 Resend 控制台验证自有域名或发信子域名，创建仅有 `Sending access` 权限且限制到该域名的 API Key，并保证 `RESEND_FROM_EMAIL` 与已验证域名一致。API Key 只显示一次，不得提交到 Git 或添加 `VITE_` 前缀。
+5. 配置 QQ 邮箱 SMTP：在 QQ 邮箱的账号与安全设置中开启 SMTP 服务并生成客户端授权码。授权码不是邮箱登录密码，只能写入服务端 `SMTP_PASSWORD`，不得提交到 Git、发送到聊天或添加 `VITE_` 前缀。使用 465 端口时配置 `SMTP_SECURE=true`。
 6. 使用下面的命令生成验证码 HMAC 密钥，并把输出写入本机 `.env` 的 `EMAIL_CODE_SECRET`：
 
 ```powershell
@@ -79,7 +87,7 @@ Vite 会把 `/api` 代理到 `http://127.0.0.1:8787`。需要改端口时设置 
 
 邮箱验证码有效期为 10 分钟，同一邮箱 60 秒内不能重发、每小时最多发送 5 次，同一 IP 每小时最多发送 20 次，每个验证码最多尝试 5 次。验证码只以 HMAC 摘要保存，不会写入数据库明文或日志。
 
-Resend 要求使用自有并已验证的域名发送邮件，推荐使用 `mail.example.com` 一类独立子域名隔离发信信誉。官方配置说明见 [Resend Domains](https://resend.com/docs/dashboard/domains/introduction) 和 [Resend API Keys](https://resend.com/docs/dashboard/api-keys/introduction)。
+个人 QQ 邮箱 SMTP 适合小规模初期上线，但发送额度、频率控制和送达率由邮箱服务商决定。用户规模增长后，应购买自有域名并迁移到面向事务邮件的服务商，同时继续保留当前验证码限流和 HMAC 存储策略。
 
 ## 生产 Web 部署
 
@@ -94,6 +102,12 @@ COOKIE_SECURE=true
 COOKIE_SAME_SITE=lax
 TRUST_PROXY=true
 SERVE_STATIC=true
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=sender@qq.com
+SMTP_PASSWORD=仅保存在部署平台的客户端授权码
+SMTP_FROM=云栈 <sender@qq.com>
 VITE_API_BASE_URL=/api
 ```
 

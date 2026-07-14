@@ -1,67 +1,122 @@
-const RESEND_API_URL = 'https://api.resend.com/emails'
+import nodemailer from 'nodemailer'
+import { validateEmail } from './validation.mjs'
+
 const EMAIL_TIMEOUT_MS = 10_000
+const MAX_SMTP_HOST_LENGTH = 253
+const MAX_SMTP_PASSWORD_LENGTH = 512
+const MAX_SMTP_FROM_LENGTH = 320
+const SMTP_HOST_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 const VERIFICATION_CODE_PATTERN = /^\d{6}$/
 
-function isRecord(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+function createServiceUnavailableError(message) {
+  const error = new Error(message)
+  error.statusCode = 503
+  return error
 }
 
-function readConfiguration() {
-  const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.RESEND_FROM_EMAIL
+function parseSmtpPort(value) {
+  if (typeof value !== 'string' || !/^\d{1,5}$/.test(value)) return null
+  const port = Number.parseInt(value ?? '', 10)
+  return Number.isInteger(port) && port >= 1 && port <= 65_535 ? port : null
+}
+
+function readFromAddress(value) {
+  if (typeof value !== 'string') return null
+  const from = value.trim()
+  if (from.length < 3 || from.length > MAX_SMTP_FROM_LENGTH || /[\r\n]/.test(from)) return null
+  const angleAddressMatch = from.match(/<([^<>]+)>$/)
+  const email = validateEmail(angleAddressMatch?.[1] ?? from)
+  return email === null ? null : from
+}
+
+function readConfiguration(environment = process.env) {
+  const host = environment.SMTP_HOST?.trim() ?? ''
+  const port = parseSmtpPort(environment.SMTP_PORT)
+  const secureValue = environment.SMTP_SECURE
+  const user = validateEmail(environment.SMTP_USER)
+  const password = environment.SMTP_PASSWORD
+  const from = readFromAddress(environment.SMTP_FROM)
+  const secure = secureValue === 'true'
+  const hasValidSecureValue = secureValue === 'true' || secureValue === 'false'
+
   if (
-    typeof apiKey !== 'string'
-    || !apiKey.startsWith('re_')
-    || apiKey.length > 512
-    || typeof from !== 'string'
-    || from.length < 3
-    || from.length > 320
-    || /[\r\n]/.test(from)
+    host.length > MAX_SMTP_HOST_LENGTH
+    || !SMTP_HOST_PATTERN.test(host)
+    || port === null
+    || !hasValidSecureValue
+    || user === null
+    || typeof password !== 'string'
+    || password.length < 8
+    || password.length > MAX_SMTP_PASSWORD_LENGTH
+    || from === null
   ) {
-    const error = new Error('Resend 邮件服务尚未配置。')
-    error.statusCode = 503
-    throw error
+    throw createServiceUnavailableError('SMTP 邮件服务尚未配置。')
   }
-  return { apiKey, from }
+
+  return { from, host, password, port, secure, user }
 }
 
-export async function sendRegistrationCode({ to, code, idempotencyKey }) {
+function createTransportOptions(configuration) {
+  return {
+    auth: {
+      pass: configuration.password,
+      user: configuration.user,
+    },
+    connectionTimeout: EMAIL_TIMEOUT_MS,
+    greetingTimeout: EMAIL_TIMEOUT_MS,
+    host: configuration.host,
+    port: configuration.port,
+    requireTLS: !configuration.secure,
+    secure: configuration.secure,
+    socketTimeout: EMAIL_TIMEOUT_MS,
+    tls: {
+      minVersion: 'TLSv1.2',
+      servername: configuration.host,
+    },
+  }
+}
+
+function createMessage({ code, from, to }) {
+  return {
+    from,
+    html: `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.7"><h2>云栈注册验证</h2><p>你的注册验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>验证码 10 分钟内有效，请勿转发给他人。</p></div>`,
+    subject: '云栈注册验证码',
+    text: `你的云栈注册验证码是：${code}。验证码 10 分钟内有效，请勿转发给他人。`,
+    to,
+  }
+}
+
+function isSuccessfulDelivery(result, recipient) {
+  return typeof result?.messageId === 'string'
+    && result.messageId.length > 0
+    && result.messageId.length <= 512
+    && Array.isArray(result.accepted)
+    && result.accepted.some(address => String(address).toLowerCase() === recipient)
+}
+
+export async function sendRegistrationCode(
+  { to, code },
+  { createTransport = nodemailer.createTransport } = {},
+) {
+  const recipient = validateEmail(to)
+  if (recipient === null) throw new Error('收件邮箱格式无效。')
   if (!VERIFICATION_CODE_PATTERN.test(code)) throw new Error('验证码格式无效。')
-  const { apiKey, from } = readConfiguration()
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), EMAIL_TIMEOUT_MS)
+
+  const configuration = readConfiguration()
+  const transporter = createTransport(createTransportOptions(configuration))
+
   try {
-    const response = await fetch(RESEND_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Idempotency-Key': idempotencyKey,
-        'User-Agent': 'Yunzhan-Account-Service/1.0',
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject: '云栈注册验证码',
-        text: `你的云栈注册验证码是：${code}。验证码 10 分钟内有效，请勿转发给他人。`,
-        html: `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.7"><h2>云栈注册验证</h2><p>你的注册验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>验证码 10 分钟内有效，请勿转发给他人。</p></div>`,
-        tags: [{ name: 'message_type', value: 'registration_code' }],
-      }),
-      signal: controller.signal,
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok || !isRecord(payload) || typeof payload.id !== 'string' || payload.id.length > 128) {
-      const error = new Error('验证码邮件发送失败。')
-      error.statusCode = 503
-      throw error
+    const result = await transporter.sendMail(createMessage({
+      code,
+      from: configuration.from,
+      to: recipient,
+    }))
+    if (!isSuccessfulDelivery(result, recipient)) {
+      throw createServiceUnavailableError('验证码邮件发送失败。')
     }
-    return payload.id
+    return result.messageId
   } catch (error) {
     if (error instanceof Error && Number.isInteger(error.statusCode)) throw error
-    const deliveryError = new Error('验证码邮件发送失败。')
-    deliveryError.statusCode = 503
-    throw deliveryError
-  } finally {
-    clearTimeout(timeoutId)
+    throw createServiceUnavailableError('验证码邮件发送失败。')
   }
 }

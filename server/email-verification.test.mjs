@@ -2,23 +2,41 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { sendRegistrationCode } from './email-service.mjs'
 
+const SMTP_ENVIRONMENT_KEYS = [
+  'SMTP_HOST',
+  'SMTP_PORT',
+  'SMTP_SECURE',
+  'SMTP_USER',
+  'SMTP_PASSWORD',
+  'SMTP_FROM',
+]
 const originalSecret = process.env.EMAIL_CODE_SECRET
-const originalApiKey = process.env.RESEND_API_KEY
-const originalFrom = process.env.RESEND_FROM_EMAIL
+const originalSmtpEnvironment = Object.fromEntries(
+  SMTP_ENVIRONMENT_KEYS.map(key => [key, process.env[key]]),
+)
+
+function configureTestSmtp() {
+  process.env.SMTP_HOST = 'smtp.example.com'
+  process.env.SMTP_PORT = '465'
+  process.env.SMTP_SECURE = 'true'
+  process.env.SMTP_USER = 'sender@example.com'
+  process.env.SMTP_PASSWORD = 'test-only-smtp-password'
+  process.env.SMTP_FROM = '云栈 <sender@example.com>'
+}
 
 beforeAll(() => {
   process.env.EMAIL_CODE_SECRET = 'test-only-secret-that-is-longer-than-32-characters'
-  delete process.env.RESEND_API_KEY
-  delete process.env.RESEND_FROM_EMAIL
+  SMTP_ENVIRONMENT_KEYS.forEach(key => delete process.env[key])
 })
 
 afterAll(() => {
   if (originalSecret === undefined) delete process.env.EMAIL_CODE_SECRET
   else process.env.EMAIL_CODE_SECRET = originalSecret
-  if (originalApiKey === undefined) delete process.env.RESEND_API_KEY
-  else process.env.RESEND_API_KEY = originalApiKey
-  if (originalFrom === undefined) delete process.env.RESEND_FROM_EMAIL
-  else process.env.RESEND_FROM_EMAIL = originalFrom
+  SMTP_ENVIRONMENT_KEYS.forEach((key) => {
+    const originalValue = originalSmtpEnvironment[key]
+    if (originalValue === undefined) delete process.env[key]
+    else process.env[key] = originalValue
+  })
 })
 
 describe('email verification challenge', () => {
@@ -38,11 +56,52 @@ describe('email verification challenge', () => {
     }, 'learner@example.com', '999999')).toBe(false)
   })
 
-  it('rejects delivery when Resend configuration is missing', async () => {
+  it('rejects delivery when SMTP configuration is missing', async () => {
     await expect(sendRegistrationCode({
       to: 'learner@example.com',
       code: '123456',
-      idempotencyKey: 'test-request',
-    })).rejects.toThrow('Resend 邮件服务尚未配置')
+    })).rejects.toThrow('SMTP 邮件服务尚未配置')
+  })
+
+  it('sends the registration code through a TLS SMTP transport', async () => {
+    configureTestSmtp()
+    let transportOptions
+    let deliveredMessage
+    const createTransport = (options) => {
+      transportOptions = options
+      return {
+        async sendMail(message) {
+          deliveredMessage = message
+          return {
+            accepted: ['learner@example.com'],
+            messageId: '<test-message@example.com>',
+            rejected: [],
+          }
+        },
+      }
+    }
+
+    const messageId = await sendRegistrationCode({
+      to: 'LEARNER@example.com',
+      code: '123456',
+    }, { createTransport })
+
+    expect(messageId).toBe('<test-message@example.com>')
+    expect(transportOptions).toMatchObject({
+      auth: {
+        pass: 'test-only-smtp-password',
+        user: 'sender@example.com',
+      },
+      host: 'smtp.example.com',
+      port: 465,
+      secure: true,
+      tls: { minVersion: 'TLSv1.2' },
+    })
+    expect(deliveredMessage).toMatchObject({
+      from: '云栈 <sender@example.com>',
+      subject: '云栈注册验证码',
+      to: 'learner@example.com',
+    })
+    expect(deliveredMessage.text).toContain('123456')
   })
 })

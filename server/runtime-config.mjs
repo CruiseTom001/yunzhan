@@ -1,10 +1,27 @@
+import { validateEmail } from './validation.mjs'
+
 const LOCAL_DEVELOPMENT_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]
+const SMTP_HOST_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 
 function readBoolean(value) {
   return value === 'true'
+}
+
+function readPort(value) {
+  if (typeof value !== 'string' || !/^\d{1,5}$/.test(value)) return null
+  const port = Number.parseInt(value, 10)
+  return Number.isInteger(port) && port >= 1 && port <= 65_535 ? port : null
+}
+
+function readFromAddress(value) {
+  if (typeof value !== 'string') return null
+  const from = value.trim()
+  if (from.length < 3 || from.length > 320 || /[\r\n]/.test(from)) return null
+  const angleAddressMatch = from.match(/<([^<>]+)>$/)
+  return validateEmail(angleAddressMatch?.[1] ?? from) === null ? null : from
 }
 
 function normalizeOrigin(value, production) {
@@ -56,19 +73,33 @@ function validateProductionEmailConfig(environment) {
   if ((environment.EMAIL_CODE_SECRET ?? '').length < 32) {
     throw new Error('生产环境 EMAIL_CODE_SECRET 必须至少 32 个字符。')
   }
-  if (!environment.RESEND_API_KEY?.startsWith('re_')) {
-    throw new Error('生产环境必须配置有效的 RESEND_API_KEY。')
+  const smtpHost = environment.SMTP_HOST?.trim() ?? ''
+  if (!SMTP_HOST_PATTERN.test(smtpHost)) {
+    throw new Error('生产环境必须配置有效的 SMTP_HOST。')
   }
-  const fromEmail = environment.RESEND_FROM_EMAIL?.trim() ?? ''
-  if (!fromEmail || !fromEmail.includes('@')) {
-    throw new Error('生产环境必须配置 RESEND_FROM_EMAIL。')
+  const smtpPort = readPort(environment.SMTP_PORT)
+  if (smtpPort === null) {
+    throw new Error('生产环境必须配置有效的 SMTP_PORT。')
+  }
+  if (environment.SMTP_SECURE !== 'true' && environment.SMTP_SECURE !== 'false') {
+    throw new Error('生产环境 SMTP_SECURE 只能是 true 或 false。')
+  }
+  if (validateEmail(environment.SMTP_USER) === null) {
+    throw new Error('生产环境必须配置有效的 SMTP_USER。')
+  }
+  const smtpPassword = environment.SMTP_PASSWORD ?? ''
+  if (smtpPassword.length < 8 || smtpPassword.length > 512) {
+    throw new Error('生产环境必须配置有效的 SMTP_PASSWORD。')
+  }
+  if (readFromAddress(environment.SMTP_FROM) === null) {
+    throw new Error('生产环境必须配置 SMTP_FROM。')
   }
 }
 
 export function loadRuntimeConfig(environment = process.env) {
   const production = environment.NODE_ENV === 'production'
-  const port = Number.parseInt(environment.PORT ?? '8787', 10)
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  const port = readPort(environment.PORT ?? '8787')
+  if (port === null) {
     throw new Error('PORT 必须是有效端口。')
   }
 

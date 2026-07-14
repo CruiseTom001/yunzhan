@@ -6,8 +6,12 @@ const productionEnvironment = {
   COOKIE_SECURE: 'true',
   COOKIE_SAME_SITE: 'lax',
   EMAIL_CODE_SECRET: 'a'.repeat(64),
-  RESEND_API_KEY: 're_test_key',
-  RESEND_FROM_EMAIL: '云栈 <verify@example.com>',
+  SMTP_HOST: 'smtp.qq.com',
+  SMTP_PORT: '465',
+  SMTP_SECURE: 'true',
+  SMTP_USER: 'sender@example.com',
+  SMTP_PASSWORD: 'test-only-smtp-password',
+  SMTP_FROM: '云栈 <sender@example.com>',
   RENDER_EXTERNAL_URL: 'https://yunzhan-example.onrender.com',
   SERVE_STATIC: 'true',
   TRUST_PROXY: 'true',
@@ -63,7 +67,18 @@ describe('runtime config', () => {
   it('fails fast when production email secrets are missing', () => {
     expect(() => loadRuntimeConfig({
       ...productionEnvironment,
-      RESEND_API_KEY: '',
-    })).toThrow('RESEND_API_KEY')
+      SMTP_PASSWORD: '',
+    })).toThrow('SMTP_PASSWORD')
+  })
+
+  it('rejects malformed SMTP ports and sender headers', () => {
+    expect(() => loadRuntimeConfig({
+      ...productionEnvironment,
+      SMTP_PORT: '465x',
+    })).toThrow('SMTP_PORT')
+    expect(() => loadRuntimeConfig({
+      ...productionEnvironment,
+      SMTP_FROM: '云栈 <sender@example.com>\r\nBcc: other@example.com',
+    })).toThrow('SMTP_FROM')
   })
 })

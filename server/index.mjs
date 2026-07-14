@@ -327,7 +327,6 @@ app.post('/api/auth/register/code', asyncRoute(async (request, response) => {
       const providerMessageId = await sendRegistrationCode({
         to: email,
         code: challenge.code,
-        idempotencyKey: challenge.id,
       })
       await pool.query(
         `UPDATE email_verification_challenges
