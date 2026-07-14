@@ -3,6 +3,7 @@ import crypto, { randomInt, randomUUID } from 'node:crypto'
 const VERIFICATION_CODE_MAX = 1_000_000
 const VERIFICATION_CODE_LENGTH = 6
 const MINIMUM_SECRET_LENGTH = 32
+const EMAIL_CHALLENGE_PURPOSES = new Set(['registration', 'password_reset'])
 
 function readVerificationSecret() {
   const secret = process.env.EMAIL_CODE_SECRET
@@ -21,20 +22,27 @@ function createDigest(parts) {
     .digest('hex')
 }
 
-export function createEmailChallenge(email, requestIp) {
+export function createEmailChallenge(email, requestIp, purpose) {
+  if (!EMAIL_CHALLENGE_PURPOSES.has(purpose)) throw new Error('验证码用途无效。')
   const id = randomUUID()
   const code = randomInt(0, VERIFICATION_CODE_MAX).toString().padStart(VERIFICATION_CODE_LENGTH, '0')
   return {
     id,
     code,
-    codeDigest: createDigest(['registration', email, id, code]),
+    codeDigest: createDigest([purpose, email, id, code]),
+    purpose,
     requestIpDigest: createDigest(['request-ip', requestIp]),
   }
 }
 
 export function verifyEmailChallengeCode(challenge, email, code) {
-  if (!challenge || typeof challenge.id !== 'string' || typeof challenge.code_digest !== 'string') return false
+  if (
+    !challenge
+    || typeof challenge.id !== 'string'
+    || typeof challenge.code_digest !== 'string'
+    || !EMAIL_CHALLENGE_PURPOSES.has(challenge.purpose)
+  ) return false
   const expected = Buffer.from(challenge.code_digest, 'hex')
-  const actual = Buffer.from(createDigest(['registration', email, challenge.id, code]), 'hex')
+  const actual = Buffer.from(createDigest([challenge.purpose, email, challenge.id, code]), 'hex')
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual)
 }

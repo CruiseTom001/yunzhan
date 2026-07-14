@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
-import { sendRegistrationCode } from './email-service.mjs'
+import { sendVerificationCode } from './email-service.mjs'
 
 const SMTP_ENVIRONMENT_KEYS = [
   'SMTP_HOST',
@@ -41,7 +41,7 @@ afterAll(() => {
 
 describe('email verification challenge', () => {
   it('creates a six-digit code and verifies only the matching challenge', () => {
-    const challenge = createEmailChallenge('learner@example.com', '127.0.0.1')
+    const challenge = createEmailChallenge('learner@example.com', '127.0.0.1', 'registration')
 
     expect(challenge.code).toMatch(/^\d{6}$/)
     expect(challenge.codeDigest).toHaveLength(64)
@@ -49,17 +49,34 @@ describe('email verification challenge', () => {
     expect(verifyEmailChallengeCode({
       id: challenge.id,
       code_digest: challenge.codeDigest,
+      purpose: challenge.purpose,
     }, 'learner@example.com', challenge.code)).toBe(true)
     expect(verifyEmailChallengeCode({
       id: challenge.id,
       code_digest: challenge.codeDigest,
+      purpose: challenge.purpose,
     }, 'learner@example.com', '999999')).toBe(false)
   })
 
+  it('keeps registration and password reset codes isolated', () => {
+    const challenge = createEmailChallenge('learner@example.com', '127.0.0.1', 'password_reset')
+    expect(verifyEmailChallengeCode({
+      id: challenge.id,
+      code_digest: challenge.codeDigest,
+      purpose: 'registration',
+    }, 'learner@example.com', challenge.code)).toBe(false)
+    expect(verifyEmailChallengeCode({
+      id: challenge.id,
+      code_digest: challenge.codeDigest,
+      purpose: challenge.purpose,
+    }, 'learner@example.com', challenge.code)).toBe(true)
+  })
+
   it('rejects delivery when SMTP configuration is missing', async () => {
-    await expect(sendRegistrationCode({
+    await expect(sendVerificationCode({
       to: 'learner@example.com',
       code: '123456',
+      purpose: 'registration',
     })).rejects.toThrow('SMTP 邮件服务尚未配置')
   })
 
@@ -81,9 +98,10 @@ describe('email verification challenge', () => {
       }
     }
 
-    const messageId = await sendRegistrationCode({
+    const messageId = await sendVerificationCode({
       to: 'LEARNER@example.com',
       code: '123456',
+      purpose: 'registration',
     }, { createTransport })
 
     expect(messageId).toBe('<test-message@example.com>')
@@ -103,5 +121,30 @@ describe('email verification challenge', () => {
       to: 'learner@example.com',
     })
     expect(deliveredMessage.text).toContain('123456')
+  })
+
+  it('uses dedicated password reset email content', async () => {
+    configureTestSmtp()
+    let deliveredMessage
+    const createTransport = () => ({
+      async sendMail(message) {
+        deliveredMessage = message
+        return {
+          accepted: ['learner@example.com'],
+          messageId: '<password-reset@example.com>',
+          rejected: [],
+        }
+      },
+    })
+
+    await sendVerificationCode({
+      to: 'learner@example.com',
+      code: '654321',
+      purpose: 'password_reset',
+    }, { createTransport })
+
+    expect(deliveredMessage.subject).toBe('云栈密码重置验证码')
+    expect(deliveredMessage.text).toContain('654321')
+    expect(deliveredMessage.text).toContain('密码重置')
   })
 })

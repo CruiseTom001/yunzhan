@@ -13,10 +13,10 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
 
-type AuthMode = 'login' | 'register'
+type AuthMode = 'forgot-password' | 'login' | 'register'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/
+const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const PASSWORD_HAS_LETTER = /[A-Za-z]/
 const PASSWORD_HAS_NUMBER = /\d/
 
@@ -33,8 +33,13 @@ const registrationUsername = ref('')
 const registrationDisplayName = ref('')
 const registrationPassword = ref('')
 const registrationPasswordConfirmation = ref('')
+const resetEmail = ref('')
+const resetCode = ref('')
+const resetPassword = ref('')
+const resetPasswordConfirmation = ref('')
 const showLoginPassword = ref(false)
 const showRegistrationPassword = ref(false)
+const showResetPassword = ref(false)
 const submitting = ref(false)
 const sendingCode = ref(false)
 const cooldownSeconds = ref(0)
@@ -57,12 +62,28 @@ const canSendCode = computed(() => (
 const canSubmitRegistration = computed(() => (
   EMAIL_PATTERN.test(registrationEmail.value.trim())
   && /^\d{6}$/.test(registrationCode.value)
-  && USERNAME_PATTERN.test(registrationUsername.value.trim().toLowerCase())
+  && USERNAME_PATTERN.test(registrationUsername.value.trim())
   && registrationDisplayName.value.trim().length >= 1
   && registrationPassword.value.length >= 10
   && PASSWORD_HAS_LETTER.test(registrationPassword.value)
   && PASSWORD_HAS_NUMBER.test(registrationPassword.value)
   && registrationPassword.value === registrationPasswordConfirmation.value
+  && !submitting.value
+))
+
+const canSendResetCode = computed(() => (
+  EMAIL_PATTERN.test(resetEmail.value.trim())
+  && cooldownSeconds.value === 0
+  && !sendingCode.value
+))
+
+const canSubmitPasswordReset = computed(() => (
+  EMAIL_PATTERN.test(resetEmail.value.trim())
+  && /^\d{6}$/.test(resetCode.value)
+  && resetPassword.value.length >= 10
+  && PASSWORD_HAS_LETTER.test(resetPassword.value)
+  && PASSWORD_HAS_NUMBER.test(resetPassword.value)
+  && resetPassword.value === resetPasswordConfirmation.value
   && !submitting.value
 ))
 
@@ -96,6 +117,11 @@ function startCountdown(seconds: number) {
 function normalizeCodeInput(event: Event) {
   if (!(event.target instanceof HTMLInputElement)) return
   registrationCode.value = event.target.value.replace(/\D/g, '').slice(0, 6)
+}
+
+function normalizeResetCodeInput(event: Event) {
+  if (!(event.target instanceof HTMLInputElement)) return
+  resetCode.value = event.target.value.replace(/\D/g, '').slice(0, 6)
 }
 
 async function completeAuthentication(userId: string, displayName: string) {
@@ -146,7 +172,7 @@ async function submitRegistration() {
     const user = await authStore.register({
       email: registrationEmail.value.trim().toLowerCase(),
       code: registrationCode.value,
-      username: registrationUsername.value.trim().toLowerCase(),
+      username: registrationUsername.value.trim(),
       displayName: registrationDisplayName.value.trim(),
       password: registrationPassword.value,
     })
@@ -158,16 +184,61 @@ async function submitRegistration() {
   }
 }
 
+async function sendResetCode() {
+  if (!canSendResetCode.value) return
+  sendingCode.value = true
+  formError.value = ''
+  formMessage.value = ''
+  try {
+    const seconds = await authStore.requestPasswordResetCode(resetEmail.value.trim().toLowerCase())
+    startCountdown(seconds)
+    formMessage.value = '如果该邮箱已绑定可用账号，验证码将发送到邮箱。'
+  } catch (error: unknown) {
+    formError.value = error instanceof Error ? error.message : '验证码发送失败，请稍后重试。'
+  } finally {
+    sendingCode.value = false
+  }
+}
+
+async function submitPasswordReset() {
+  if (!canSubmitPasswordReset.value) {
+    formError.value = '请检查邮箱、验证码和新密码是否符合要求。'
+    return
+  }
+  submitting.value = true
+  formError.value = ''
+  formMessage.value = ''
+  try {
+    const email = resetEmail.value.trim().toLowerCase()
+    await authStore.resetPassword({
+      email,
+      code: resetCode.value,
+      password: resetPassword.value,
+    })
+    loginIdentifier.value = email
+    loginPassword.value = ''
+    mode.value = 'login'
+    formMessage.value = '密码已更新，请使用新密码登录。'
+  } catch (error: unknown) {
+    formError.value = error instanceof Error ? error.message : '密码重置失败，请重试。'
+  } finally {
+    submitting.value = false
+  }
+}
+
 onUnmounted(stopCountdown)
 </script>
 
 <template>
   <main class="login-page">
-    <section class="login-panel" :aria-labelledby="mode === 'login' ? 'login-title' : 'register-title'">
+    <section
+      class="login-panel"
+      :aria-labelledby="mode === 'login' ? 'login-title' : mode === 'register' ? 'register-title' : 'forgot-password-title'"
+    >
       <div class="login-brand" aria-hidden="true">&gt;_</div>
       <p class="login-kicker">YUNZHAN ACCOUNT</p>
 
-      <div class="auth-segments" role="tablist" aria-label="账号操作">
+      <div v-if="mode !== 'forgot-password'" class="auth-segments" role="tablist" aria-label="账号操作">
         <button
           type="button"
           role="tab"
@@ -232,6 +303,11 @@ onUnmounted(stopCountdown)
             </button>
           </div>
 
+          <button type="button" class="forgot-password-button" @click="switchMode('forgot-password')">
+            忘记密码？
+          </button>
+
+          <p v-if="formMessage" class="login-message" role="status">{{ formMessage }}</p>
           <p v-if="formError" class="login-error" role="alert">{{ formError }}</p>
           <button class="login-submit" type="submit" :disabled="!canSubmitLogin">
             <LoaderCircle v-if="submitting" class="w-4 h-4 animate-spin" />
@@ -240,7 +316,7 @@ onUnmounted(stopCountdown)
         </form>
       </template>
 
-      <template v-else>
+      <template v-else-if="mode === 'register'">
         <h1 id="register-title">注册云栈</h1>
         <p class="login-subtitle">验证邮箱后创建独立学习账号。</p>
 
@@ -292,7 +368,7 @@ onUnmounted(stopCountdown)
                   type="text"
                   autocomplete="username"
                   maxlength="32"
-                  placeholder="3-32 位英文标识"
+                  placeholder="3-32 位英文标识，保留大小写"
                 />
               </div>
             </div>
@@ -356,6 +432,96 @@ onUnmounted(stopCountdown)
           <button class="login-submit" type="submit" :disabled="!canSubmitRegistration">
             <LoaderCircle v-if="submitting" class="w-4 h-4 animate-spin" />
             {{ submitting ? '正在创建账号...' : '创建账号' }}
+          </button>
+        </form>
+      </template>
+
+      <template v-else>
+        <button type="button" class="back-to-login-button" @click="switchMode('login')">
+          返回登录
+        </button>
+        <h1 id="forgot-password-title">找回密码</h1>
+        <p class="login-subtitle">验证账号绑定邮箱后设置新密码。</p>
+
+        <form class="login-form" @submit.prevent="submitPasswordReset">
+          <label for="reset-email">绑定邮箱</label>
+          <div class="login-input-wrap">
+            <Mail class="w-4 h-4" aria-hidden="true" />
+            <input
+              id="reset-email"
+              v-model="resetEmail"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              placeholder="name@example.com"
+            />
+          </div>
+
+          <label for="reset-code">邮箱验证码</label>
+          <div class="login-input-wrap">
+            <KeyRound class="w-4 h-4" aria-hidden="true" />
+            <input
+              id="reset-code"
+              :value="resetCode"
+              name="code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              placeholder="6 位验证码"
+              @input="normalizeResetCodeInput"
+            />
+            <button type="button" class="send-code-button" :disabled="!canSendResetCode" @click="sendResetCode">
+              <LoaderCircle v-if="sendingCode" class="w-3.5 h-3.5 animate-spin" />
+              <span v-else-if="cooldownSeconds > 0">{{ cooldownSeconds }} 秒</span>
+              <span v-else>发送验证码</span>
+            </button>
+          </div>
+
+          <label for="reset-password">新密码</label>
+          <div class="login-input-wrap">
+            <LockKeyhole class="w-4 h-4" aria-hidden="true" />
+            <input
+              id="reset-password"
+              v-model="resetPassword"
+              name="new-password"
+              :type="showResetPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              maxlength="128"
+              placeholder="至少 10 位，包含字母和数字"
+            />
+            <button
+              type="button"
+              class="login-password-toggle"
+              :title="showResetPassword ? '隐藏密码' : '显示密码'"
+              :aria-label="showResetPassword ? '隐藏密码' : '显示密码'"
+              @click="showResetPassword = !showResetPassword"
+            >
+              <EyeOff v-if="showResetPassword" class="w-4 h-4" />
+              <Eye v-else class="w-4 h-4" />
+            </button>
+          </div>
+
+          <label for="reset-password-confirmation">确认新密码</label>
+          <div class="login-input-wrap">
+            <LockKeyhole class="w-4 h-4" aria-hidden="true" />
+            <input
+              id="reset-password-confirmation"
+              v-model="resetPasswordConfirmation"
+              name="new-password-confirmation"
+              type="password"
+              autocomplete="new-password"
+              maxlength="128"
+              placeholder="再次输入新密码"
+            />
+          </div>
+
+          <p v-if="formMessage" class="login-message" role="status">{{ formMessage }}</p>
+          <p v-if="formError" class="login-error" role="alert">{{ formError }}</p>
+          <button class="login-submit" type="submit" :disabled="!canSubmitPasswordReset">
+            <LoaderCircle v-if="submitting" class="w-4 h-4 animate-spin" />
+            {{ submitting ? '正在更新密码...' : '更新密码' }}
           </button>
         </form>
       </template>
@@ -489,6 +655,27 @@ onUnmounted(stopCountdown)
 .login-password-toggle:hover {
   color: #e2e8f0;
   background: rgb(255 255 255 / 0.04);
+}
+
+.forgot-password-button,
+.back-to-login-button {
+  color: #67e8f9;
+  font-size: 11px;
+}
+
+.forgot-password-button {
+  display: block;
+  margin: 9px 0 0 auto;
+}
+
+.back-to-login-button {
+  margin: 14px 0 18px;
+}
+
+.forgot-password-button:hover,
+.back-to-login-button:hover {
+  color: #cffafe;
+  text-decoration: underline;
 }
 
 .send-code-button {

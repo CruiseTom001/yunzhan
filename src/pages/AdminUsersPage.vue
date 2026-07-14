@@ -39,7 +39,7 @@ interface UserEditorState {
   status: UserStatus
 }
 
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/
+const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const PASSWORD_HAS_LETTER = /[A-Za-z]/
 const PASSWORD_HAS_NUMBER = /\d/
 
@@ -170,10 +170,10 @@ function closeEditor() {
 }
 
 function validateEditor() {
-  const username = editor.value.username.trim().toLowerCase()
+  const username = editor.value.username.trim()
   const displayName = editor.value.displayName.trim()
   const password = editor.value.password
-  if (!USERNAME_PATTERN.test(username)) return '用户名需为 3-32 位小写字母、数字、点、下划线或连字符。'
+  if (!USERNAME_PATTERN.test(username)) return '用户名需为 3-32 位字母、数字、点、下划线或连字符。'
   if (displayName.length < 1 || displayName.length > 50) return '显示名称需为 1-50 个字符。'
   const passwordRequired = editorMode.value === 'create'
   if (passwordRequired || password.length > 0) {
@@ -192,7 +192,7 @@ async function submitEditor() {
   }
 
   const input: AdminUserInput = {
-    username: editor.value.username.trim().toLowerCase(),
+    username: editor.value.username.trim(),
     displayName: editor.value.displayName.trim(),
     role: editor.value.role,
     status: editor.value.status,

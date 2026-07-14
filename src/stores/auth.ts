@@ -11,6 +11,12 @@ export interface RegistrationInput {
   password: string
 }
 
+export interface PasswordResetInput {
+  email: string
+  code: string
+  password: string
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -65,6 +71,10 @@ function readCooldownSeconds(value: unknown) {
   return Number.isInteger(value.cooldownSeconds) && value.cooldownSeconds > 0 && value.cooldownSeconds <= 600
     ? value.cooldownSeconds
     : null
+}
+
+function readOkResponse(value: unknown) {
+  return isRecord(value) && value.ok === true
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -129,6 +139,24 @@ export const useAuthStore = defineStore('auth', () => {
     return cooldownSeconds
   }
 
+  async function requestPasswordResetCode(email: string) {
+    const payload = await apiRequest('/auth/password-reset/code', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+    const cooldownSeconds = readCooldownSeconds(payload)
+    if (!cooldownSeconds) throw new Error('账号服务返回了无效验证码结果。')
+    return cooldownSeconds
+  }
+
+  async function resetPassword(input: PasswordResetInput) {
+    const payload = await apiRequest('/auth/password-reset', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    if (!readOkResponse(payload)) throw new Error('账号服务返回了无效密码重置结果。')
+  }
+
   async function register(input: RegistrationInput) {
     status.value = 'loading'
     errorMessage.value = ''
@@ -169,7 +197,9 @@ export const useAuthStore = defineStore('auth', () => {
     initialize,
     login,
     requestRegistrationCode,
+    requestPasswordResetCode,
     register,
+    resetPassword,
     logout,
   }
 })

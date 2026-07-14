@@ -1,4 +1,4 @@
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/
+const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_{}|~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
 const VERIFICATION_CODE_PATTERN = /^\d{6}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -173,7 +173,7 @@ export function isRecord(value) {
 }
 
 export function normalizeUsername(value) {
-  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 export function normalizeEmail(value) {

@@ -8,13 +8,12 @@ import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
-import { sendRegistrationCode } from './email-service.mjs'
+import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
 import {
   isRecord,
   normalizeEmail,
-  normalizeUsername,
   parsePagination,
   validateDisplayName,
   validateEmail,
@@ -248,24 +247,9 @@ async function ensureAdminContinuity(client, targetUser, nextRole, nextStatus) {
   }
 }
 
-app.get('/api/health', asyncRoute(async (_request, response) => {
-  await pool.query('SELECT 1')
-  response.json({ ok: true })
-}))
-
-app.post('/api/auth/register/code', asyncRoute(async (request, response) => {
-  if (!isRecord(request.body)) {
-    response.status(400).json({ error: '邮箱参数无效。' })
-    return
-  }
-  const email = validateEmail(request.body.email)
-  if (!email) {
-    response.status(400).json({ error: '请输入有效的邮箱地址。' })
-    return
-  }
-
-  const challenge = createEmailChallenge(email, getRequestIp(request))
-  const prepared = await withTransaction(async (client) => {
+async function prepareEmailChallenge({ canSend, email, purpose, requestIp }) {
+  const challenge = createEmailChallenge(email, requestIp, purpose)
+  const shouldSend = await withTransaction(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [email])
     await client.query(
       `DELETE FROM email_verification_challenges
@@ -276,7 +260,7 @@ app.post('/api/auth/register/code', asyncRoute(async (request, response) => {
          COUNT(*) FILTER (WHERE email = $1)::INTEGER AS email_count,
          COUNT(*) FILTER (WHERE request_ip_digest = $2)::INTEGER AS ip_count,
          MAX(created_at) FILTER (
-           WHERE email = $1 AND delivery_status IN ('pending', 'sent')
+           WHERE email = $1 AND delivery_status IN ('pending', 'sent', 'suppressed')
          ) AS last_email_at
        FROM email_verification_challenges
        WHERE created_at > NOW() - INTERVAL '1 hour'
@@ -298,52 +282,81 @@ app.post('/api/auth/register/code', asyncRoute(async (request, response) => {
       }
     }
 
-    const existingUser = await client.query('SELECT 1 FROM users WHERE email = $1', [email])
-    if (existingUser.rowCount > 0) return { shouldSend: false }
-
+    const eligible = await canSend(client)
     await client.query(
       `UPDATE email_verification_challenges
           SET consumed_at = NOW()
-        WHERE email = $1 AND consumed_at IS NULL`,
-      [email],
+        WHERE email = $1 AND purpose = $2 AND consumed_at IS NULL`,
+      [email, purpose],
     )
     await client.query(
       `INSERT INTO email_verification_challenges
-        (id, email, purpose, code_digest, request_ip_digest, expires_at)
-       VALUES ($1, $2, 'registration', $3, $4, $5)`,
+        (id, email, purpose, code_digest, request_ip_digest, delivery_status, expires_at, consumed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         challenge.id,
         email,
+        purpose,
         challenge.codeDigest,
         challenge.requestIpDigest,
+        eligible ? 'pending' : 'suppressed',
         new Date(Date.now() + EMAIL_CODE_TTL_MS),
+        eligible ? null : new Date(),
       ],
     )
-    return { shouldSend: true }
+    return eligible
   })
+  return { challenge, shouldSend }
+}
 
-  if (prepared.shouldSend) {
-    try {
-      const providerMessageId = await sendRegistrationCode({
-        to: email,
-        code: challenge.code,
-      })
-      await pool.query(
-        `UPDATE email_verification_challenges
-            SET delivery_status = 'sent', provider_message_id = $2
-          WHERE id = $1 AND delivery_status = 'pending'`,
-        [challenge.id, providerMessageId],
-      )
-    } catch (error) {
-      await pool.query(
-        `UPDATE email_verification_challenges
-            SET delivery_status = 'failed', consumed_at = NOW()
-          WHERE id = $1`,
-        [challenge.id],
-      )
-      throw error
-    }
+async function deliverEmailChallenge({ challenge, email, shouldSend }) {
+  if (!shouldSend) return
+  try {
+    const providerMessageId = await sendVerificationCode({
+      to: email,
+      code: challenge.code,
+      purpose: challenge.purpose,
+    })
+    await pool.query(
+      `UPDATE email_verification_challenges
+          SET delivery_status = 'sent', provider_message_id = $2
+        WHERE id = $1 AND delivery_status = 'pending'`,
+      [challenge.id, providerMessageId],
+    )
+  } catch (error) {
+    await pool.query(
+      `UPDATE email_verification_challenges
+          SET delivery_status = 'failed', consumed_at = NOW()
+        WHERE id = $1`,
+      [challenge.id],
+    )
+    throw error
   }
+}
+
+app.get('/api/health', asyncRoute(async (_request, response) => {
+  await pool.query('SELECT 1')
+  response.json({ ok: true })
+}))
+
+app.post('/api/auth/register/code', asyncRoute(async (request, response) => {
+  if (!isRecord(request.body)) {
+    response.status(400).json({ error: '邮箱参数无效。' })
+    return
+  }
+  const email = validateEmail(request.body.email)
+  if (!email) {
+    response.status(400).json({ error: '请输入有效的邮箱地址。' })
+    return
+  }
+
+  const prepared = await prepareEmailChallenge({
+    email,
+    purpose: 'registration',
+    requestIp: getRequestIp(request),
+    canSend: async client => (await client.query('SELECT 1 FROM users WHERE email = $1', [email])).rowCount === 0,
+  })
+  await deliverEmailChallenge({ ...prepared, email })
 
   response.json({
     ok: true,
@@ -372,7 +385,7 @@ app.post('/api/auth/register', asyncRoute(async (request, response) => {
   try {
     const registration = await withTransaction(async (client) => {
       const challengeResult = await client.query(
-        `SELECT id, code_digest, attempt_count
+        `SELECT id, purpose, code_digest, attempt_count
            FROM email_verification_challenges
           WHERE email = $1
             AND purpose = 'registration'
@@ -398,7 +411,7 @@ app.post('/api/auth/register', asyncRoute(async (request, response) => {
       }
 
       const existing = await client.query(
-        'SELECT 1 FROM users WHERE username = $1 OR email = $2',
+        'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) OR email = $2',
         [username, email],
       )
       if (existing.rowCount > 0) return { status: 'unavailable' }
@@ -444,6 +457,125 @@ app.post('/api/auth/register', asyncRoute(async (request, response) => {
   }
 }))
 
+app.post('/api/auth/password-reset/code', asyncRoute(async (request, response) => {
+  if (!isRecord(request.body)) {
+    response.status(400).json({ error: '邮箱参数无效。' })
+    return
+  }
+  const email = validateEmail(request.body.email)
+  if (!email) {
+    response.status(400).json({ error: '请输入有效的邮箱地址。' })
+    return
+  }
+
+  const prepared = await prepareEmailChallenge({
+    email,
+    purpose: 'password_reset',
+    requestIp: getRequestIp(request),
+    canSend: async client => (await client.query(
+      `SELECT 1
+         FROM users
+        WHERE email = $1
+          AND email_verified_at IS NOT NULL
+          AND status = 'active'`,
+      [email],
+    )).rowCount === 1,
+  })
+  await deliverEmailChallenge({ ...prepared, email })
+
+  response.json({
+    ok: true,
+    cooldownSeconds: EMAIL_CODE_COOLDOWN_SECONDS,
+    message: '如果该邮箱已绑定可用账号，验证码将发送到邮箱。',
+  })
+}))
+
+app.post('/api/auth/password-reset', asyncRoute(async (request, response) => {
+  if (!isRecord(request.body)) {
+    response.status(400).json({ error: '密码重置参数无效。' })
+    return
+  }
+  const email = validateEmail(request.body.email)
+  const code = validateVerificationCode(request.body.code)
+  const password = validatePassword(request.body.password)
+  if (!email || !code || !password) {
+    response.status(400).json({ error: '邮箱、验证码或新密码不符合要求。' })
+    return
+  }
+
+  const resetResult = await withTransaction(async (client) => {
+    const challengeResult = await client.query(
+      `SELECT id, purpose, code_digest, attempt_count
+         FROM email_verification_challenges
+        WHERE email = $1
+          AND purpose = 'password_reset'
+          AND delivery_status = 'sent'
+          AND consumed_at IS NULL
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        FOR UPDATE`,
+      [email],
+    )
+    const activeChallenge = challengeResult.rows[0]
+    if (!activeChallenge || activeChallenge.attempt_count >= 5) return { status: 'invalid_code' }
+    if (!verifyEmailChallengeCode(activeChallenge, email, code)) {
+      await client.query(
+        `UPDATE email_verification_challenges
+            SET attempt_count = LEAST(attempt_count + 1, 5),
+                consumed_at = CASE WHEN attempt_count + 1 >= 5 THEN NOW() ELSE consumed_at END
+          WHERE id = $1`,
+        [activeChallenge.id],
+      )
+      return { status: 'invalid_code' }
+    }
+
+    const userResult = await client.query(
+      `SELECT *
+         FROM users
+        WHERE email = $1
+          AND email_verified_at IS NOT NULL
+          AND status = 'active'
+        FOR UPDATE`,
+      [email],
+    )
+    const user = userResult.rows[0]
+    if (!user) {
+      await client.query(
+        'UPDATE email_verification_challenges SET consumed_at = NOW() WHERE id = $1',
+        [activeChallenge.id],
+      )
+      return { status: 'invalid_code' }
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12)
+    await client.query(
+      `UPDATE users
+          SET password_hash = $2,
+              password_changed_at = NOW(),
+              updated_at = NOW()
+        WHERE id = $1`,
+      [user.id, passwordHash],
+    )
+    await client.query(
+      `UPDATE email_verification_challenges
+          SET consumed_at = NOW()
+        WHERE email = $1 AND purpose = 'password_reset' AND consumed_at IS NULL`,
+      [email],
+    )
+    await client.query('DELETE FROM sessions WHERE user_id = $1', [user.id])
+    await writeAudit(client, user.id, 'auth.password.reset', user.id, { method: 'verified_email' })
+    return { status: 'updated' }
+  })
+
+  if (resetResult.status !== 'updated') {
+    response.status(400).json({ error: '验证码无效、已过期或尝试次数过多。' })
+    return
+  }
+  clearSessionCookie(response)
+  response.json({ ok: true })
+}))
+
 app.post('/api/auth/login', asyncRoute(async (request, response) => {
   if (!isRecord(request.body)) {
     response.status(400).json({ error: '登录参数无效。' })
@@ -469,7 +601,7 @@ app.post('/api/auth/login', asyncRoute(async (request, response) => {
 
   const result = email
     ? await pool.query('SELECT * FROM users WHERE email = $1', [normalizeEmail(email)])
-    : await pool.query('SELECT * FROM users WHERE username = $1', [username])
+    : await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username])
   const user = result.rows[0]
   const passwordMatches = user ? await bcrypt.compare(password, user.password_hash) : false
   if (!user || !passwordMatches || user.status !== 'active') {

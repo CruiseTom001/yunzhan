@@ -17,7 +17,7 @@ try {
   const result = await pool.query(
     `INSERT INTO users (id, username, display_name, password_hash, role, status)
      VALUES ($1, $2, $3, $4, 'super_admin', 'active')
-     ON CONFLICT (username) DO NOTHING
+     ON CONFLICT DO NOTHING
      RETURNING id`,
     [randomUUID(), username, displayName, passwordHash],
   )

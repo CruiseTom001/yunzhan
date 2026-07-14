@@ -51,7 +51,7 @@ function createValidProgress() {
 
 describe('account input validation', () => {
   it('normalizes valid usernames and rejects unsafe credentials', () => {
-    expect(validateUsername('  User.Name  ')).toBe('user.name')
+    expect(validateUsername('  User.Name  ')).toBe('User.Name')
     expect(validateUsername('../admin')).toBeNull()
     expect(validatePassword('short1')).toBeNull()
     expect(validatePassword('strong-password-2026')).toBe('strong-password-2026')
