@@ -1381,6 +1381,346 @@ if (serveStatic) {
   })
 }
 
+app.post('/api/feedback', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['category', 'content', 'contact'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '反馈参数无效。' })
+    return
+  }
+  const category = typeof request.body.category === 'string' ? request.body.category.trim() : ''
+  if (!['suggestion', 'bug', 'other'].includes(category)) {
+    response.status(400).json({ error: '反馈类别无效。' })
+    return
+  }
+  const content = typeof request.body.content === 'string' ? request.body.content.trim() : ''
+  if (content.length < 1 || content.length > 2000) {
+    response.status(400).json({ error: '反馈内容需为 1-2000 个字符。' })
+    return
+  }
+  const contact = typeof request.body.contact === 'string' && request.body.contact.trim().length > 0
+    ? request.body.contact.trim().slice(0, 128)
+    : null
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO feedback (user_id, category, content, contact)
+       VALUES ($1, $2, $3, $4)`,
+      [request.auth.id, category, content, contact],
+    )
+    await writeAudit(client, request.auth.id, 'feedback.submit', request.auth.id, { category })
+  })
+  response.json({ ok: true })
+}))
+
+app.get('/api/feedback/mine', requireAuth, asyncRoute(async (request, response) => {
+  const result = await pool.query(
+    `SELECT id, category, content, contact, status, created_at, seen_at
+       FROM feedback
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [request.auth.id],
+  )
+  response.json({
+    feedbacks: result.rows.map(row => ({
+      id: String(row.id),
+      category: row.category,
+      content: row.content,
+      contact: row.contact ?? null,
+      status: row.status,
+      createdAt: new Date(row.created_at).getTime(),
+      seenAt: row.seen_at ? new Date(row.seen_at).getTime() : null,
+    })),
+  })
+}))
+
+app.get('/api/admin/feedback', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const { limit, offset } = parsePagination(request.query)
+  const status = typeof request.query.status === 'string' ? request.query.status.trim().slice(0, 16) : ''
+  if (status && !['open', 'seen', 'resolved'].includes(status)) {
+    response.status(400).json({ error: '状态筛选条件无效。' })
+    return
+  }
+  const [feedbacksResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT f.id, f.category, f.content, f.contact, f.status,
+              f.created_at, f.seen_at,
+              u.id AS user_id, u.username AS user_username, u.display_name AS user_display_name
+         FROM feedback f
+         LEFT JOIN users u ON u.id = f.user_id
+        WHERE ($1 = '' OR f.status = $1)
+        ORDER BY f.created_at DESC, f.id DESC
+        LIMIT $2 OFFSET $3`,
+      [status, limit, offset],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::INTEGER AS count
+         FROM feedback
+        WHERE ($1 = '' OR status = $1)`,
+      [status],
+    ),
+  ])
+  response.json({
+    feedbacks: feedbacksResult.rows.map(row => ({
+      id: String(row.id),
+      category: row.category,
+      content: row.content,
+      contact: row.contact ?? null,
+      status: row.status,
+      createdAt: new Date(row.created_at).getTime(),
+      seenAt: row.seen_at ? new Date(row.seen_at).getTime() : null,
+      user: row.user_id ? {
+        id: row.user_id,
+        username: row.user_username,
+        displayName: row.user_display_name,
+      } : null,
+    })),
+    total: countResult.rows[0].count,
+    limit,
+    offset,
+  })
+}))
+
+app.patch('/api/admin/feedback/:id', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const feedbackId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(feedbackId) || feedbackId < 1) {
+    response.status(400).json({ error: '反馈 ID 无效。' })
+    return
+  }
+  const allowedKeys = new Set(['status'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '反馈更新参数无效。' })
+    return
+  }
+  const status = typeof request.body.status === 'string' ? request.body.status.trim() : ''
+  if (!['open', 'seen', 'resolved'].includes(status)) {
+    response.status(400).json({ error: '反馈状态无效。' })
+    return
+  }
+  const result = await withTransaction(async (client) => {
+    const updated = await client.query(
+      `UPDATE feedback
+          SET status = $2,
+              seen_at = CASE WHEN $2 <> 'open' AND seen_at IS NULL THEN NOW() ELSE seen_at END
+        WHERE id = $1
+        RETURNING id, status`,
+      [feedbackId, status],
+    )
+    if (updated.rowCount === 0) return null
+    await writeAudit(client, request.auth.id, 'feedback.update', request.auth.id, { feedbackId, status })
+    return updated.rows[0]
+  })
+  if (!result) {
+    response.status(404).json({ error: '反馈不存在。' })
+    return
+  }
+  response.json({ ok: true, status: result.status })
+}))
+
+app.get('/api/announcements/latest', requireAuth, asyncRoute(async (request, response) => {
+  const result = await pool.query(
+    `SELECT a.id, a.title, a.content, a.published_at
+       FROM announcements a
+       LEFT JOIN announcement_reads r
+         ON r.announcement_id = a.id AND r.user_id = $1
+      WHERE a.active = true
+        AND r.user_id IS NULL
+        AND a.published_at <= NOW()
+      ORDER BY a.published_at DESC, a.id DESC
+      LIMIT 1`,
+    [request.auth.id],
+  )
+  const row = result.rows[0]
+  if (!row) {
+    response.json({ announcement: null })
+    return
+  }
+  response.json({
+    announcement: {
+      id: String(row.id),
+      title: row.title,
+      content: row.content,
+      publishedAt: new Date(row.published_at).getTime(),
+    },
+  })
+}))
+
+app.post('/api/announcements/:id/read', requireAuth, asyncRoute(async (request, response) => {
+  const announcementId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(announcementId) || announcementId < 1) {
+    response.status(400).json({ error: '公告 ID 无效。' })
+    return
+  }
+  await pool.query(
+    `INSERT INTO announcement_reads (user_id, announcement_id)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id, announcement_id) DO NOTHING`,
+    [request.auth.id, announcementId],
+  )
+  response.json({ ok: true })
+}))
+
+app.get('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const { limit, offset } = parsePagination(request.query)
+  const [announcementsResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT a.id, a.title, a.content, a.published_at, a.active,
+              a.created_at, a.updated_at
+         FROM announcements a
+        ORDER BY a.published_at DESC, a.id DESC
+        LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    ),
+    pool.query(
+      'SELECT COUNT(*)::INTEGER AS count FROM announcements',
+    ),
+  ])
+  response.json({
+    announcements: announcementsResult.rows.map(row => ({
+      id: String(row.id),
+      title: row.title,
+      content: row.content,
+      publishedAt: new Date(row.published_at).getTime(),
+      active: row.active,
+      createdAt: new Date(row.created_at).getTime(),
+      updatedAt: new Date(row.updated_at).getTime(),
+    })),
+    total: countResult.rows[0].count,
+    limit,
+    offset,
+  })
+}))
+
+app.post('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['title', 'content', 'active', 'publishedAt'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '公告参数无效。' })
+    return
+  }
+  if (typeof request.body.title !== 'string') {
+    response.status(400).json({ error: '公告标题无效。' })
+    return
+  }
+  const title = request.body.title.trim()
+  if (title.length < 1 || title.length > 120) {
+    response.status(400).json({ error: '公告标题需为 1-120 个字符。' })
+    return
+  }
+  if (typeof request.body.content !== 'string') {
+    response.status(400).json({ error: '公告内容无效。' })
+    return
+  }
+  const content = request.body.content.trim()
+  if (content.length < 1 || content.length > 4000) {
+    response.status(400).json({ error: '公告内容需为 1-4000 个字符。' })
+    return
+  }
+  const active = request.body.active === undefined ? true : Boolean(request.body.active)
+  let publishedAt = 'NOW()'
+  const params = [title, content, active, request.auth.id]
+  if (request.body.publishedAt !== undefined) {
+    const ts = Number(request.body.publishedAt)
+    if (!Number.isFinite(ts) || ts <= 0) {
+      response.status(400).json({ error: '公告发布时间无效。' })
+      return
+    }
+    publishedAt = 'TO_TIMESTAMP($5)'
+    params.push(ts)
+  }
+  const result = await withTransaction(async (client) => {
+    const inserted = await client.query(
+      `INSERT INTO announcements (title, content, active, created_by, published_at)
+       VALUES ($1, $2, $3, $4, ${publishedAt})
+       RETURNING id, title, content, published_at, active, created_at, updated_at`,
+      params,
+    )
+    await writeAudit(client, request.auth.id, 'announcement.create', request.auth.id, { title })
+    return inserted.rows[0]
+  })
+  response.json({
+    announcement: {
+      id: String(result.id),
+      title: result.title,
+      content: result.content,
+      publishedAt: new Date(result.published_at).getTime(),
+      active: result.active,
+      createdAt: new Date(result.created_at).getTime(),
+      updatedAt: new Date(result.updated_at).getTime(),
+    },
+  })
+}))
+
+app.patch('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const announcementId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(announcementId) || announcementId < 1) {
+    response.status(400).json({ error: '公告 ID 无效。' })
+    return
+  }
+  const allowedKeys = new Set(['title', 'content', 'active'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '公告更新参数无效。' })
+    return
+  }
+  const fields = []
+  const values = []
+  if (request.body.title !== undefined) {
+    const title = typeof request.body.title === 'string' ? request.body.title.trim() : ''
+    if (title.length < 1 || title.length > 120) {
+      response.status(400).json({ error: '公告标题需为 1-120 个字符。' })
+      return
+    }
+    values.push(title)
+    fields.push(`title = $${values.length}`)
+  }
+  if (request.body.content !== undefined) {
+    const content = typeof request.body.content === 'string' ? request.body.content.trim() : ''
+    if (content.length < 1 || content.length > 4000) {
+      response.status(400).json({ error: '公告内容需为 1-4000 个字符。' })
+      return
+    }
+    values.push(content)
+    fields.push(`content = $${values.length}`)
+  }
+  if (request.body.active !== undefined) {
+    values.push(Boolean(request.body.active))
+    fields.push(`active = $${values.length}`)
+  }
+  if (fields.length === 0) {
+    response.status(400).json({ error: '没有需要更新的字段。' })
+    return
+  }
+  values.push('NOW()')
+  fields.push(`updated_at = $${values.length}`)
+  values.push(announcementId)
+  const result = await withTransaction(async (client) => {
+    const updated = await client.query(
+      `UPDATE announcements
+          SET ${fields.join(', ')}
+        WHERE id = $${values.length}
+        RETURNING id, title, content, published_at, active, created_at, updated_at`,
+      values,
+    )
+    if (updated.rowCount === 0) return null
+    await writeAudit(client, request.auth.id, 'announcement.update', request.auth.id, { announcementId })
+    return updated.rows[0]
+  })
+  if (!result) {
+    response.status(404).json({ error: '公告不存在。' })
+    return
+  }
+  response.json({
+    announcement: {
+      id: String(result.id),
+      title: result.title,
+      content: result.content,
+      publishedAt: new Date(result.published_at).getTime(),
+      active: result.active,
+      createdAt: new Date(result.created_at).getTime(),
+      updatedAt: new Date(result.updated_at).getTime(),
+    },
+  })
+}))
+
 app.use((error, _request, response, _next) => {
   if (error?.message === 'origin_not_allowed') {
     response.status(403).json({ error: '请求来源未获授权。' })

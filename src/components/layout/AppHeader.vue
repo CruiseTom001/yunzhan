@@ -11,7 +11,9 @@ import {
   Home,
   LoaderCircle,
   LogOut,
+  Megaphone,
   Menu,
+  MessageSquare,
   Moon,
   PenTool,
   ScrollText,
@@ -217,6 +219,26 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
               <ScrollText class="w-4 h-4" />
               审计日志
             </button>
+            <button
+              v-if="authStore.isSuperAdmin"
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
+              @click="navigate('/admin/feedback')"
+            >
+              <MessageSquare class="w-4 h-4" />
+              反馈管理
+            </button>
+            <button
+              v-if="authStore.isSuperAdmin"
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
+              @click="navigate('/admin/announcements')"
+            >
+              <Megaphone class="w-4 h-4" />
+              公告管理
+            </button>
             <button type="button" class="account-menu-item text-red-300" role="menuitem" :disabled="loggingOut" @click="logout">
               <LoaderCircle v-if="loggingOut" class="w-4 h-4 animate-spin" />
               <LogOut v-else class="w-4 h-4" />
@@ -288,6 +310,24 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
         >
           <ScrollText class="w-4 h-4" />
           审计日志
+        </button>
+        <button
+          v-if="authStore.isSuperAdmin"
+          type="button"
+          class="mobile-account-action"
+          @click="navigate('/admin/feedback')"
+        >
+          <MessageSquare class="w-4 h-4" />
+          反馈管理
+        </button>
+        <button
+          v-if="authStore.isSuperAdmin"
+          type="button"
+          class="mobile-account-action"
+          @click="navigate('/admin/announcements')"
+        >
+          <Megaphone class="w-4 h-4" />
+          公告管理
         </button>
         <button type="button" class="mobile-account-action text-red-300" :disabled="loggingOut" @click="logout">
           <LoaderCircle v-if="loggingOut" class="w-4 h-4 animate-spin" />

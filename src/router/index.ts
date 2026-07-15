@@ -7,7 +7,13 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
-      meta: { public: true },
+      meta: { public: true, hideChrome: true },
+    },
+    {
+      path: '/landing',
+      name: 'landing',
+      component: () => import('@/pages/LandingPage.vue'),
+      meta: { public: true, hideChrome: true },
     },
     {
       path: '/',
@@ -69,6 +75,18 @@ const router = createRouter({
       path: '/admin/audit',
       name: 'adminAudit',
       component: () => import('@/pages/AdminAuditPage.vue'),
+      meta: { requiresSuperAdmin: true },
+    },
+    {
+      path: '/admin/feedback',
+      name: 'adminFeedback',
+      component: () => import('@/pages/AdminFeedbackPage.vue'),
+      meta: { requiresSuperAdmin: true },
+    },
+    {
+      path: '/admin/announcements',
+      name: 'adminAnnouncements',
+      component: () => import('@/pages/AdminAnnouncementsPage.vue'),
       meta: { requiresSuperAdmin: true },
     },
     {

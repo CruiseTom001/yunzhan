@@ -18,10 +18,15 @@ async function bootstrap() {
   router.beforeEach(async (to) => {
     await authReady
     if (to.meta.public) {
-      return authStore.isAuthenticated && to.name === 'login' ? { name: 'home' } : true
+      // 已登录用户访问登录页或落地页：跳回首页
+      if (authStore.isAuthenticated && (to.name === 'login' || to.name === 'landing')) {
+        return { name: 'home' }
+      }
+      return true
     }
     if (!authStore.isAuthenticated) {
-      return { name: 'login', query: { redirect: to.fullPath } }
+      // 未登录用户访问受保护路由：跳落地页（带 redirect 回跳）
+      return { name: 'landing', query: { redirect: to.fullPath } }
     }
     if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
       return { name: 'home' }

@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import AnnouncementModal from '@/components/common/AnnouncementModal.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import AIChatPanel from '@/components/ai/AIChatPanel.vue'
@@ -79,7 +80,7 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen bg-surface-secondary text-ink-secondary antialiased">
     <AppHeader
-      v-if="route.name !== 'login'"
+      v-if="!route.meta.hideChrome"
       @open-search="openSearch"
       @toggle-ai="toggleAI"
       @toggle-terminal="toggleTerminal"
@@ -91,7 +92,8 @@ onUnmounted(() => {
         </keep-alive>
       </transition>
     </router-view>
-    <template v-if="route.name !== 'login'">
+    <template v-if="!route.meta.hideChrome">
+      <AnnouncementModal />
       <ConceptPopover />
       <GlobalSearch ref="globalSearch" />
       <AIChatPanel :visible="showAI" @close="showAI = false" />

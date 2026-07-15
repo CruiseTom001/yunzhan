@@ -7,6 +7,7 @@ import {
   KeyRound,
   LoaderCircle,
   Mail,
+  MessageSquare,
   MonitorSmartphone,
   RefreshCw,
   ShieldAlert,
@@ -26,6 +27,11 @@ import {
   revokeOtherAccountSessions,
   type AccountSession,
 } from '@/utils/accountApi'
+import {
+  listMyFeedback as listMyFeedbackApi,
+  submitFeedback as submitFeedbackApi,
+  type MyFeedback,
+} from '@/utils/feedbackApi'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const PASSWORD_HAS_LETTER = /[A-Za-z]/
@@ -301,6 +307,85 @@ async function exportData() {
   }
 }
 
+// 意见反馈
+const feedbackForm = ref({ category: 'suggestion' as 'suggestion' | 'bug' | 'other', content: '', contact: '' })
+const feedbackSubmitting = ref(false)
+const feedbackError = ref('')
+const feedbackSuccess = ref('')
+const myFeedbacks = ref<MyFeedback[]>([])
+const myFeedbacksOpen = ref(false)
+const myFeedbacksLoading = ref(false)
+const myFeedbacksError = ref('')
+
+async function submitFeedback() {
+  const content = feedbackForm.value.content.trim()
+  if (content.length < 1 || content.length > 2000) {
+    feedbackError.value = '反馈内容需为 1-2000 个字符。'
+    feedbackSuccess.value = ''
+    return
+  }
+  if (feedbackForm.value.contact.length > 128) {
+    feedbackError.value = '联系方式最多 128 个字符。'
+    feedbackSuccess.value = ''
+    return
+  }
+  feedbackSubmitting.value = true
+  feedbackError.value = ''
+  feedbackSuccess.value = ''
+  try {
+    await submitFeedbackApi({
+      category: feedbackForm.value.category,
+      content,
+      contact: feedbackForm.value.contact.trim() || undefined,
+    })
+    feedbackForm.value = { category: 'suggestion', content: '', contact: '' }
+    feedbackSuccess.value = '反馈已提交，感谢你的建议。'
+    if (myFeedbacksOpen.value) await loadMyFeedbacks()
+  } catch (error: unknown) {
+    feedbackError.value = errorMessage(error, '反馈提交失败。')
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
+async function loadMyFeedbacks() {
+  myFeedbacksLoading.value = true
+  myFeedbacksError.value = ''
+  try {
+    myFeedbacks.value = await listMyFeedbackApi()
+  } catch (error: unknown) {
+    myFeedbacksError.value = errorMessage(error, '我的反馈加载失败。')
+  } finally {
+    myFeedbacksLoading.value = false
+  }
+}
+
+function toggleMyFeedbacks() {
+  myFeedbacksOpen.value = !myFeedbacksOpen.value
+  if (myFeedbacksOpen.value && myFeedbacks.value.length === 0 && !myFeedbacksError.value) {
+    void loadMyFeedbacks()
+  }
+}
+
+function categoryLabel(category: string) {
+  if (category === 'bug') return 'Bug 反馈'
+  if (category === 'suggestion') return '功能建议'
+  return '其他'
+}
+
+function statusLabel(status: string) {
+  if (status === 'seen') return '已查看'
+  if (status === 'resolved') return '已处理'
+  return '待处理'
+}
+
+const canSubmitFeedback = computed(() => (
+  !feedbackSubmitting.value
+  && feedbackForm.value.content.trim().length >= 1
+  && feedbackForm.value.content.trim().length <= 2000
+  && feedbackForm.value.contact.length <= 128
+))
+
 // 注销账号
 function openDeleteDialog() {
   deleteForm.value = { currentPassword: '', confirmation: '' }
@@ -545,6 +630,81 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <!-- 意见反馈 -->
+      <div class="card p-5 mb-6">
+        <h2 class="text-sm font-medium text-gray-200 flex items-center gap-2 mb-4">
+          <MessageSquare class="w-4 h-4 text-cyan-400" />
+          意见反馈
+        </h2>
+        <form class="space-y-4" @submit.prevent="submitFeedback">
+          <label class="form-field">
+            <span>类别</span>
+            <select v-model="feedbackForm.category">
+              <option value="suggestion">功能建议</option>
+              <option value="bug">Bug 反馈</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>内容</span>
+            <textarea
+              v-model="feedbackForm.content"
+              rows="4"
+              maxlength="2000"
+              placeholder="告诉我们你的想法、遇到的问题或想要的改进"
+              class="rounded-md border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50 resize-y"
+            />
+            <small>1-2000 个字符</small>
+          </label>
+          <label class="form-field">
+            <span>联系方式（可选）</span>
+            <input v-model="feedbackForm.contact" type="text" maxlength="128" autocomplete="off" placeholder="如邮箱或用户名，方便我们回复你" />
+          </label>
+          <div v-if="feedbackError" class="form-error" role="alert">
+            <AlertCircle class="w-4 h-4 shrink-0" />{{ feedbackError }}
+          </div>
+          <p v-if="feedbackSuccess" class="text-xs text-emerald-400">{{ feedbackSuccess }}</p>
+          <div class="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              class="text-xs text-gray-500 hover:text-cyan-300 transition-colors"
+              :aria-expanded="myFeedbacksOpen"
+              @click="toggleMyFeedbacks"
+            >
+              {{ myFeedbacksOpen ? '收起我的反馈' : '查看我的反馈' }}
+            </button>
+            <button type="submit" class="primary-button" :disabled="!canSubmitFeedback">
+              <LoaderCircle v-if="feedbackSubmitting" class="w-4 h-4 animate-spin" />
+              提交反馈
+            </button>
+          </div>
+        </form>
+
+        <div v-if="myFeedbacksOpen" class="mt-5 pt-5 border-t border-white/[0.05]">
+          <div v-if="myFeedbacksLoading" class="text-sm text-gray-600 text-center py-6">
+            <LoaderCircle class="w-5 h-5 animate-spin mx-auto mb-3" />正在加载反馈
+          </div>
+          <div v-else-if="myFeedbacksError" class="form-error" role="alert">
+            <AlertCircle class="w-4 h-4 shrink-0" />{{ myFeedbacksError }}
+          </div>
+          <div v-else-if="myFeedbacks.length === 0" class="py-6 text-center text-sm text-gray-600">
+            还没有提交过反馈
+          </div>
+          <ul v-else class="divide-y divide-white/[0.05]">
+            <li v-for="item in myFeedbacks" :key="item.id" class="py-3">
+              <div class="flex items-center justify-between gap-3 mb-1">
+                <span class="text-xs text-cyan-300">{{ categoryLabel(item.category) }}</span>
+                <span class="text-xs" :class="item.status === 'open' ? 'text-amber-400' : item.status === 'resolved' ? 'text-emerald-400' : 'text-gray-500'">
+                  {{ statusLabel(item.status) }}
+                </span>
+              </div>
+              <p class="text-sm text-gray-300 break-words line-clamp-2">{{ item.content }}</p>
+              <p class="text-xs text-gray-600 font-mono mt-1">{{ formatDate(item.createdAt) }}</p>
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <!-- 注销账号 -->
       <div class="card p-5 border-red-400/20">
         <h2 class="text-sm font-medium text-red-300 flex items-center gap-2 mb-3">
@@ -628,6 +788,15 @@ onUnmounted(() => {
 .form-field input,
 .form-field select {
   @apply h-10 rounded-md border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white outline-none focus:border-cyan-400/50 disabled:opacity-50;
+}
+
+.form-field select {
+  color-scheme: dark;
+}
+
+.form-field select option {
+  color: #ffffff;
+  background-color: #0c0f18;
 }
 
 .form-field small {
