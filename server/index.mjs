@@ -153,6 +153,24 @@ function hasOnlyKeys(value, allowedKeys) {
   return isRecord(value) && Object.keys(value).every(key => allowedKeys.has(key))
 }
 
+// ---------- 语义版本比较(后端内联,与 src/utils/semver.ts 同义) ----------
+// 服务端由 node 直接运行(不编译 .ts),不能跨目录 import 前端实现。
+const SEMVER_RE_SERVER = /^\d+\.\d+\.\d+$/
+
+/**
+ * 比较两个 x.y.z 版本号。返回 -1 / 0 / 1。
+ * 非法返回 0(视为相等,避免 reduce 误判),调用方应在入参已校验场景使用。
+ */
+function compareVersionsServer(a, b) {
+  if (!SEMVER_RE_SERVER.test(a) || !SEMVER_RE_SERVER.test(b)) return 0
+  const [aM, am, ap] = a.split('.').map(Number)
+  const [bM, bm, bp] = b.split('.').map(Number)
+  if (aM !== bM) return aM < bM ? -1 : 1
+  if (am !== bm) return am < bm ? -1 : 1
+  if (ap !== bp) return ap < bp ? -1 : 1
+  return 0
+}
+
 async function writeAudit(client, actorUserId, action, targetUserId, metadata = {}) {
   await client.query(
     `INSERT INTO audit_logs (actor_user_id, action, target_user_id, metadata)
@@ -1721,6 +1739,221 @@ app.patch('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, asyncR
   })
 }))
 
+
+// ---------- 桌面端版本发布 ----------
+
+// 公开端点:桌面端启动时拉取,可能用户未登录,因此不加 requireAuth
+app.get('/api/desktop/latest-version', asyncRoute(async (_request, response) => {
+  const result = await pool.query(
+    `SELECT version, min_supported AS "minSupported", download_url AS "downloadUrl",
+            release_notes AS "releaseNotes"
+       FROM desktop_releases
+      WHERE enabled = 1`,
+  )
+  if (result.rowCount === 0) {
+    response.json({ version: null, minSupported: null, downloadUrl: null, releaseNotes: null })
+    return
+  }
+  // 在 JS 侧做语义版本比较,避免 SQLite 字符串排序把 1.10.0 排在 1.2.0 之前
+  const latest = result.rows.reduce((acc, row) => {
+    if (!acc) return row
+    return compareVersionsServer(row.version, acc.version) > 0 ? row : acc
+  }, null)
+  response.json(latest)
+}))
+
+app.get('/api/admin/desktop-releases', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const { limit, offset } = parsePagination(request.query)
+  const [releasesResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT id, version, min_supported AS "minSupported", download_url AS "downloadUrl",
+              release_notes AS "releaseNotes", enabled, created_at, updated_at
+         FROM desktop_releases
+        ORDER BY created_at DESC, id DESC
+        LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    ),
+    pool.query('SELECT COUNT(*)::INTEGER AS count FROM desktop_releases'),
+  ])
+  response.json({
+    releases: releasesResult.rows.map(row => ({
+      id: Number(row.id),
+      version: row.version,
+      minSupported: row.minSupported,
+      downloadUrl: row.downloadUrl,
+      releaseNotes: row.releaseNotes,
+      enabled: row.enabled === 1,
+      createdAt: new Date(row.created_at).getTime(),
+      updatedAt: new Date(row.updated_at).getTime(),
+    })),
+    total: countResult.rows[0].count,
+    limit,
+    offset,
+  })
+}))
+
+app.post('/api/admin/desktop-releases', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['version', 'minSupported', 'downloadUrl', 'releaseNotes', 'enabled'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '桌面端版本参数无效。' })
+    return
+  }
+  if (typeof request.body.version !== 'string' || !SEMVER_RE_SERVER.test(request.body.version)) {
+    response.status(400).json({ error: '版本号需为 x.y.z 形式纯数字。' })
+    return
+  }
+  const version = request.body.version
+  if (typeof request.body.minSupported !== 'string' || !SEMVER_RE_SERVER.test(request.body.minSupported)) {
+    response.status(400).json({ error: '最低兼容版本需为 x.y.z 形式纯数字。' })
+    return
+  }
+  const minSupported = request.body.minSupported
+  if (typeof request.body.downloadUrl !== 'string' || !/^https?:\/\//.test(request.body.downloadUrl) || request.body.downloadUrl.length > 500) {
+    response.status(400).json({ error: '下载地址需为 http(s):// 开头且不超过 500 字符。' })
+    return
+  }
+  const downloadUrl = request.body.downloadUrl
+  const releaseNotesRaw = typeof request.body.releaseNotes === 'string' ? request.body.releaseNotes : ''
+  if (releaseNotesRaw.length > 2000) {
+    response.status(400).json({ error: '发布说明不超过 2000 字符。' })
+    return
+  }
+  const releaseNotes = releaseNotesRaw
+  const enabled = request.body.enabled === undefined ? true : Boolean(request.body.enabled)
+
+  try {
+    const result = await withTransaction(async (client) => {
+      const inserted = await client.query(
+        `INSERT INTO desktop_releases (version, min_supported, download_url, release_notes, enabled)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, version, min_supported, download_url, release_notes, enabled, created_at, updated_at`,
+        [version, minSupported, downloadUrl, releaseNotes, enabled ? 1 : 0],
+      )
+      await writeAudit(client, request.auth.id, 'desktop_release.create', request.auth.id, { version })
+      return inserted.rows[0]
+    })
+    response.json({
+      release: {
+        id: Number(result.id),
+        version: result.version,
+        minSupported: result.min_supported,
+        downloadUrl: result.download_url,
+        releaseNotes: result.release_notes,
+        enabled: result.enabled === 1,
+        createdAt: new Date(result.created_at).getTime(),
+        updatedAt: new Date(result.updated_at).getTime(),
+      },
+    })
+  } catch (error) {
+    // version 唯一约束冲突
+    if (error?.code === '23505') {
+      response.status(400).json({ error: '该版本号已存在。' })
+      return
+    }
+    throw error
+  }
+}))
+
+app.patch('/api/admin/desktop-releases/:id', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const releaseId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(releaseId) || releaseId < 1) {
+    response.status(400).json({ error: '版本记录 ID 无效。' })
+    return
+  }
+  // version 不可改:版本号是身份(UNIQUE),需要换版本应新建一条再停用旧的
+  const allowedKeys = new Set(['minSupported', 'downloadUrl', 'releaseNotes', 'enabled'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '桌面端版本更新参数无效。' })
+    return
+  }
+
+  const fields = []
+  const values = []
+  if (request.body.minSupported !== undefined) {
+    if (typeof request.body.minSupported !== 'string' || !SEMVER_RE_SERVER.test(request.body.minSupported)) {
+      response.status(400).json({ error: '最低兼容版本需为 x.y.z 形式纯数字。' })
+      return
+    }
+    values.push(request.body.minSupported)
+    fields.push(`min_supported = $${values.length}`)
+  }
+  if (request.body.downloadUrl !== undefined) {
+    if (typeof request.body.downloadUrl !== 'string' || !/^https?:\/\//.test(request.body.downloadUrl) || request.body.downloadUrl.length > 500) {
+      response.status(400).json({ error: '下载地址需为 http(s):// 开头且不超过 500 字符。' })
+      return
+    }
+    values.push(request.body.downloadUrl)
+    fields.push(`download_url = $${values.length}`)
+  }
+  if (request.body.releaseNotes !== undefined) {
+    if (typeof request.body.releaseNotes !== 'string' || request.body.releaseNotes.length > 2000) {
+      response.status(400).json({ error: '发布说明不超过 2000 字符。' })
+      return
+    }
+    values.push(request.body.releaseNotes)
+    fields.push(`release_notes = $${values.length}`)
+  }
+  if (request.body.enabled !== undefined) {
+    values.push(Boolean(request.body.enabled) ? 1 : 0)
+    fields.push(`enabled = $${values.length}`)
+  }
+  if (fields.length === 0) {
+    response.status(400).json({ error: '没有需要更新的字段。' })
+    return
+  }
+  values.push('NOW()')
+  fields.push(`updated_at = $${values.length}`)
+  values.push(releaseId)
+
+  const result = await withTransaction(async (client) => {
+    const updated = await client.query(
+      `UPDATE desktop_releases
+          SET ${fields.join(', ')}
+        WHERE id = $${values.length}
+        RETURNING id, version, min_supported, download_url, release_notes, enabled, created_at, updated_at`,
+      values,
+    )
+    if (updated.rowCount === 0) return null
+    await writeAudit(client, request.auth.id, 'desktop_release.update', request.auth.id, { releaseId })
+    return updated.rows[0]
+  })
+  if (!result) {
+    response.status(404).json({ error: '版本记录不存在。' })
+    return
+  }
+  response.json({
+    release: {
+      id: Number(result.id),
+      version: result.version,
+      minSupported: result.min_supported,
+      downloadUrl: result.download_url,
+      releaseNotes: result.release_notes,
+      enabled: result.enabled === 1,
+      createdAt: new Date(result.created_at).getTime(),
+      updatedAt: new Date(result.updated_at).getTime(),
+    },
+  })
+}))
+
+app.delete('/api/admin/desktop-releases/:id', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const releaseId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(releaseId) || releaseId < 1) {
+    response.status(400).json({ error: '版本记录 ID 无效。' })
+    return
+  }
+  const result = await withTransaction(async (client) => {
+    const found = await client.query('SELECT version FROM desktop_releases WHERE id = $1', [releaseId])
+    if (found.rowCount === 0) return null
+    await writeAudit(client, request.auth.id, 'desktop_release.delete', request.auth.id, { version: found.rows[0].version })
+    await client.query('DELETE FROM desktop_releases WHERE id = $1', [releaseId])
+    return true
+  })
+  if (!result) {
+    response.status(404).json({ error: '版本记录不存在。' })
+    return
+  }
+  response.json({ ok: true })
+}))
 app.use((error, _request, response, _next) => {
   if (error?.message === 'origin_not_allowed') {
     response.status(403).json({ error: '请求来源未获授权。' })

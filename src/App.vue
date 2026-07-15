@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AnnouncementModal from '@/components/common/AnnouncementModal.vue'
+import UpdateBanner from '@/components/common/UpdateBanner.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import AIChatPanel from '@/components/ai/AIChatPanel.vue'
@@ -94,6 +95,7 @@ onUnmounted(() => {
     </router-view>
     <template v-if="!route.meta.hideChrome">
       <AnnouncementModal />
+      <UpdateBanner />
       <ConceptPopover />
       <GlobalSearch ref="globalSearch" />
       <AIChatPanel :visible="showAI" @close="showAI = false" />
