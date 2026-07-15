@@ -68,6 +68,11 @@
   --border-card: #e2e8f0;
   --border-hover: #94a3b8;
 
+  --accent-cyan: #0891b2;
+  --accent-purple: #7c3aed;
+  --accent-amber: #d97706;
+  --accent-emerald: #059669;
+
   --overlay: rgba(0, 0, 0, 0.15);
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
@@ -137,34 +142,119 @@ body {
   background-color: color-mix(in srgb, var(--bg-secondary) 80%, transparent) !important;
 }
 
-/* 文本颜色 */
+/* 文本颜色：覆盖 Tailwind 写死的 text-gray-* 原子色阶，让浅色下也能自适应 */
 [data-theme="light"] .text-white { color: var(--text-primary) !important; }
+[data-theme="light"] .text-gray-200 { color: var(--text-secondary) !important; }
 [data-theme="light"] .text-gray-300 { color: var(--text-secondary) !important; }
 [data-theme="light"] .text-gray-400 { color: var(--text-muted) !important; }
 [data-theme="light"] .text-gray-500 { color: var(--text-muted) !important; }
 [data-theme="light"] .text-gray-600 { color: var(--text-dim) !important; }
 [data-theme="light"] .text-gray-700 { color: var(--text-very-dim) !important; }
+[data-theme="light"] .text-gray-800 { color: var(--text-primary) !important; }
+[data-theme="light"] .text-gray-900 { color: var(--text-primary) !important; }
 
-/* 代码块 */
+/* 青色品牌色在浅色下沉一档，避免过淡看不清 */
+[data-theme="light"] .text-cyan-400 { color: var(--accent-cyan) !important; }
+
+/* 课程正文（Markdown 渲染区）：覆盖 .prose-content 写死的深色 hex */
+[data-theme="light"] .prose-content {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .prose-content h1,
+[data-theme="light"] .prose-content h2,
+[data-theme="light"] .prose-content h4 {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .prose-content h3 {
+  color: var(--accent-purple) !important;
+}
+
+[data-theme="light"] .prose-content strong {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .prose-content code {
+  background: rgba(8, 145, 178, 0.08) !important;
+  color: var(--accent-cyan) !important;
+}
+
 [data-theme="light"] .prose-content pre {
   background: var(--bg-code) !important;
-  border-color: var(--border-light) !important;
-}
-[data-theme="light"] .prose-content code {
-  background: rgba(124, 58, 237, 0.08) !important;
-  color: #7c3aed !important;
+  border-color: var(--border-card) !important;
 }
 
-/* 工具条/面板 */
-[data-theme="light"] .code-toolbar,
-[data-theme="light"] .explain-panel {
+[data-theme="light"] .prose-content pre code {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .prose-content li::marker {
+  color: var(--accent-cyan) !important;
+}
+
+[data-theme="light"] .prose-content blockquote {
+  color: var(--accent-purple) !important;
+  background: rgba(124, 58, 237, 0.05) !important;
+  border-left-color: var(--accent-purple) !important;
+}
+
+[data-theme="light"] .prose-content th {
+  color: var(--accent-cyan) !important;
+  background: rgba(8, 145, 178, 0.06) !important;
+  border-bottom-color: rgba(8, 145, 178, 0.2) !important;
+}
+
+[data-theme="light"] .prose-content td {
+  color: var(--text-secondary) !important;
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-theme="light"] .prose-content tr:hover td {
+  background: var(--bg-card-hover) !important;
+}
+
+[data-theme="light"] .prose-content a {
+  color: var(--accent-cyan) !important;
+  border-bottom-color: rgba(8, 145, 178, 0.3) !important;
+}
+
+/* 代码工具条与按钮 */
+[data-theme="light"] .code-toolbar {
   background: var(--bg-elevated) !important;
   border-color: var(--border-card) !important;
 }
 
+[data-theme="light"] .code-toolbar + pre {
+  border-top-color: var(--border-card) !important;
+}
+
+[data-theme="light"] .code-btn {
+  background: var(--bg-card) !important;
+  border-color: var(--border-card) !important;
+  color: var(--text-muted) !important;
+}
+
+[data-theme="light"] .code-btn:hover {
+  background: var(--bg-card-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 讲解面板 */
+[data-theme="light"] .explain-panel {
+  background: var(--bg-elevated) !important;
+  border-color: rgba(124, 58, 237, 0.15) !important;
+}
+
+[data-theme="light"] .explain-desc,
+[data-theme="light"] .explain-options-table td {
+  color: var(--text-secondary) !important;
+}
+
 /* 知识术语弹窗 */
 [data-theme="light"] .knowledge-term {
-  color: #7c3aed !important;
+  color: var(--accent-purple) !important;
   border-bottom-color: rgba(124, 58, 237, 0.3) !important;
 }
 [data-theme="light"] .knowledge-term:hover {
@@ -187,6 +277,22 @@ body {
 [data-theme="light"] .knowledge-popover {
   background: var(--bg-tooltip) !important;
   border-color: var(--border-card) !important;
+}
+
+[data-theme="light"] .popover-desc {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .popover-term {
+  color: var(--accent-purple) !important;
+}
+
+/* 浅色滚动条 */
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15) !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25) !important;
 }
 
 ::selection {
@@ -595,178 +701,4 @@ body {
   color: #00f0ff;
   padding: 0.1em 0.3em;
   border-radius: 3px;
-}
-
-/* ========== 浅色模式 ========== */
-.theme-light {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --bg-hover: #f1f5f9;
-  --border-color: rgba(0, 0, 0, 0.06);
-  --border-light: rgba(0, 0, 0, 0.03);
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --accent-cyan: #0891b2;
-  --accent-purple: #7c3aed;
-  --accent-amber: #d97706;
-  --accent-emerald: #059669;
-}
-
-.theme-light body,
-body.theme-light,
-.theme-light {
-  background-color: var(--bg-primary) !important;
-  color: var(--text-primary) !important;
-}
-
-.theme-light .bg-\[\#06060b\],
-.theme-light .bg-\[\#0a0a0f\],
-.theme-light .bg-\[\#0c0c14\],
-.theme-light [class*="bg-[#06060"],
-.theme-light [class*="bg-[#0a0a0"] {
-  background-color: var(--bg-primary) !important;
-}
-
-.theme-light .text-white {
-  color: var(--text-primary) !important;
-}
-
-.theme-light .text-gray-300 {
-  color: var(--text-secondary) !important;
-}
-
-.theme-light .text-gray-400 {
-  color: var(--text-secondary) !important;
-}
-
-.theme-light .text-gray-500 {
-  color: var(--text-secondary) !important;
-}
-
-.theme-light .text-gray-600 {
-  color: var(--text-muted) !important;
-}
-
-.theme-light .text-gray-700 {
-  color: var(--text-muted) !important;
-}
-
-.theme-light .border-white\/\[0\.04\],
-.theme-light .border-white\/\[0\.03\],
-.theme-light .border-white\/\[0\.06\] {
-  border-color: var(--border-color) !important;
-}
-
-.theme-light .bg-white\/\[0\.01\],
-.theme-light .bg-white\/\[0\.02\],
-.theme-light .bg-white\/\[0\.03\] {
-  background-color: var(--bg-hover) !important;
-}
-
-.theme-light .bg-white\/\[0\.025\],
-.theme-light .bg-white\/\[0\.05\] {
-  background-color: var(--bg-hover) !important;
-}
-
-.theme-light .prose-content {
-  color: var(--text-secondary) !important;
-}
-
-.theme-light .prose-content h1,
-.theme-light .prose-content h2 {
-  color: var(--text-primary) !important;
-}
-
-.theme-light .prose-content h3 {
-  color: var(--accent-purple) !important;
-}
-
-.theme-light .prose-content strong {
-  color: var(--text-primary) !important;
-}
-
-.theme-light .prose-content code {
-  background: rgba(8, 145, 178, 0.08) !important;
-  color: var(--accent-cyan) !important;
-}
-
-.theme-light .prose-content pre {
-  background: #f1f5f9 !important;
-  border-color: var(--border-color) !important;
-}
-
-.theme-light .prose-content pre code {
-  color: var(--text-primary) !important;
-}
-
-.theme-light .prose-content td {
-  color: var(--text-secondary) !important;
-  border-bottom-color: var(--border-light) !important;
-}
-
-.theme-light .prose-content tr:hover td {
-  background: var(--bg-hover) !important;
-}
-
-.theme-light .code-toolbar {
-  background: #f1f5f9 !important;
-  border-color: var(--border-color) !important;
-}
-
-.theme-light .code-toolbar + pre {
-  border-top-color: var(--border-color) !important;
-}
-
-.theme-light .code-btn {
-  background: var(--bg-card) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-muted) !important;
-}
-
-.theme-light .code-btn:hover {
-  background: var(--bg-hover) !important;
-  color: var(--text-primary) !important;
-}
-
-.theme-light .explain-panel {
-  background: #f1f5f9 !important;
-  border-color: rgba(124, 58, 237, 0.15) !important;
-}
-
-.theme-light .explain-desc,
-.theme-light .explain-options-table td {
-  color: var(--text-secondary) !important;
-}
-
-.theme-light .knowledge-term {
-  color: var(--accent-purple) !important;
-  border-bottom-color: rgba(124, 58, 237, 0.3) !important;
-}
-
-.theme-light .knowledge-term:hover {
-  background: rgba(124, 58, 237, 0.06) !important;
-}
-
-.theme-light .knowledge-popover {
-  background: var(--bg-card) !important;
-  border-color: rgba(124, 58, 237, 0.2) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
-}
-
-.theme-light .popover-desc {
-  color: var(--text-secondary) !important;
-}
-
-.theme-light .popover-term {
-  color: var(--accent-purple) !important;
-}
-
-.theme-light ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.theme-light ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
 }
