@@ -90,6 +90,12 @@ const router = createRouter({
       meta: { requiresSuperAdmin: true },
     },
     {
+      path: '/admin/desktop-releases',
+      name: 'adminDesktopReleases',
+      component: () => import('@/pages/AdminDesktopReleasesPage.vue'),
+      meta: { requiresSuperAdmin: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
       component: () => import('@/pages/NotFoundPage.vue'),
