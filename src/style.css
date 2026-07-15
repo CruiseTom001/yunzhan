@@ -295,6 +295,67 @@ body {
   background: rgba(0, 0, 0, 0.25) !important;
 }
 
+/* ===== 交互式实验卡片浅色覆盖 ===== */
+/* 卡片容器背景从黑半透明改为浅灰 */
+[data-theme="light"] .lab-card {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-card) !important;
+}
+
+/* 实验步骤项 */
+[data-theme="light"] .lab-step {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+
+/* 实验里硬编码的命令显示 / Next 按钮，cyan-300 在浅色下偏淡，沉到 accent-cyan */
+[data-theme="light"] .lab-step code,
+[data-theme="light"] .lab-card .text-cyan-300 {
+  color: var(--accent-cyan) !important;
+  background-color: rgba(8, 145, 178, 0.06) !important;
+  border-color: rgba(8, 145, 178, 0.18) !important;
+}
+
+/* 实验底部 check 提示文字（amber-200/emerald-200 在浅色下偏淡，提到 amber-700/emerald-700） */
+[data-theme="light"] .lab-card .text-amber-200\/70 {
+  color: var(--accent-amber) !important;
+}
+[data-theme="light"] .lab-card .text-emerald-200\/70 {
+  color: var(--accent-emerald) !important;
+}
+
+/* 实验里小标签 / 灰字（text-gray-200/500/600 已被全局 text-gray-* 规则覆盖，这里只补一条 card 内部背景层） */
+[data-theme="light"] .lab-card .bg-white\/\[0\.01\],
+[data-theme="light"] .lab-card .bg-white\/\[0\.015\],
+[data-theme="light"] .lab-card .bg-white\/\[0\.03\],
+[data-theme="light"] .lab-card .bg-white\/\[0\.05\] {
+  background-color: var(--bg-card-hover) !important;
+}
+
+[data-theme="light"] .lab-card .border-white\/\[0\.03\],
+[data-theme="light"] .lab-card .border-white\/\[0\.04\],
+[data-theme="light"] .lab-card .border-white\/\[0\.05\] {
+  border-color: var(--border-card) !important;
+}
+
+/* 自动判题按钮：emerald-500 在浅色下字色偏黑可读，但背景过浓，调浅 */
+[data-theme="light"] .lab-card .bg-emerald-500 {
+  background-color: var(--accent-emerald) !important;
+  color: #ffffff !important;
+}
+[data-theme="light"] .lab-card .text-emerald-400,
+[data-theme="light"] .lab-card .text-emerald-300 {
+  color: var(--accent-emerald) !important;
+}
+[data-theme="light"] .lab-card .text-amber-400 {
+  color: var(--accent-amber) !important;
+}
+[data-theme="light"] .lab-card .bg-amber-400\/5,
+[data-theme="light"] .lab-card .bg-emerald-400\/5,
+[data-theme="light"] .lab-card .bg-emerald-400\/10 {
+  background-color: var(--bg-card-hover) !important;
+}
+
 ::selection {
   background: rgba(0, 240, 255, 0.2);
   color: #00f0ff;
