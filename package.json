@@ -12,9 +12,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "prebuild": "node scripts/check-chapter-counts.cjs",
+    "prebuild": "node scripts/check-chapter-counts.cjs && node scripts/check-version-sync.cjs",
     "build:fast": "vite build",
-    "prebuild:fast": "node scripts/check-chapter-counts.cjs",
+    "prebuild:fast": "node scripts/check-chapter-counts.cjs && node scripts/check-version-sync.cjs",
     "preview": "vite preview",
     "server:dev": "node --watch server/index.mjs",
     "server:start": "node server/index.mjs",
