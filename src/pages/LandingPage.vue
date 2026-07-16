@@ -6,6 +6,7 @@ import {
   BookOpen,
   BarChart3,
   Cloud,
+  Download,
   Lock,
   PenTool,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
 import { courseIndex } from '@/data/courses/index'
 import ParticleBg from '@/components/common/ParticleBg.vue'
 import { useAuthStore } from '@/stores/auth'
+import { getDesktopLatestVersion } from '@/utils/desktopVersionApi'
 
 const appVersion = __APP_VERSION__
 const router = useRouter()
@@ -22,6 +24,24 @@ const authStore = useAuthStore()
 const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
+const desktopDownloadUrl = ref<string | null>(null)
+
+async function loadDesktopDownloadUrl() {
+  try {
+    const latest = await getDesktopLatestVersion()
+    if (typeof latest.downloadUrl === 'string' && /^https?:\/\//.test(latest.downloadUrl)) {
+      desktopDownloadUrl.value = latest.downloadUrl
+    }
+  } catch {
+    // 静默:落地页不应因版本服务异常影响主流程
+  }
+}
+
+function openDesktopDownload() {
+  if (desktopDownloadUrl.value) {
+    window.open(desktopDownloadUrl.value, '_blank', 'noopener')
+  }
+}
 
 let typeTimer: ReturnType<typeof setInterval> | null = null
 let revealObserver: IntersectionObserver | null = null
@@ -74,6 +94,7 @@ function setupReveal() {
 }
 
 onMounted(() => {
+  void loadDesktopDownloadUrl()
   startTyping()
   setupReveal()
 })
@@ -119,6 +140,16 @@ const stats = [
         </div>
 
         <div class="flex items-center gap-2">
+          <button
+            v-if="desktopDownloadUrl"
+            type="button"
+            class="inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-md border border-white/[0.08] text-gray-300 hover:text-white hover:bg-white/[0.04] text-sm"
+            title="下载桌面端"
+            @click="openDesktopDownload"
+          >
+            <Download class="w-4 h-4" />
+            下载桌面端
+          </button>
           <template v-if="authStore.isAuthenticated">
             <button
               type="button"
