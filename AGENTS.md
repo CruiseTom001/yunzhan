@@ -1,6 +1,11 @@
 # 云栈项目开发与编码规范
 
-本文件是本仓库的强制工程约束。所有分析、编码、测试、发布和代码审查工作开始前都必须先阅读并遵守。
+本文件是本仓库的强制工程约束。`AGENTS.md` 与 `PROJECT_DEVELOPMENT.md` 是所有开发工作的双基线文档。所有分析、编码、测试、发布、故障处理和代码审查工作开始前，必须先完整阅读并遵守这两份文档；未完成阅读不得修改代码。
+
+两份文档分工如下：
+
+- `AGENTS.md`：编码、安全、质量门禁和 Git 的不可绕过规则。
+- `PROJECT_DEVELOPMENT.md`：云栈架构、关键文件、业务不变量、任务分级流程和发布边界。
 
 ## 1. 规范适用范围
 
@@ -11,6 +16,7 @@
 
 ## 2. 修改前要求
 
+- 先完整阅读 `AGENTS.md` 和 `PROJECT_DEVELOPMENT.md`，再读取当前任务相关的专项文档。
 - 先运行 `git status -sb`，识别并保留用户已有改动，禁止擅自回滚或覆盖。
 - 先阅读目标模块、关联类型、调用方、持久化结构和现有测试，不得只改报错行。
 - 变更学习进度、实验判题、路由、Electron IPC 或发布配置时，必须评估旧数据兼容和桌面升级影响。
@@ -56,9 +62,10 @@
 1. `npm run policy:check`
 2. `npm run check`
 3. `npm run lint`
-4. `npm test`
-5. `npm run build`
-6. `git diff --check`
+4. `npm run server:check`
+5. `npm test`
+6. `npm run build`
+7. `git diff --check`
 
 修改依赖时额外运行 `npm audit --omit=dev`。任何必需检查失败时不得宣布完成、提交、推送或生成正式安装包。
 
