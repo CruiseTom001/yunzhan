@@ -14,6 +14,7 @@ import {
   Megaphone,
   Menu,
   MessageSquare,
+  MonitorCog,
   Moon,
   PenTool,
   ScrollText,
@@ -214,6 +215,16 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
               type="button"
               class="account-menu-item"
               role="menuitem"
+              @click="navigate('/admin/desktop-releases')"
+            >
+              <MonitorCog class="w-4 h-4" />
+              桌面版本管理
+            </button>
+            <button
+              v-if="authStore.isSuperAdmin"
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
               @click="navigate('/admin/audit')"
             >
               <ScrollText class="w-4 h-4" />
@@ -301,6 +312,15 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
         >
           <ShieldCheck class="w-4 h-4" />
           用户管理
+        </button>
+        <button
+          v-if="authStore.isSuperAdmin"
+          type="button"
+          class="mobile-account-action"
+          @click="navigate('/admin/desktop-releases')"
+        >
+          <MonitorCog class="w-4 h-4" />
+          桌面版本管理
         </button>
         <button
           v-if="authStore.isSuperAdmin"
