@@ -140,7 +140,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl px-4 py-8 text-white">
+  <main class="mx-auto min-h-screen max-w-5xl pt-24 pb-16 px-4 sm:px-6 text-white">
     <div class="flex items-center gap-3 mb-6">
       <MonitorCog class="w-7 h-7 text-cyan-400" />
       <h1 class="text-2xl font-semibold">桌面端版本管理</h1>
@@ -273,7 +273,7 @@ onMounted(() => {
         </section>
       </div>
     </Teleport>
-  </div>
+  </main>
 </template>
 
 <style scoped>
