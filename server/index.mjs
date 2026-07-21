@@ -12,6 +12,7 @@ import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { requestStudyNoteAi } from './ai-provider.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
+import { isDesktopOriginAllowed } from './origin-validation.mjs'
 import {
   isRecord,
   normalizeEmail,
@@ -38,6 +39,7 @@ const {
   serveStatic,
   trustProxy,
 } = runtimeConfig
+
 const sessionCookieName = 'yunzhan_session'
 const sessionDurationMs = 7 * 24 * 60 * 60 * 1000
 const LOGIN_ATTEMPT_LIMIT = 5
@@ -63,7 +65,7 @@ app.use(cors({
       callback(null, true)
       return
     }
-    if (origin === 'null' && allowElectronFileOrigin) {
+    if (allowElectronFileOrigin && (origin === 'null' || origin.startsWith('file://'))) {
       callback(null, true)
       return
     }
@@ -83,9 +85,11 @@ app.use((request, response, next) => {
 
   const origin = request.get('origin')
   const isAllowedWebOrigin = Boolean(origin && allowedOrigins.has(origin))
-  const isAllowedDesktopOrigin = origin === 'null'
-    && allowElectronFileOrigin
-    && request.get('x-yunzhan-client') === 'desktop'
+  const isAllowedDesktopOrigin = isDesktopOriginAllowed(
+    origin,
+    request.get('x-yunzhan-client'),
+    allowElectronFileOrigin,
+  )
   if (isAllowedWebOrigin || isAllowedDesktopOrigin) {
     next()
     return
