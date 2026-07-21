@@ -45,6 +45,11 @@ const EMAIL_CODE_TTL_MS = 10 * 60 * 1000
 const EMAIL_CODE_COOLDOWN_SECONDS = 60
 const EMAIL_CODE_MAX_PER_HOUR = 5
 const EMAIL_CODE_MAX_PER_IP_HOUR = 20
+const STUDY_NOTE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const STUDY_NOTE_CONTENT_MAX_LENGTH = 20_000
+const STUDY_NOTE_POLISHED_MAX_LENGTH = 30_000
+const AI_PROVIDER_NAME_MAX_LENGTH = 80
+const AI_MODEL_MAX_LENGTH = 128
 
 app.set('trust proxy', trustProxy ? 1 : false)
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }))
@@ -151,6 +156,50 @@ function summarizeProgress(payload) {
 
 function hasOnlyKeys(value, allowedKeys) {
   return isRecord(value) && Object.keys(value).every(key => allowedKeys.has(key))
+}
+
+function validateStudyNoteDate(value) {
+  if (typeof value !== 'string' || !STUDY_NOTE_DATE_RE.test(value)) return null
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+  ) return null
+  return value
+}
+
+function formatStudyNoteDate(value) {
+  if (typeof value === 'string') return value.slice(0, 10)
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return ''
+}
+
+function toStudyNote(row) {
+  return {
+    id: String(row.id),
+    date: formatStudyNoteDate(row.note_date),
+    content: row.content,
+    polishedContent: row.polished_content,
+    aiProviderName: row.ai_provider_name ?? null,
+    aiModel: row.ai_model ?? null,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  }
+}
+
+function validateStudyNoteContent(value, maxLength, allowEmpty = false) {
+  if (typeof value !== 'string') return null
+  const content = value.trim()
+  if ((!allowEmpty && content.length < 1) || content.length > maxLength) return null
+  return content
+}
+
+function validateAiText(value, maxLength) {
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  return text.length >= 1 && text.length <= maxLength ? text : null
 }
 
 // ---------- 语义版本比较(后端内联,与 src/utils/semver.ts 同义) ----------
@@ -1088,6 +1137,96 @@ app.put('/api/progress', requireAuth, asyncRoute(async (request, response) => {
     version: result.saved.version,
     updatedAt: new Date(result.saved.updated_at).getTime(),
   })
+}))
+
+app.get('/api/study-notes', requireAuth, asyncRoute(async (request, response) => {
+  const { limit, offset } = parsePagination(request.query)
+  const [notesResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT id, note_date, content, polished_content, ai_provider_name, ai_model, created_at, updated_at
+         FROM study_notes
+        WHERE user_id = $1
+        ORDER BY note_date DESC, id DESC
+        LIMIT $2 OFFSET $3`,
+      [request.auth.id, limit, offset],
+    ),
+    pool.query(
+      'SELECT COUNT(*)::INTEGER AS count FROM study_notes WHERE user_id = $1',
+      [request.auth.id],
+    ),
+  ])
+  response.json({
+    notes: notesResult.rows.map(toStudyNote),
+    total: countResult.rows[0].count,
+    limit,
+    offset,
+  })
+}))
+
+app.put('/api/study-notes/:date', requireAuth, asyncRoute(async (request, response) => {
+  const noteDate = validateStudyNoteDate(request.params.date)
+  if (!noteDate) {
+    response.status(400).json({ error: '学习记录日期无效。' })
+    return
+  }
+  const allowedKeys = new Set(['content', 'polishedContent', 'aiProviderName', 'aiModel'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '学习记录参数无效。' })
+    return
+  }
+  const content = validateStudyNoteContent(request.body.content, STUDY_NOTE_CONTENT_MAX_LENGTH)
+  if (!content) {
+    response.status(400).json({ error: '学习记录内容需为 1-20000 个字符。' })
+    return
+  }
+  const polishedContent = request.body.polishedContent === undefined
+    ? ''
+    : validateStudyNoteContent(request.body.polishedContent, STUDY_NOTE_POLISHED_MAX_LENGTH, true)
+  if (polishedContent === null) {
+    response.status(400).json({ error: '润色内容不能超过 30000 个字符。' })
+    return
+  }
+  const aiProviderName = request.body.aiProviderName === undefined || request.body.aiProviderName === null
+    ? null
+    : validateAiText(request.body.aiProviderName, AI_PROVIDER_NAME_MAX_LENGTH)
+  const aiModel = request.body.aiModel === undefined || request.body.aiModel === null
+    ? null
+    : validateAiText(request.body.aiModel, AI_MODEL_MAX_LENGTH)
+  if (
+    (request.body.aiProviderName !== undefined && request.body.aiProviderName !== null && !aiProviderName)
+    || (request.body.aiModel !== undefined && request.body.aiModel !== null && !aiModel)
+  ) {
+    response.status(400).json({ error: 'AI 供应商名称或模型无效。' })
+    return
+  }
+
+  const result = await pool.query(
+    `INSERT INTO study_notes
+       (user_id, note_date, content, polished_content, ai_provider_name, ai_model)
+     VALUES ($1, $2::DATE, $3, $4, $5, $6)
+     ON CONFLICT (user_id, note_date) DO UPDATE
+        SET content = EXCLUDED.content,
+            polished_content = EXCLUDED.polished_content,
+            ai_provider_name = EXCLUDED.ai_provider_name,
+            ai_model = EXCLUDED.ai_model,
+            updated_at = NOW()
+     RETURNING id, note_date, content, polished_content, ai_provider_name, ai_model, created_at, updated_at`,
+    [request.auth.id, noteDate, content, polishedContent, aiProviderName, aiModel],
+  )
+  response.json({ note: toStudyNote(result.rows[0]) })
+}))
+
+app.delete('/api/study-notes/:date', requireAuth, asyncRoute(async (request, response) => {
+  const noteDate = validateStudyNoteDate(request.params.date)
+  if (!noteDate) {
+    response.status(400).json({ error: '学习记录日期无效。' })
+    return
+  }
+  await pool.query(
+    'DELETE FROM study_notes WHERE user_id = $1 AND note_date = $2::DATE',
+    [request.auth.id, noteDate],
+  )
+  response.json({ ok: true })
 }))
 
 app.get('/api/admin/audit-logs', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {

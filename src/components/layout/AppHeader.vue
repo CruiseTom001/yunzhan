@@ -64,6 +64,7 @@ const navItems = [
   { path: '/courses', label: '课程', icon: BookOpen },
   { path: '/quiz', label: '问答', icon: PenTool },
   { path: '/review', label: '复习', icon: Brain },
+  { path: '/study-notes', label: '记录', icon: ScrollText },
   { path: '/progress', label: '进度', icon: BarChart3 },
   { path: '/terminal', label: '终端', icon: Terminal },
 ]

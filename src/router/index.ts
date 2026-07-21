@@ -56,6 +56,11 @@ const router = createRouter({
       component: () => import('@/pages/ReviewPage.vue'),
     },
     {
+      path: '/study-notes',
+      name: 'studyNotes',
+      component: () => import('@/pages/DailyStudyNotesPage.vue'),
+    },
+    {
       path: '/terminal',
       name: 'terminal',
       component: () => import('@/pages/TerminalPage.vue'),
