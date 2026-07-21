@@ -14,6 +14,8 @@ const REQUEST_TIMEOUT_MS = 60_000
 const RESPONSE_MAX_BYTES = 100_000
 const POLISHED_CONTENT_MAX_LENGTH = 30_000
 const CONNECTION_TEST_MAX_LENGTH = 1000
+const PROVIDER_ERROR_MAX_LENGTH = 600
+const PROVIDER_ERROR_KEYS = ['message', 'detail', 'reason', 'type', 'code', 'param']
 
 type StoredAiProvider = AiProviderInput & { savedAt: number }
 
@@ -281,6 +283,70 @@ function parseAiContent(payload: unknown, format: AiProviderFormat, maxLength: n
   return normalized.length >= 1 && normalized.length <= maxLength ? normalized : ''
 }
 
+function truncateProviderError(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.length > PROVIDER_ERROR_MAX_LENGTH
+    ? `${normalized.slice(0, PROVIDER_ERROR_MAX_LENGTH)}...`
+    : normalized
+}
+
+function redactProviderSecret(value: string, provider: AiProviderInput) {
+  let redacted = value.replace(/Bearer\s+[^\s"'，。；;]+/gi, 'Bearer [已隐藏]')
+  if (provider.apiKey.length >= 4) {
+    redacted = redacted.split(provider.apiKey).join('[已隐藏]')
+  }
+  return redacted
+}
+
+function addProviderErrorPart(parts: string[], value: unknown) {
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return
+  const normalized = String(value).trim()
+  if (normalized && !parts.includes(normalized)) parts.push(normalized)
+}
+
+function collectProviderErrorParts(value: unknown, parts: string[]) {
+  if (parts.length >= 8) return
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    addProviderErrorPart(parts, value)
+    return
+  }
+  if (Array.isArray(value)) {
+    value.slice(0, 4).forEach(item => collectProviderErrorParts(item, parts))
+    return
+  }
+  if (!isRecord(value)) return
+
+  if (isRecord(value.error)) {
+    collectProviderErrorParts(value.error, parts)
+  } else {
+    addProviderErrorPart(parts, value.error)
+  }
+
+  PROVIDER_ERROR_KEYS.forEach(key => {
+    addProviderErrorPart(parts, value[key])
+  })
+
+  if (Array.isArray(value.errors)) collectProviderErrorParts(value.errors, parts)
+}
+
+function extractProviderError(rawText: string, provider: AiProviderInput) {
+  const parts: string[] = []
+  try {
+    collectProviderErrorParts(JSON.parse(rawText) as unknown, parts)
+  } catch {
+    addProviderErrorPart(parts, rawText)
+  }
+  return truncateProviderError(redactProviderSecret(parts.join('；'), provider))
+}
+
+function buildProviderHttpError(response: Response, rawText: string, provider: AiProviderInput) {
+  const providerMessage = extractProviderError(rawText, provider)
+  return providerMessage
+    ? `AI 供应商返回错误：HTTP ${response.status}，${providerMessage}。`
+    : `AI 供应商返回错误：HTTP ${response.status}。`
+}
+
 async function requestAiFromBrowser(input: {
   content: string
   provider: AiProviderInput
@@ -304,7 +370,7 @@ async function requestAiFromBrowser(input: {
   }
 
   const rawText = await readLimitedResponseText(response)
-  if (!response.ok) throw new Error(`AI 供应商返回错误：HTTP ${response.status}。`)
+  if (!response.ok) throw new Error(buildProviderHttpError(response, rawText, input.provider))
 
   let payload: unknown
   try {

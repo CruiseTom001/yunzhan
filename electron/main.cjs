@@ -17,6 +17,8 @@ const aiContentMaxLength = 20_000
 const aiPolishedMaxLength = 30_000
 const aiResponseMaxBytes = 100_000
 const aiRequestTimeoutMs = 60_000
+const aiProviderErrorMaxLength = 600
+const aiProviderErrorKeys = ['message', 'detail', 'reason', 'type', 'code', 'param']
 
 function normalizeAccountId(value) {
   if (value === null || value === undefined) return null
@@ -218,6 +220,86 @@ function parseAiContent(payload, format, maxLength) {
   return normalized.length >= 1 && normalized.length <= maxLength ? normalized : ''
 }
 
+function truncateAiProviderError(value) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.length > aiProviderErrorMaxLength
+    ? `${normalized.slice(0, aiProviderErrorMaxLength)}...`
+    : normalized
+}
+
+function redactAiProviderSecret(value, provider) {
+  let redacted = value.replace(/Bearer\s+[^\s"'，。；;]+/gi, 'Bearer [已隐藏]')
+  if (typeof provider.apiKey === 'string' && provider.apiKey.length >= 4) {
+    redacted = redacted.split(provider.apiKey).join('[已隐藏]')
+  }
+  return redacted
+}
+
+function addAiProviderErrorPart(parts, value) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const normalized = String(value).trim()
+    if (normalized && !parts.includes(normalized)) parts.push(normalized)
+  }
+}
+
+function collectAiProviderErrorParts(value, parts) {
+  if (parts.length >= 8) return
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    addAiProviderErrorPart(parts, value)
+    return
+  }
+  if (Array.isArray(value)) {
+    value.slice(0, 4).forEach(item => collectAiProviderErrorParts(item, parts))
+    return
+  }
+  if (!isPlainObject(value)) return
+
+  if (isPlainObject(value.error)) {
+    collectAiProviderErrorParts(value.error, parts)
+  } else {
+    addAiProviderErrorPart(parts, value.error)
+  }
+
+  aiProviderErrorKeys.forEach(key => {
+    addAiProviderErrorPart(parts, value[key])
+  })
+
+  if (Array.isArray(value.errors)) collectAiProviderErrorParts(value.errors, parts)
+}
+
+function extractAiProviderError(rawText, provider) {
+  const parts = []
+  try {
+    collectAiProviderErrorParts(JSON.parse(rawText), parts)
+  } catch {
+    addAiProviderErrorPart(parts, rawText)
+  }
+  return truncateAiProviderError(redactAiProviderSecret(parts.join('；'), provider))
+}
+
+function buildAiProviderHttpError(response, rawText, provider) {
+  const providerMessage = extractAiProviderError(rawText, provider)
+  return providerMessage
+    ? `AI 供应商返回错误：HTTP ${response.status}，${providerMessage}。`
+    : `AI 供应商返回错误：HTTP ${response.status}。`
+}
+
+function isAiProviderTimeoutError(error) {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+}
+
+function readAiProviderNetworkError(error) {
+  if (!(error instanceof Error)) return ''
+  if (isPlainObject(error.cause)) {
+    const cause = error.cause
+    if (typeof cause.code === 'string' && cause.code.trim()) return cause.code.trim()
+    if (typeof cause.message === 'string' && cause.message.trim()) return cause.message.trim()
+  }
+  if (error.message && !/fetch failed/i.test(error.message)) return error.message
+  return ''
+}
+
 async function requestAiProvider(input, purpose) {
   if (!isPlainObject(input)) throw new Error('payload invalid')
   const provider = validateAiProvider(input.provider)
@@ -235,14 +317,16 @@ async function requestAiProvider(input, purpose) {
       signal: AbortSignal.timeout(aiRequestTimeoutMs),
     })
   } catch (error) {
-    const message = error instanceof Error && error.name === 'TimeoutError'
+    const message = isAiProviderTimeoutError(error)
       ? 'AI 供应商响应超时。'
-      : '无法连接 AI 供应商。'
+      : readAiProviderNetworkError(error)
+        ? `无法连接 AI 供应商：${truncateAiProviderError(redactAiProviderSecret(readAiProviderNetworkError(error), provider))}。`
+        : '无法连接 AI 供应商。'
     throw new Error(message)
   }
 
   const rawText = await readLimitedResponseText(response)
-  if (!response.ok) throw new Error(`AI 供应商返回错误：HTTP ${response.status}。`)
+  if (!response.ok) throw new Error(buildAiProviderHttpError(response, rawText, provider))
 
   let payload
   try {

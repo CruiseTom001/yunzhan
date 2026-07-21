@@ -100,4 +100,33 @@ describe('localAiProvider direct browser compatibility helper', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('includes provider error details without leaking api key', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      error: {
+        message: 'insufficient_quota: sk-test has exceeded quota',
+        type: 'rate_limit_error',
+        code: 'insufficient_quota',
+      },
+    }), { status: 429 })
+    try {
+      await expect(testAiProviderFromBrowser({
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'sk-test',
+        format: 'chat_completions',
+        model: 'deepseek-chat',
+      })).rejects.toThrow('insufficient_quota')
+      await expect(testAiProviderFromBrowser({
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'sk-test',
+        format: 'chat_completions',
+        model: 'deepseek-chat',
+      })).rejects.not.toThrow('sk-test')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
