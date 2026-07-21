@@ -1,5 +1,7 @@
 import { apiRequest } from '@/utils/apiClient'
 
+const AI_API_TIMEOUT_MS = 65_000
+
 export type AiProviderFormat = 'anthropic_messages' | 'chat_completions' | 'responses'
 
 export interface StudyNote {
@@ -135,7 +137,10 @@ export async function deleteStudyNote(date: string) {
 }
 
 export async function testServerAiProvider(): Promise<PolishResult> {
-  const payload = await apiRequest('/study-notes/ai/test', { method: 'POST' })
+  const payload = await apiRequest('/study-notes/ai/test', {
+    method: 'POST',
+    timeoutMs: AI_API_TIMEOUT_MS,
+  })
   const result = readPolishPayload(payload)
   if (!result) throw new Error('账号服务返回了无效 AI 测试结果。')
   return result
@@ -145,6 +150,7 @@ export async function polishStudyNoteViaServer(content: string): Promise<PolishR
   const payload = await apiRequest('/study-notes/ai/polish', {
     method: 'POST',
     body: JSON.stringify({ content }),
+    timeoutMs: AI_API_TIMEOUT_MS,
   })
   const result = readPolishPayload(payload)
   if (!result) throw new Error('账号服务返回了无效 AI 润色结果。')

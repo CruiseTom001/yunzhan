@@ -79,7 +79,10 @@ describe('studyNotesApi type guards', () => {
     }))
     const result = await testServerAiProvider()
     expect(result.providerName).toBe('云栈 AI')
-    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/test', { method: 'POST' })
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/test', expect.objectContaining({
+      method: 'POST',
+      timeoutMs: 65_000,
+    }))
   })
 
   it('polishes through server AI endpoint', async () => {
@@ -90,10 +93,11 @@ describe('studyNotesApi type guards', () => {
     }))
     const result = await polishStudyNoteViaServer('学了 Docker 网络')
     expect(result.content).toContain('Docker')
-    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/polish', {
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/polish', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ content: '学了 Docker 网络' }),
-    })
+      timeoutMs: 65_000,
+    }))
   })
 
   it('rejects invalid server AI response', async () => {

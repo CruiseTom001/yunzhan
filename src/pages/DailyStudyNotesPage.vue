@@ -31,8 +31,8 @@ const notes = ref<StudyNote[]>([])
 const selectedDate = ref(formatLocalDate(new Date()))
 const content = ref('')
 const polishedContent = ref('')
-const selectedProviderName = ref<string | null>(null)
-const selectedModel = ref<string | null>(null)
+const currentAiProviderName = ref<string | null>(null)
+const currentAiModel = ref<string | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const polishing = ref(false)
@@ -67,6 +67,16 @@ const selectedNote = computed(() => notes.value.find(note => note.date === selec
 const hasPolishedContent = computed(() => polishedContent.value.trim().length > 0)
 const aiReady = computed(() => desktopLocalAi.value ? configured.value : true)
 const canPolish = computed(() => content.value.trim().length > 0 && aiReady.value && !polishing.value)
+const displayProviderName = computed(() => {
+  if (currentAiProviderName.value) return currentAiProviderName.value
+  if (!desktopLocalAi.value) return '云栈服务端 AI'
+  return configured.value ? provider.name.trim() : null
+})
+const displayModel = computed(() => {
+  if (currentAiModel.value) return currentAiModel.value
+  if (!desktopLocalAi.value) return '服务端配置'
+  return configured.value ? provider.model.trim() : null
+})
 
 function formatLocalDate(date: Date) {
   const year = date.getFullYear()
@@ -104,8 +114,8 @@ function setTransientMessage(message: string) {
 function loadEditor(note: StudyNote | null) {
   content.value = note?.content ?? ''
   polishedContent.value = note?.polishedContent ?? ''
-  selectedProviderName.value = note?.aiProviderName ?? null
-  selectedModel.value = note?.aiModel ?? null
+  currentAiProviderName.value = note?.aiProviderName ?? null
+  currentAiModel.value = note?.aiModel ?? null
 }
 
 async function loadNotes() {
@@ -124,8 +134,6 @@ async function loadNotes() {
 
 async function loadAiProvider() {
   if (!desktopLocalAi.value) {
-    selectedProviderName.value = '云栈服务端 AI'
-    selectedModel.value = '服务端配置'
     return
   }
   try {
@@ -137,8 +145,6 @@ async function loadAiProvider() {
     provider.format = stored.format
     provider.model = stored.model
     if (!modelList.value.includes(stored.model)) modelList.value.push(stored.model)
-    selectedProviderName.value = stored.name
-    selectedModel.value = stored.model
     configured.value = true
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '本地 AI 配置读取失败。'
@@ -169,8 +175,8 @@ async function saveCurrentNote() {
       date: selectedDate.value,
       content: text,
       polishedContent: polishedContent.value.trim(),
-      aiProviderName: selectedProviderName.value,
-      aiModel: selectedModel.value,
+      aiProviderName: currentAiProviderName.value,
+      aiModel: currentAiModel.value,
     })
     const index = notes.value.findIndex(item => item.date === note.date)
     if (index >= 0) notes.value.splice(index, 1, note)
@@ -230,8 +236,6 @@ async function saveAiConfig() {
     })
     configured.value = true
     showAiConfig.value = false
-    selectedProviderName.value = provider.name.trim()
-    selectedModel.value = provider.model.trim()
     setTransientMessage('AI 配置已保存到本地。')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '本地 AI 配置保存失败。'
@@ -286,8 +290,8 @@ async function polishCurrentNote() {
       provider: desktopLocalAi.value ? readProviderInput() : undefined,
     })
     polishedContent.value = result.content
-    selectedProviderName.value = result.providerName
-    selectedModel.value = result.model
+    currentAiProviderName.value = result.providerName
+    currentAiModel.value = result.model
     setTransientMessage('AI 润色已生成，确认后可保存。')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'AI 润色失败。'
@@ -479,8 +483,8 @@ onMounted(() => {
                 <div>
                   AI Key：{{ desktopLocalAi ? '桌面端只保存在本机 IndexedDB。' : '网页端使用云栈后端统一配置，浏览器不可见。' }}
                 </div>
-                <div>当前供应商：{{ selectedProviderName || '未配置' }}</div>
-                <div>当前模型：{{ selectedModel || '未配置' }}</div>
+                <div>当前供应商：{{ displayProviderName || '未配置' }}</div>
+                <div>当前模型：{{ displayModel || '未配置' }}</div>
               </div>
             </section>
           </div>

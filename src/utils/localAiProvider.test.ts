@@ -59,10 +59,11 @@ describe('localAiProvider web proxy', () => {
     })
     const result = await polishStudyNoteLocally({ content: '学了 Docker 网络' })
     expect(result.content).toContain('Docker')
-    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/polish', {
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/polish', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ content: '学了 Docker 网络' }),
-    })
+      timeoutMs: 65_000,
+    }))
   })
 
   it('tests server AI provider in browser mode', async () => {
@@ -73,7 +74,10 @@ describe('localAiProvider web proxy', () => {
     })
     const result = await testAiProviderLocally()
     expect(result.content).toBe('连接成功')
-    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/test', { method: 'POST' })
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/test', expect.objectContaining({
+      method: 'POST',
+      timeoutMs: 65_000,
+    }))
   })
 })
 

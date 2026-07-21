@@ -2,6 +2,10 @@ const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
 const API_TIMEOUT_MS = 15_000
 let apiBaseUrlPromise: Promise<string> | null = null
 
+export interface ApiRequestOptions extends RequestInit {
+  timeoutMs?: number
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly payload: unknown
@@ -46,13 +50,14 @@ function resolveApiBaseUrl() {
   return apiBaseUrlPromise
 }
 
-export async function apiRequest(path: string, options: RequestInit = {}): Promise<unknown> {
+export async function apiRequest(path: string, options: ApiRequestOptions = {}): Promise<unknown> {
+  const { timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options
   const apiBaseUrl = await resolveApiBaseUrl()
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
-  const headers = new Headers(options.headers)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const headers = new Headers(fetchOptions.headers)
   headers.set('Accept', 'application/json')
-  if (options.body !== undefined) {
+  if (fetchOptions.body !== undefined) {
     headers.set('Content-Type', 'application/json')
   }
   if (window.electronAPI) {
@@ -61,7 +66,7 @@ export async function apiRequest(path: string, options: RequestInit = {}): Promi
 
   try {
     const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers,
       credentials: 'include',
       signal: controller.signal,
