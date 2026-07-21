@@ -406,6 +406,29 @@ function registerSecurityHeaders() {
   })
 }
 
+function registerDesktopApiHeaders() {
+  const configuredApiOrigin = getConfiguredApiOrigin()
+  if (!configuredApiOrigin) return
+
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    try {
+      const target = new URL(details.url)
+      if (target.origin === configuredApiOrigin && target.pathname.startsWith('/api/')) {
+        callback({
+          requestHeaders: {
+            ...details.requestHeaders,
+            'X-Yunzhan-Client': 'desktop',
+          },
+        })
+        return
+      }
+    } catch {
+      // ignore invalid url
+    }
+    callback({ requestHeaders: details.requestHeaders })
+  })
+}
+
 function registerIpc() {
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
@@ -562,6 +585,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   registerSecurityHeaders()
+  registerDesktopApiHeaders()
   registerIpc()
   createWindow()
 
