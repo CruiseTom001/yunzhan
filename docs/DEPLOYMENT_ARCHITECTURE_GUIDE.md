@@ -347,7 +347,7 @@ progress.backup.json
 - `nodeIntegration = false`
 - `sandbox = true`
 
-当前 `electron/api-config.json` 的 `apiOrigin` 为空。因此当前源码构建的新桌面安装包尚未绑定正式云端账号服务。发布下一版安装包前应改为：
+当前 `electron/api-config.json` 的 `apiOrigin` 已绑定正式云端账号服务：
 
 ```json
 {
