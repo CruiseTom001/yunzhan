@@ -8,7 +8,9 @@ import { apiRequest } from '@/utils/apiClient'
 import {
   deleteStudyNote,
   listStudyNotes,
+  polishStudyNoteViaServer,
   saveStudyNote,
+  testServerAiProvider,
 } from './studyNotesApi'
 
 const mockedApiRequest = vi.mocked(apiRequest)
@@ -69,4 +71,33 @@ describe('studyNotesApi type guards', () => {
     await expect(deleteStudyNote('2026-07-21')).resolves.toBeUndefined()
   })
 
+  it('tests server AI provider and parses response', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      content: '连接成功',
+      providerName: '云栈 AI',
+      model: 'deepseek-chat',
+    }))
+    const result = await testServerAiProvider()
+    expect(result.providerName).toBe('云栈 AI')
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/test', { method: 'POST' })
+  })
+
+  it('polishes through server AI endpoint', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      content: '今天系统学习了 Docker 网络。',
+      providerName: '云栈 AI',
+      model: 'deepseek-chat',
+    }))
+    const result = await polishStudyNoteViaServer('学了 Docker 网络')
+    expect(result.content).toContain('Docker')
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/polish', {
+      method: 'POST',
+      body: JSON.stringify({ content: '学了 Docker 网络' }),
+    })
+  })
+
+  it('rejects invalid server AI response', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
+    await expect(testServerAiProvider()).rejects.toThrow('无效 AI 测试结果')
+  })
 })

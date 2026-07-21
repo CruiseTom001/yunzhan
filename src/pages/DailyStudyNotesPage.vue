@@ -45,6 +45,7 @@ const configured = ref(false)
 const testingProvider = ref(false)
 const providerTestMessage = ref('')
 const providerTestOk = ref(false)
+const desktopLocalAi = computed(() => typeof window !== 'undefined' && Boolean(window.electronAPI))
 
 const provider = reactive({
   name: 'DeepSeek',
@@ -64,7 +65,8 @@ const formatOptions: Array<{ value: AiProviderFormat; label: string }> = [
 const sortedNotes = computed(() => [...notes.value].sort((a, b) => b.date.localeCompare(a.date)))
 const selectedNote = computed(() => notes.value.find(note => note.date === selectedDate.value) ?? null)
 const hasPolishedContent = computed(() => polishedContent.value.trim().length > 0)
-const canPolish = computed(() => content.value.trim().length > 0 && configured.value && !polishing.value)
+const aiReady = computed(() => desktopLocalAi.value ? configured.value : true)
+const canPolish = computed(() => content.value.trim().length > 0 && aiReady.value && !polishing.value)
 
 function formatLocalDate(date: Date) {
   const year = date.getFullYear()
@@ -121,6 +123,11 @@ async function loadNotes() {
 }
 
 async function loadAiProvider() {
+  if (!desktopLocalAi.value) {
+    selectedProviderName.value = '云栈服务端 AI'
+    selectedModel.value = '服务端配置'
+    return
+  }
   try {
     const stored = await loadLocalAiProvider()
     if (!stored) return
@@ -204,6 +211,10 @@ function addModel() {
 }
 
 async function saveAiConfig() {
+  if (!desktopLocalAi.value) {
+    showAiConfig.value = false
+    return
+  }
   if (!provider.name.trim() || !provider.baseUrl.trim() || !provider.apiKey.trim() || !provider.model.trim()) {
     errorMessage.value = '请补全 AI 供应商配置。'
     return
@@ -243,7 +254,9 @@ async function testAiConfig() {
   providerTestOk.value = false
   errorMessage.value = ''
   try {
-    const result = await testAiProviderLocally(readProviderInput())
+    const result = desktopLocalAi.value
+      ? await testAiProviderLocally(readProviderInput())
+      : await testAiProviderLocally()
     providerTestOk.value = true
     providerTestMessage.value = `连接成功：${result.providerName} / ${result.model}`
   } catch (error) {
@@ -260,7 +273,7 @@ async function polishCurrentNote() {
     errorMessage.value = '请先写下需要润色的学习记录。'
     return
   }
-  if (!configured.value) {
+  if (!aiReady.value) {
     showAiConfig.value = true
     errorMessage.value = '请先配置 AI 供应商。'
     return
@@ -270,7 +283,7 @@ async function polishCurrentNote() {
   try {
     const result = await polishStudyNoteLocally({
       content: text,
-      provider: readProviderInput(),
+      provider: desktopLocalAi.value ? readProviderInput() : undefined,
     })
     polishedContent.value = result.content
     selectedProviderName.value = result.providerName
@@ -306,7 +319,7 @@ onMounted(() => {
           </div>
           <h1 class="text-3xl font-bold text-theme">每日学习记录</h1>
           <p class="mt-2 max-w-2xl text-sm leading-6 text-theme-muted">
-            记录每天学到的内容，用自己的话留下复盘材料；需要时可以用自定义 AI 供应商润色表达。
+            记录每天学到的内容，用自己的话留下复盘材料；需要时可以用 AI 润色表达。
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -463,7 +476,9 @@ onMounted(() => {
                 placeholder="AI 润色后会显示在这里，你可以继续修改，再保存。"
               ></textarea>
               <div class="mt-3 rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-xs leading-5 text-theme-muted">
-                <div>AI Key：只保存在本机 IndexedDB，不上传云栈服务器。</div>
+                <div>
+                  AI Key：{{ desktopLocalAi ? '桌面端只保存在本机 IndexedDB。' : '网页端使用云栈后端统一配置，浏览器不可见。' }}
+                </div>
                 <div>当前供应商：{{ selectedProviderName || '未配置' }}</div>
                 <div>当前模型：{{ selectedModel || '未配置' }}</div>
               </div>
@@ -490,7 +505,11 @@ onMounted(() => {
           </button>
         </div>
 
-        <div class="space-y-4">
+        <div v-if="!desktopLocalAi" class="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-100">
+          网页端使用云栈后端统一配置的 AI Key。前端只把学习记录内容发给云栈后端，由后端调用 AI 供应商后返回结果；浏览器不会看到 API Key。
+        </div>
+
+        <div v-else class="space-y-4">
           <div>
             <label class="mb-2 block text-sm text-gray-300" for="ai-provider-name">名称</label>
             <input
@@ -577,7 +596,7 @@ onMounted(() => {
 
         <div class="mt-6 flex items-center justify-between gap-3">
           <p class="text-xs leading-5 text-gray-500">
-            桌面端测试与润色走本机 IPC，网页端直连供应商；API Key 保存到本机 IndexedDB，不会上传云栈服务器。
+            {{ desktopLocalAi ? '桌面端测试与润色走本机 IPC，API Key 保存到本机 IndexedDB。' : '网页端测试与润色走云栈后端代理，API Key 保存在服务端环境变量。' }}
           </p>
           <div class="flex shrink-0 items-center gap-2">
             <button
@@ -591,6 +610,7 @@ onMounted(() => {
               测试连接
             </button>
             <button
+              v-if="desktopLocalAi"
               type="button"
               class="rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-[#0c0c14] hover:bg-cyan-300"
               @click="saveAiConfig"

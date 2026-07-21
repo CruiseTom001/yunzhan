@@ -10,6 +10,7 @@ import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
+import { requestStudyNoteAi } from './ai-provider.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
 import {
   isRecord,
@@ -1227,6 +1228,26 @@ app.delete('/api/study-notes/:date', requireAuth, asyncRoute(async (request, res
     [request.auth.id, noteDate],
   )
   response.json({ ok: true })
+}))
+
+app.post('/api/study-notes/ai/test', requireAuth, asyncRoute(async (_request, response) => {
+  const result = await requestStudyNoteAi({ purpose: 'test' })
+  response.json(result)
+}))
+
+app.post('/api/study-notes/ai/polish', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['content'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: 'AI 润色参数无效。' })
+    return
+  }
+  const content = validateStudyNoteContent(request.body.content, STUDY_NOTE_CONTENT_MAX_LENGTH)
+  if (!content) {
+    response.status(400).json({ error: '学习记录内容需为 1-20000 个字符。' })
+    return
+  }
+  const result = await requestStudyNoteAi({ content, purpose: 'polish' })
+  response.json(result)
 }))
 
 app.get('/api/admin/audit-logs', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {

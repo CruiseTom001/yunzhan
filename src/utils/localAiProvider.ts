@@ -1,4 +1,10 @@
-import type { AiProviderFormat, AiProviderInput, PolishResult } from '@/utils/studyNotesApi'
+import {
+  type AiProviderFormat,
+  type AiProviderInput,
+  type PolishResult,
+  polishStudyNoteViaServer,
+  testServerAiProvider,
+} from '@/utils/studyNotesApi'
 
 const DB_NAME = 'yunzhan-local-ai'
 const DB_VERSION = 1
@@ -329,17 +335,24 @@ async function requestAiFromDesktop(channel: 'ai:polishStudyNote' | 'ai:testProv
   return parsed
 }
 
-export async function polishStudyNoteLocally(input: { content: string; provider: AiProviderInput }): Promise<PolishResult> {
+export async function polishStudyNoteLocally(input: { content: string; provider?: AiProviderInput }): Promise<PolishResult> {
   const content = input.content.trim()
   if (!content || content.length > 20_000) throw new Error('学习记录内容需为 1-20000 个字符。')
+  if (!getElectronApi()) return polishStudyNoteViaServer(content)
+  if (!input.provider) throw new Error('请先配置桌面端 AI 供应商。')
   validateProvider(input.provider)
-  if (getElectronApi()) return requestAiFromDesktop('ai:polishStudyNote', { content, provider: input.provider })
-  return requestAiFromBrowser({ content, provider: input.provider, purpose: 'polish' })
+  return requestAiFromDesktop('ai:polishStudyNote', { content, provider: input.provider })
 }
 
-export async function testAiProviderLocally(provider: AiProviderInput): Promise<PolishResult> {
+export async function testAiProviderLocally(provider?: AiProviderInput): Promise<PolishResult> {
+  if (!getElectronApi()) return testServerAiProvider()
+  if (!provider) throw new Error('请先配置桌面端 AI 供应商。')
   validateProvider(provider)
-  if (getElectronApi()) return requestAiFromDesktop('ai:testProvider', provider)
+  return requestAiFromDesktop('ai:testProvider', provider)
+}
+
+export async function testAiProviderFromBrowser(provider: AiProviderInput): Promise<PolishResult> {
+  validateProvider(provider)
   return requestAiFromBrowser({
     content: '请测试当前模型连接。',
     provider,

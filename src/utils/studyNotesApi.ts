@@ -77,6 +77,20 @@ function readOkPayload(value: unknown) {
   return isRecord(value) && value.ok === true
 }
 
+function readPolishPayload(value: unknown): PolishResult | null {
+  if (
+    !isRecord(value)
+    || typeof value.content !== 'string'
+    || typeof value.providerName !== 'string'
+    || typeof value.model !== 'string'
+  ) return null
+  return {
+    content: value.content,
+    providerName: value.providerName,
+    model: value.model,
+  }
+}
+
 export async function listStudyNotes(input: { limit?: number; offset?: number } = {}): Promise<StudyNotesResult> {
   const params = new URLSearchParams({
     limit: String(input.limit ?? 60),
@@ -118,4 +132,21 @@ export async function saveStudyNote(input: {
 export async function deleteStudyNote(date: string) {
   const payload = await apiRequest(`/study-notes/${encodeURIComponent(date)}`, { method: 'DELETE' })
   if (!readOkPayload(payload)) throw new Error('账号服务返回了无效删除结果。')
+}
+
+export async function testServerAiProvider(): Promise<PolishResult> {
+  const payload = await apiRequest('/study-notes/ai/test', { method: 'POST' })
+  const result = readPolishPayload(payload)
+  if (!result) throw new Error('账号服务返回了无效 AI 测试结果。')
+  return result
+}
+
+export async function polishStudyNoteViaServer(content: string): Promise<PolishResult> {
+  const payload = await apiRequest('/study-notes/ai/polish', {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
+  const result = readPolishPayload(payload)
+  if (!result) throw new Error('账号服务返回了无效 AI 润色结果。')
+  return result
 }
