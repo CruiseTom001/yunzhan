@@ -11,6 +11,8 @@ const allowedChannels = [
   'app:getVersion',
   'app:getApiBaseUrl',
   'app:openDataFolder',
+  'ai:polishStudyNote',
+  'ai:testProvider',
   'progress:load',
   'progress:save',
   'progress:clear',

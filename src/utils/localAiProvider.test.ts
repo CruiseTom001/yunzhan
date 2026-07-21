@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { polishStudyNoteLocally, validateProvider } from './localAiProvider'
+import { polishStudyNoteLocally, testAiProviderLocally, validateProvider } from './localAiProvider'
 
 describe('localAiProvider validation', () => {
   it('accepts https provider config', () => {
@@ -51,6 +51,25 @@ describe('localAiProvider direct polish', () => {
         },
       })
       expect(result.content).toContain('Docker')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('parses connection test response', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: '连接成功' } }],
+    }))
+    try {
+      const result = await testAiProviderLocally({
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'sk-test',
+        format: 'chat_completions',
+        model: 'deepseek-chat',
+      })
+      expect(result.content).toBe('连接成功')
     } finally {
       globalThis.fetch = originalFetch
     }

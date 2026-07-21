@@ -7,8 +7,13 @@ const ACTIVE_PROVIDER_KEY = 'active'
 const REQUEST_TIMEOUT_MS = 60_000
 const RESPONSE_MAX_BYTES = 100_000
 const POLISHED_CONTENT_MAX_LENGTH = 30_000
+const CONNECTION_TEST_MAX_LENGTH = 1000
 
 type StoredAiProvider = AiProviderInput & { savedAt: number }
+
+function getElectronApi() {
+  return typeof window === 'undefined' ? undefined : window.electronAPI
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -36,6 +41,20 @@ function readStoredProvider(value: unknown): StoredAiProvider | null {
     format: value.format,
     model: value.model,
     savedAt: value.savedAt,
+  }
+}
+
+function readPolishResult(value: unknown): PolishResult | null {
+  if (
+    !isRecord(value)
+    || typeof value.content !== 'string'
+    || typeof value.providerName !== 'string'
+    || typeof value.model !== 'string'
+  ) return null
+  return {
+    content: value.content,
+    providerName: value.providerName,
+    model: value.model,
   }
 }
 
@@ -136,8 +155,10 @@ function buildAiEndpoint(provider: AiProviderInput) {
   return `${provider.baseUrl.replace(/\/+$/, '')}${endpointByFormat[provider.format]}`
 }
 
-function buildAiRequest(provider: AiProviderInput, content: string) {
-  const systemPrompt = buildPolishPrompt()
+function buildAiRequest(provider: AiProviderInput, content: string, purpose: 'polish' | 'test' = 'polish') {
+  const systemPrompt = purpose === 'test'
+    ? '请用中文简短回复“连接成功”。'
+    : buildPolishPrompt()
   if (provider.format === 'anthropic_messages') {
     return {
       headers: {
@@ -149,7 +170,7 @@ function buildAiRequest(provider: AiProviderInput, content: string) {
         model: provider.model,
         system: systemPrompt,
         messages: [{ role: 'user', content }],
-        max_tokens: 2000,
+        max_tokens: purpose === 'test' ? 64 : 2000,
       },
     }
   }
@@ -164,7 +185,7 @@ function buildAiRequest(provider: AiProviderInput, content: string) {
         instructions: systemPrompt,
         input: content,
         temperature: 0.3,
-        max_output_tokens: 2000,
+        max_output_tokens: purpose === 'test' ? 64 : 2000,
       },
     }
   }
@@ -180,7 +201,7 @@ function buildAiRequest(provider: AiProviderInput, content: string) {
         { role: 'user', content },
       ],
       temperature: 0.3,
-      max_tokens: 2000,
+      max_tokens: purpose === 'test' ? 64 : 2000,
       stream: false,
     },
   }
@@ -244,21 +265,22 @@ function parseResponsesContent(payload: unknown) {
     .join('\n')
 }
 
-function parsePolishContent(payload: unknown, format: AiProviderFormat) {
+function parseAiContent(payload: unknown, format: AiProviderFormat, maxLength: number) {
   const content = format === 'anthropic_messages'
     ? parseAnthropicContent(payload)
     : format === 'responses'
       ? parseResponsesContent(payload)
       : parseChatCompletionContent(payload)
   const normalized = content.trim()
-  return normalized.length >= 1 && normalized.length <= POLISHED_CONTENT_MAX_LENGTH ? normalized : ''
+  return normalized.length >= 1 && normalized.length <= maxLength ? normalized : ''
 }
 
-export async function polishStudyNoteLocally(input: { content: string; provider: AiProviderInput }): Promise<PolishResult> {
-  const content = input.content.trim()
-  if (!content || content.length > 20_000) throw new Error('学习记录内容需为 1-20000 个字符。')
-  validateProvider(input.provider)
-  const requestPayload = buildAiRequest(input.provider, content)
+async function requestAiFromBrowser(input: {
+  content: string
+  provider: AiProviderInput
+  purpose: 'polish' | 'test'
+}): Promise<PolishResult> {
+  const requestPayload = buildAiRequest(input.provider, input.content, input.purpose)
 
   let response: Response
   try {
@@ -285,11 +307,42 @@ export async function polishStudyNoteLocally(input: { content: string; provider:
     throw new Error('AI 供应商返回了无效 JSON。')
   }
 
-  const polishedContent = parsePolishContent(payload, input.provider.format)
-  if (!polishedContent) throw new Error('AI 供应商返回内容无效。')
+  const parsedContent = parseAiContent(
+    payload,
+    input.provider.format,
+    input.purpose === 'test' ? CONNECTION_TEST_MAX_LENGTH : POLISHED_CONTENT_MAX_LENGTH,
+  )
+  if (!parsedContent) throw new Error('AI 供应商返回内容无效。')
   return {
-    content: polishedContent,
+    content: parsedContent,
     providerName: input.provider.name.trim(),
     model: input.provider.model.trim(),
   }
+}
+
+async function requestAiFromDesktop(channel: 'ai:polishStudyNote' | 'ai:testProvider', payload: unknown): Promise<PolishResult> {
+  const electronApi = getElectronApi()
+  if (!electronApi) throw new Error('当前不是桌面端。')
+  const result = await electronApi.invoke(channel, payload)
+  const parsed = readPolishResult(result)
+  if (!parsed) throw new Error('桌面端返回了无效 AI 结果。')
+  return parsed
+}
+
+export async function polishStudyNoteLocally(input: { content: string; provider: AiProviderInput }): Promise<PolishResult> {
+  const content = input.content.trim()
+  if (!content || content.length > 20_000) throw new Error('学习记录内容需为 1-20000 个字符。')
+  validateProvider(input.provider)
+  if (getElectronApi()) return requestAiFromDesktop('ai:polishStudyNote', { content, provider: input.provider })
+  return requestAiFromBrowser({ content, provider: input.provider, purpose: 'polish' })
+}
+
+export async function testAiProviderLocally(provider: AiProviderInput): Promise<PolishResult> {
+  validateProvider(provider)
+  if (getElectronApi()) return requestAiFromDesktop('ai:testProvider', provider)
+  return requestAiFromBrowser({
+    content: '请测试当前模型连接。',
+    provider,
+    purpose: 'test',
+  })
 }

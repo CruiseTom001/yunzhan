@@ -24,6 +24,7 @@ import {
   loadLocalAiProvider,
   polishStudyNoteLocally,
   saveLocalAiProvider,
+  testAiProviderLocally,
 } from '@/utils/localAiProvider'
 
 const notes = ref<StudyNote[]>([])
@@ -41,6 +42,9 @@ const successMessage = ref('')
 const showAiConfig = ref(false)
 const modelDraft = ref('')
 const configured = ref(false)
+const testingProvider = ref(false)
+const providerTestMessage = ref('')
+const providerTestOk = ref(false)
 
 const provider = reactive({
   name: 'DeepSeek',
@@ -223,6 +227,33 @@ async function saveAiConfig() {
   }
 }
 
+function readProviderInput() {
+  return {
+    name: provider.name.trim(),
+    baseUrl: provider.baseUrl.trim(),
+    apiKey: provider.apiKey.trim(),
+    format: provider.format,
+    model: provider.model.trim(),
+  }
+}
+
+async function testAiConfig() {
+  testingProvider.value = true
+  providerTestMessage.value = ''
+  providerTestOk.value = false
+  errorMessage.value = ''
+  try {
+    const result = await testAiProviderLocally(readProviderInput())
+    providerTestOk.value = true
+    providerTestMessage.value = `连接成功：${result.providerName} / ${result.model}`
+  } catch (error) {
+    providerTestOk.value = false
+    providerTestMessage.value = error instanceof Error ? error.message : 'AI 连接测试失败。'
+  } finally {
+    testingProvider.value = false
+  }
+}
+
 async function polishCurrentNote() {
   const text = content.value.trim()
   if (!text) {
@@ -239,13 +270,7 @@ async function polishCurrentNote() {
   try {
     const result = await polishStudyNoteLocally({
       content: text,
-      provider: {
-        name: provider.name.trim(),
-        baseUrl: provider.baseUrl.trim(),
-        apiKey: provider.apiKey.trim(),
-        format: provider.format,
-        model: provider.model.trim(),
-      },
+      provider: readProviderInput(),
     })
     polishedContent.value = result.content
     selectedProviderName.value = result.providerName
@@ -542,17 +567,37 @@ onMounted(() => {
           </div>
         </div>
 
+        <div
+          v-if="providerTestMessage"
+          class="mt-4 rounded-md border px-3 py-2 text-sm"
+          :class="providerTestOk ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-red-400/30 bg-red-400/10 text-red-200'"
+        >
+          {{ providerTestMessage }}
+        </div>
+
         <div class="mt-6 flex items-center justify-between gap-3">
           <p class="text-xs leading-5 text-gray-500">
-            Base URL 只允许 https 地址；API Key 保存到本机 IndexedDB，不会上传云栈服务器。
+            桌面端测试与润色走本机 IPC，网页端直连供应商；API Key 保存到本机 IndexedDB，不会上传云栈服务器。
           </p>
-          <button
-            type="button"
-            class="shrink-0 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-[#0c0c14] hover:bg-cyan-300"
-            @click="saveAiConfig"
-          >
-            添加供应商
-          </button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm text-gray-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="testingProvider"
+              @click="testAiConfig"
+            >
+              <Loader2 v-if="testingProvider" class="h-4 w-4 animate-spin" />
+              <Check v-else class="h-4 w-4" />
+              测试连接
+            </button>
+            <button
+              type="button"
+              class="rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-[#0c0c14] hover:bg-cyan-300"
+              @click="saveAiConfig"
+            >
+              添加供应商
+            </button>
+          </div>
         </div>
       </div>
     </div>

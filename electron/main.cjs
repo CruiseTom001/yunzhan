@@ -8,6 +8,15 @@ const isDev = !app.isPackaged
 const progressFileName = 'progress.json'
 const backupFileName = 'progress.backup.json'
 const accountIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const aiAllowedFormats = new Set(['anthropic_messages', 'chat_completions', 'responses'])
+const aiProviderNameMaxLength = 80
+const aiBaseUrlMaxLength = 2048
+const aiKeyMaxLength = 4096
+const aiModelMaxLength = 128
+const aiContentMaxLength = 20_000
+const aiPolishedMaxLength = 30_000
+const aiResponseMaxBytes = 100_000
+const aiRequestTimeoutMs = 60_000
 
 function normalizeAccountId(value) {
   if (value === null || value === undefined) return null
@@ -28,6 +37,226 @@ function getProgressPaths(accountId = null) {
     progressPath: path.join(dataDir, progressFileName),
     backupPath: path.join(dataDir, backupFileName),
     tempPath: path.join(dataDir, `${progressFileName}.tmp`),
+  }
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function validateBoundedString(value, maxLength, fieldName) {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} invalid`)
+  }
+  const normalized = value.trim()
+  if (normalized.length < 1 || normalized.length > maxLength) {
+    throw new Error(`${fieldName} invalid`)
+  }
+  return normalized
+}
+
+function validateAiProvider(value) {
+  if (!isPlainObject(value)) throw new Error('provider invalid')
+  const name = validateBoundedString(value.name, aiProviderNameMaxLength, 'provider name')
+  const apiKey = validateBoundedString(value.apiKey, aiKeyMaxLength, 'api key')
+  const model = validateBoundedString(value.model, aiModelMaxLength, 'model')
+  if (typeof value.format !== 'string' || !aiAllowedFormats.has(value.format)) {
+    throw new Error('format invalid')
+  }
+  if (typeof value.baseUrl !== 'string' || value.baseUrl.trim().length > aiBaseUrlMaxLength) {
+    throw new Error('base url invalid')
+  }
+  let baseUrl
+  try {
+    baseUrl = new URL(value.baseUrl.trim())
+  } catch {
+    throw new Error('base url invalid')
+  }
+  if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) {
+    throw new Error('base url invalid')
+  }
+  return {
+    name,
+    baseUrl: baseUrl.href.replace(/\/$/, ''),
+    apiKey,
+    format: value.format,
+    model,
+  }
+}
+
+function buildStudyNotePolishPrompt() {
+  return [
+    '你是云栈学习平台的学习记录润色助手。',
+    '请保留用户自己的学习经历和事实，不新增没有依据的知识点。',
+    '把内容整理成清晰、自然、适合复盘的中文学习记录。',
+    '可以适当分段、修正错别字、补足表达，但不要写成营销文案。',
+  ].join('\n')
+}
+
+function buildAiEndpoint(provider) {
+  const endpointByFormat = {
+    anthropic_messages: '/messages',
+    chat_completions: '/chat/completions',
+    responses: '/responses',
+  }
+  return `${provider.baseUrl.replace(/\/+$/, '')}${endpointByFormat[provider.format]}`
+}
+
+function buildAiRequest(provider, content, purpose = 'polish') {
+  const systemPrompt = purpose === 'test'
+    ? '请用中文简短回复“连接成功”。'
+    : buildStudyNotePolishPrompt()
+  if (provider.format === 'anthropic_messages') {
+    return {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': provider.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: {
+        model: provider.model,
+        system: systemPrompt,
+        messages: [{ role: 'user', content }],
+        max_tokens: purpose === 'test' ? 64 : 2000,
+      },
+    }
+  }
+  if (provider.format === 'responses') {
+    return {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${provider.apiKey}`,
+      },
+      body: {
+        model: provider.model,
+        instructions: systemPrompt,
+        input: content,
+        temperature: 0.3,
+        max_output_tokens: purpose === 'test' ? 64 : 2000,
+      },
+    }
+  }
+  return {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${provider.apiKey}`,
+    },
+    body: {
+      model: provider.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content },
+      ],
+      temperature: 0.3,
+      max_tokens: purpose === 'test' ? 64 : 2000,
+      stream: false,
+    },
+  }
+}
+
+async function readLimitedResponseText(response) {
+  const reader = response.body && response.body.getReader ? response.body.getReader() : null
+  if (!reader) return ''
+  const chunks = []
+  let total = 0
+  let reading = true
+  while (reading) {
+    const { done, value } = await reader.read()
+    if (done) {
+      reading = false
+      continue
+    }
+    total += value.byteLength
+    if (total > aiResponseMaxBytes) {
+      throw new Error('AI 供应商响应过大。')
+    }
+    chunks.push(value)
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks))
+}
+
+function readTextPart(value) {
+  if (typeof value === 'string') return value
+  if (!isPlainObject(value)) return ''
+  if (typeof value.text === 'string') return value.text
+  if (typeof value.content === 'string') return value.content
+  return ''
+}
+
+function parseChatCompletionContent(payload) {
+  if (!isPlainObject(payload) || !Array.isArray(payload.choices)) return ''
+  const choice = payload.choices[0]
+  if (!isPlainObject(choice) || !isPlainObject(choice.message)) return ''
+  return typeof choice.message.content === 'string' ? choice.message.content : ''
+}
+
+function parseAnthropicContent(payload) {
+  if (!isPlainObject(payload)) return ''
+  if (typeof payload.content === 'string') return payload.content
+  if (!Array.isArray(payload.content)) return ''
+  return payload.content.map(readTextPart).filter(Boolean).join('\n')
+}
+
+function parseResponsesContent(payload) {
+  if (!isPlainObject(payload)) return ''
+  if (typeof payload.output_text === 'string') return payload.output_text
+  if (!Array.isArray(payload.output)) return ''
+  return payload.output
+    .flatMap(item => (isPlainObject(item) && Array.isArray(item.content) ? item.content : []))
+    .map(readTextPart)
+    .filter(Boolean)
+    .join('\n')
+}
+
+function parseAiContent(payload, format, maxLength) {
+  const content = format === 'anthropic_messages'
+    ? parseAnthropicContent(payload)
+    : format === 'responses'
+      ? parseResponsesContent(payload)
+      : parseChatCompletionContent(payload)
+  const normalized = content.trim()
+  return normalized.length >= 1 && normalized.length <= maxLength ? normalized : ''
+}
+
+async function requestAiProvider(input, purpose) {
+  if (!isPlainObject(input)) throw new Error('payload invalid')
+  const provider = validateAiProvider(input.provider)
+  const content = purpose === 'test'
+    ? '请测试当前模型连接。'
+    : validateBoundedString(input.content, aiContentMaxLength, 'content')
+  const requestPayload = buildAiRequest(provider, content, purpose)
+
+  let response
+  try {
+    response = await fetch(buildAiEndpoint(provider), {
+      method: 'POST',
+      headers: requestPayload.headers,
+      body: JSON.stringify(requestPayload.body),
+      signal: AbortSignal.timeout(aiRequestTimeoutMs),
+    })
+  } catch (error) {
+    const message = error instanceof Error && error.name === 'TimeoutError'
+      ? 'AI 供应商响应超时。'
+      : '无法连接 AI 供应商。'
+    throw new Error(message)
+  }
+
+  const rawText = await readLimitedResponseText(response)
+  if (!response.ok) throw new Error(`AI 供应商返回错误：HTTP ${response.status}。`)
+
+  let payload
+  try {
+    payload = JSON.parse(rawText)
+  } catch {
+    throw new Error('AI 供应商返回了无效 JSON。')
+  }
+
+  const parsedContent = parseAiContent(payload, provider.format, purpose === 'test' ? 1000 : aiPolishedMaxLength)
+  if (!parsedContent) throw new Error('AI 供应商返回内容无效。')
+  return {
+    content: parsedContent,
+    providerName: provider.name,
+    model: provider.model,
   }
 }
 
@@ -97,6 +326,8 @@ function registerIpc() {
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
   ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
+  ipcMain.handle('ai:polishStudyNote', async (_event, payload) => requestAiProvider(payload, 'polish'))
+  ipcMain.handle('ai:testProvider', async (_event, provider) => requestAiProvider({ provider }, 'test'))
 
   ipcMain.handle('progress:load', async (_event, accountId) => {
     const { progressPath, backupPath } = getProgressPaths(accountId)
