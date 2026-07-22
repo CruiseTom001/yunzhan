@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import {
+  type AiProviderInput,
   type AiProviderFormat,
   type StudyNote,
   deleteStudyNote,
@@ -21,9 +22,12 @@ import {
   saveStudyNote,
 } from '@/utils/studyNotesApi'
 import {
-  loadLocalAiProvider,
+  type LocalAiProviderEntry,
+  deleteLocalAiProvider,
+  loadLocalAiProviders,
   polishStudyNoteLocally,
   saveLocalAiProvider,
+  setActiveLocalAiProvider,
   testAiProviderLocally,
 } from '@/utils/localAiProvider'
 
@@ -41,10 +45,14 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const showAiConfig = ref(false)
 const modelDraft = ref('')
-const configured = ref(false)
 const testingProvider = ref(false)
 const providerTestMessage = ref('')
 const providerTestOk = ref(false)
+const localAiProviders = ref<LocalAiProviderEntry[]>([])
+const activeProviderId = ref<string | null>(null)
+const selectedPolishProviderId = ref<string | null>(null)
+const editingProviderId = ref<string | null>(null)
+const deletingProviderId = ref<string | null>(null)
 const desktopLocalAi = computed(() => typeof window !== 'undefined' && Boolean(window.electronAPI))
 
 const provider = reactive({
@@ -65,17 +73,23 @@ const formatOptions: Array<{ value: AiProviderFormat; label: string }> = [
 const sortedNotes = computed(() => [...notes.value].sort((a, b) => b.date.localeCompare(a.date)))
 const selectedNote = computed(() => notes.value.find(note => note.date === selectedDate.value) ?? null)
 const hasPolishedContent = computed(() => polishedContent.value.trim().length > 0)
-const aiReady = computed(() => desktopLocalAi.value ? configured.value : true)
+const selectedPolishProvider = computed(() => {
+  if (!desktopLocalAi.value) return null
+  return localAiProviders.value.find(item => item.id === selectedPolishProviderId.value)
+    ?? localAiProviders.value[0]
+    ?? null
+})
+const aiReady = computed(() => desktopLocalAi.value ? Boolean(selectedPolishProvider.value) : true)
 const canPolish = computed(() => content.value.trim().length > 0 && aiReady.value && !polishing.value)
 const displayProviderName = computed(() => {
   if (currentAiProviderName.value) return currentAiProviderName.value
   if (!desktopLocalAi.value) return '云栈服务端 AI'
-  return configured.value ? provider.name.trim() : null
+  return selectedPolishProvider.value?.name.trim() ?? null
 })
 const displayModel = computed(() => {
   if (currentAiModel.value) return currentAiModel.value
   if (!desktopLocalAi.value) return '服务端配置'
-  return configured.value ? provider.model.trim() : null
+  return selectedPolishProvider.value?.model.trim() ?? null
 })
 
 function formatLocalDate(date: Date) {
@@ -102,6 +116,63 @@ function formatUpdatedAt(timestamp: number) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function defaultProviderInput(): AiProviderInput {
+  return {
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    apiKey: '',
+    format: 'chat_completions',
+    model: 'deepseek-chat',
+  }
+}
+
+function ensureModelOption(model: string) {
+  if (model && !modelList.value.includes(model)) modelList.value.push(model)
+}
+
+function fillProviderDraft(input: AiProviderInput) {
+  provider.name = input.name
+  provider.baseUrl = input.baseUrl
+  provider.apiKey = input.apiKey
+  provider.format = input.format
+  provider.model = input.model
+  ensureModelOption(input.model)
+}
+
+function readProviderInput(): AiProviderInput {
+  return {
+    name: provider.name.trim(),
+    baseUrl: provider.baseUrl.trim(),
+    apiKey: provider.apiKey.trim(),
+    format: provider.format,
+    model: provider.model.trim(),
+  }
+}
+
+function readSelectedProviderInput(): AiProviderInput | undefined {
+  const selectedProvider = selectedPolishProvider.value
+  if (!selectedProvider) return undefined
+  return {
+    name: selectedProvider.name.trim(),
+    baseUrl: selectedProvider.baseUrl.trim(),
+    apiKey: selectedProvider.apiKey.trim(),
+    format: selectedProvider.format,
+    model: selectedProvider.model.trim(),
+  }
+}
+
+function upsertProvider(entry: LocalAiProviderEntry) {
+  const index = localAiProviders.value.findIndex(item => item.id === entry.id)
+  if (index >= 0) localAiProviders.value.splice(index, 1, entry)
+  else localAiProviders.value.unshift(entry)
+  localAiProviders.value.sort((a, b) => b.savedAt - a.savedAt)
+}
+
+function setSelectedProvider(providerId: string | null) {
+  selectedPolishProviderId.value = providerId
+  activeProviderId.value = providerId
 }
 
 function setTransientMessage(message: string) {
@@ -137,15 +208,12 @@ async function loadAiProvider() {
     return
   }
   try {
-    const stored = await loadLocalAiProvider()
-    if (!stored) return
-    provider.name = stored.name
-    provider.baseUrl = stored.baseUrl
-    provider.apiKey = stored.apiKey
-    provider.format = stored.format
-    provider.model = stored.model
-    if (!modelList.value.includes(stored.model)) modelList.value.push(stored.model)
-    configured.value = true
+    const stored = await loadLocalAiProviders()
+    localAiProviders.value = stored.providers
+    setSelectedProvider(stored.activeProviderId ?? stored.providers[0]?.id ?? null)
+    stored.providers.forEach(item => ensureModelOption(item.model))
+    const selectedProvider = selectedPolishProvider.value
+    if (selectedProvider) fillProviderDraft(selectedProvider)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '本地 AI 配置读取失败。'
   }
@@ -227,14 +295,10 @@ async function saveAiConfig() {
   }
   errorMessage.value = ''
   try {
-    await saveLocalAiProvider({
-      name: provider.name.trim(),
-      baseUrl: provider.baseUrl.trim(),
-      apiKey: provider.apiKey.trim(),
-      format: provider.format,
-      model: provider.model.trim(),
-    })
-    configured.value = true
+    const savedProvider = await saveLocalAiProvider(readProviderInput(), editingProviderId.value ?? undefined)
+    upsertProvider(savedProvider)
+    setSelectedProvider(savedProvider.id)
+    editingProviderId.value = savedProvider.id
     showAiConfig.value = false
     setTransientMessage('AI 配置已保存到本地。')
   } catch (error) {
@@ -242,13 +306,57 @@ async function saveAiConfig() {
   }
 }
 
-function readProviderInput() {
-  return {
-    name: provider.name.trim(),
-    baseUrl: provider.baseUrl.trim(),
-    apiKey: provider.apiKey.trim(),
-    format: provider.format,
-    model: provider.model.trim(),
+async function selectAiProvider(providerId: string) {
+  const selectedProvider = localAiProviders.value.find(item => item.id === providerId)
+  if (!selectedProvider) return
+  setSelectedProvider(selectedProvider.id)
+  fillProviderDraft(selectedProvider)
+  editingProviderId.value = selectedProvider.id
+  errorMessage.value = ''
+  try {
+    await setActiveLocalAiProvider(selectedProvider.id)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '本地 AI 默认供应商保存失败。'
+  }
+}
+
+function startCreateProvider() {
+  editingProviderId.value = null
+  providerTestMessage.value = ''
+  providerTestOk.value = false
+  fillProviderDraft(defaultProviderInput())
+}
+
+function editAiProvider(entry: LocalAiProviderEntry) {
+  editingProviderId.value = entry.id
+  providerTestMessage.value = ''
+  providerTestOk.value = false
+  fillProviderDraft(entry)
+}
+
+async function removeAiProvider(entry: LocalAiProviderEntry) {
+  const confirmed = window.confirm(`确认删除 AI 供应商「${entry.name}」？`)
+  if (!confirmed) return
+  deletingProviderId.value = entry.id
+  providerTestMessage.value = ''
+  providerTestOk.value = false
+  try {
+    const result = await deleteLocalAiProvider(entry.id)
+    localAiProviders.value = result.providers
+    setSelectedProvider(result.activeProviderId ?? result.providers[0]?.id ?? null)
+    const selectedProvider = selectedPolishProvider.value
+    if (selectedProvider) {
+      editingProviderId.value = selectedProvider.id
+      fillProviderDraft(selectedProvider)
+    } else {
+      editingProviderId.value = null
+      fillProviderDraft(defaultProviderInput())
+    }
+    setTransientMessage('AI 供应商已删除。')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '本地 AI 供应商删除失败。'
+  } finally {
+    deletingProviderId.value = null
   }
 }
 
@@ -287,7 +395,7 @@ async function polishCurrentNote() {
   try {
     const result = await polishStudyNoteLocally({
       content: text,
-      provider: desktopLocalAi.value ? readProviderInput() : undefined,
+      provider: desktopLocalAi.value ? readSelectedProviderInput() : undefined,
     })
     polishedContent.value = result.content
     currentAiProviderName.value = result.providerName
@@ -408,6 +516,17 @@ onMounted(() => {
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
+              <select
+                v-if="desktopLocalAi && localAiProviders.length > 0"
+                v-model="selectedPolishProviderId"
+                class="max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme outline-none focus:border-purple-400/40"
+                title="选择本次 AI 润色使用的供应商"
+                @change="selectedPolishProviderId && selectAiProvider(selectedPolishProviderId)"
+              >
+                <option v-for="entry in localAiProviders" :key="entry.id" :value="entry.id">
+                  {{ entry.name }} / {{ entry.model }}
+                </option>
+              </select>
               <button
                 type="button"
                 class="inline-flex items-center gap-2 rounded-md border border-purple-400/20 bg-purple-400/10 px-3 py-2 text-sm text-purple-300 hover:bg-purple-400/15 disabled:cursor-not-allowed disabled:opacity-50"
@@ -514,6 +633,61 @@ onMounted(() => {
         </div>
 
         <div v-else class="space-y-4">
+          <div class="rounded-md border border-white/10 bg-white/[0.03] p-3">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-white">已保存供应商</div>
+                <div class="mt-1 text-xs text-gray-500">润色前可在页面右上方选择本次使用哪个供应商。</div>
+              </div>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md border border-cyan-400/20 px-2.5 py-1.5 text-xs text-cyan-300 hover:bg-cyan-400/10"
+                @click="startCreateProvider"
+              >
+                <Plus class="h-3.5 w-3.5" />
+                新增
+              </button>
+            </div>
+            <div v-if="localAiProviders.length > 0" class="space-y-2">
+              <div
+                v-for="entry in localAiProviders"
+                :key="entry.id"
+                class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"
+              >
+                <button
+                  type="button"
+                  class="min-w-0 flex-1 text-left"
+                  @click="selectAiProvider(entry.id)"
+                >
+                  <div class="truncate text-sm text-white">
+                    {{ entry.name }}
+                    <span v-if="entry.id === selectedPolishProviderId" class="ml-2 text-xs text-cyan-300">当前使用</span>
+                  </div>
+                  <div class="mt-1 truncate text-xs text-gray-500">{{ entry.model }} · {{ entry.baseUrl }}</div>
+                </button>
+                <div class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="rounded-md px-2 py-1 text-xs text-gray-300 hover:bg-white/10"
+                    @click="editAiProvider(entry)"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-md px-2 py-1 text-xs text-red-300 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="deletingProviderId === entry.id"
+                    @click="removeAiProvider(entry)"
+                  >
+                    {{ deletingProviderId === entry.id ? '删除中' : '删除' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="rounded-md border border-dashed border-white/10 px-3 py-4 text-center text-xs text-gray-500">
+              暂无供应商，先在下方填写 DeepSeek、GLM 或其他兼容接口。
+            </div>
+          </div>
           <div>
             <label class="mb-2 block text-sm text-gray-300" for="ai-provider-name">名称</label>
             <input

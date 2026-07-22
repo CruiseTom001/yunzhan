@@ -10,6 +10,8 @@ const DB_NAME = 'yunzhan-local-ai'
 const DB_VERSION = 1
 const STORE_NAME = 'providers'
 const ACTIVE_PROVIDER_KEY = 'active'
+const ACTIVE_PROVIDER_ID_KEY = 'active-provider-id'
+const PROVIDER_KEY_PREFIX = 'provider:'
 const REQUEST_TIMEOUT_MS = 60_000
 const RESPONSE_MAX_BYTES = 100_000
 const POLISHED_CONTENT_MAX_LENGTH = 30_000
@@ -17,7 +19,9 @@ const CONNECTION_TEST_MAX_LENGTH = 1000
 const PROVIDER_ERROR_MAX_LENGTH = 600
 const PROVIDER_ERROR_KEYS = ['message', 'detail', 'reason', 'type', 'code', 'param']
 
-type StoredAiProvider = AiProviderInput & { savedAt: number }
+type StoredAiProvider = AiProviderInput & { id?: string; savedAt: number }
+
+export type LocalAiProviderEntry = AiProviderInput & { id: string; savedAt: number }
 
 function getElectronApi() {
   return typeof window === 'undefined' ? undefined : window.electronAPI
@@ -43,12 +47,41 @@ function readStoredProvider(value: unknown): StoredAiProvider | null {
     || !Number.isFinite(value.savedAt)
   ) return null
   return {
+    ...(typeof value.id === 'string' && value.id.trim() ? { id: value.id } : {}),
     name: value.name,
     baseUrl: value.baseUrl,
     apiKey: value.apiKey,
     format: value.format,
     model: value.model,
     savedAt: value.savedAt,
+  }
+}
+
+function createProviderId() {
+  const cryptoApi = typeof window === 'undefined' ? undefined : window.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function providerStoreKey(providerId: string) {
+  return `${PROVIDER_KEY_PREFIX}${providerId}`
+}
+
+function toProviderInput(provider: StoredAiProvider): AiProviderInput {
+  return {
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+    format: provider.format,
+    model: provider.model,
+  }
+}
+
+function toProviderEntry(provider: StoredAiProvider, fallbackId?: string): LocalAiProviderEntry {
+  return {
+    ...toProviderInput(provider),
+    id: provider.id ?? fallbackId ?? createProviderId(),
+    savedAt: provider.savedAt,
   }
 }
 
@@ -94,7 +127,7 @@ async function readStoreValue(key: string): Promise<unknown> {
   })
 }
 
-async function writeStoreValue(key: string, value: StoredAiProvider): Promise<void> {
+async function writeStoreValue(key: string, value: unknown): Promise<void> {
   const database = await openDatabase()
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readwrite')
@@ -111,22 +144,130 @@ async function writeStoreValue(key: string, value: StoredAiProvider): Promise<vo
   })
 }
 
-export async function loadLocalAiProvider(): Promise<AiProviderInput | null> {
-  const value = await readStoreValue(ACTIVE_PROVIDER_KEY)
-  const provider = readStoredProvider(value)
-  if (!provider) return null
-  return {
-    name: provider.name,
-    baseUrl: provider.baseUrl,
-    apiKey: provider.apiKey,
-    format: provider.format,
-    model: provider.model,
-  }
+async function deleteStoreValue(key: string): Promise<void> {
+  const database = await openDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readwrite')
+    const store = transaction.objectStore(STORE_NAME)
+    store.delete(key)
+    transaction.oncomplete = () => {
+      database.close()
+      resolve()
+    }
+    transaction.onerror = () => {
+      database.close()
+      reject(new Error('本地 AI 配置删除失败。'))
+    }
+  })
 }
 
-export async function saveLocalAiProvider(provider: AiProviderInput): Promise<void> {
+async function readProviderEntries(): Promise<LocalAiProviderEntry[]> {
+  const database = await openDatabase()
+  return new Promise((resolve, reject) => {
+    const providers: LocalAiProviderEntry[] = []
+    const transaction = database.transaction(STORE_NAME, 'readonly')
+    const store = transaction.objectStore(STORE_NAME)
+    const request = store.openCursor()
+    request.onsuccess = () => {
+      const cursor = request.result
+      if (!cursor) return
+      const key = String(cursor.key)
+      if (key.startsWith(PROVIDER_KEY_PREFIX)) {
+        const provider = readStoredProvider(cursor.value)
+        if (provider) providers.push(toProviderEntry(provider, key.slice(PROVIDER_KEY_PREFIX.length)))
+      }
+      cursor.continue()
+    }
+    request.onerror = () => reject(new Error('本地 AI 配置读取失败。'))
+    transaction.oncomplete = () => {
+      database.close()
+      resolve(providers.sort((a, b) => b.savedAt - a.savedAt))
+    }
+    transaction.onerror = () => {
+      database.close()
+      reject(new Error('本地 AI 配置读取失败。'))
+    }
+  })
+}
+
+async function migrateLegacyProvider(): Promise<LocalAiProviderEntry | null> {
+  const legacy = readStoredProvider(await readStoreValue(ACTIVE_PROVIDER_KEY))
+  if (!legacy) return null
+  const entry = toProviderEntry(legacy, legacy.id)
+  await writeStoreValue(providerStoreKey(entry.id), entry)
+  await writeStoreValue(ACTIVE_PROVIDER_ID_KEY, entry.id)
+  return entry
+}
+
+function sanitizeActiveProviderId(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+export async function loadLocalAiProviders(): Promise<{
+  providers: LocalAiProviderEntry[]
+  activeProviderId: string | null
+}> {
+  let providers = await readProviderEntries()
+  let activeProviderId = sanitizeActiveProviderId(await readStoreValue(ACTIVE_PROVIDER_ID_KEY))
+
+  if (providers.length === 0) {
+    const migrated = await migrateLegacyProvider()
+    providers = migrated ? [migrated] : []
+    activeProviderId = migrated?.id ?? null
+  }
+
+  if (providers.length === 0) {
+    return { providers: [], activeProviderId: null }
+  }
+
+  const activeExists = activeProviderId
+    ? providers.some(provider => provider.id === activeProviderId)
+    : false
+  if (activeExists) return { providers, activeProviderId }
+
+  const fallbackId = providers[0].id
+  await writeStoreValue(ACTIVE_PROVIDER_ID_KEY, fallbackId)
+  return { providers, activeProviderId: fallbackId }
+}
+
+export async function loadLocalAiProvider(): Promise<AiProviderInput | null> {
+  const { providers, activeProviderId } = await loadLocalAiProviders()
+  const provider = providers.find(item => item.id === activeProviderId) ?? providers[0]
+  return provider ? toProviderInput(provider) : null
+}
+
+export async function saveLocalAiProvider(provider: AiProviderInput, providerId?: string): Promise<LocalAiProviderEntry> {
   validateProvider(provider)
-  await writeStoreValue(ACTIVE_PROVIDER_KEY, { ...provider, savedAt: Date.now() })
+  const entry: LocalAiProviderEntry = {
+    ...provider,
+    id: providerId && providerId.trim() ? providerId : createProviderId(),
+    savedAt: Date.now(),
+  }
+  await writeStoreValue(providerStoreKey(entry.id), entry)
+  await writeStoreValue(ACTIVE_PROVIDER_ID_KEY, entry.id)
+  return entry
+}
+
+export async function setActiveLocalAiProvider(providerId: string): Promise<void> {
+  if (!providerId.trim()) throw new Error('AI 供应商无效。')
+  await writeStoreValue(ACTIVE_PROVIDER_ID_KEY, providerId)
+}
+
+export async function deleteLocalAiProvider(providerId: string): Promise<{
+  providers: LocalAiProviderEntry[]
+  activeProviderId: string | null
+}> {
+  if (!providerId.trim()) throw new Error('AI 供应商无效。')
+  const previousActiveProviderId = sanitizeActiveProviderId(await readStoreValue(ACTIVE_PROVIDER_ID_KEY))
+  await deleteStoreValue(providerStoreKey(providerId))
+  const providers = await readProviderEntries()
+  const activeProviderId = previousActiveProviderId && previousActiveProviderId !== providerId
+    && providers.some(provider => provider.id === previousActiveProviderId)
+    ? previousActiveProviderId
+    : providers[0]?.id ?? null
+  if (activeProviderId) await writeStoreValue(ACTIVE_PROVIDER_ID_KEY, activeProviderId)
+  else await deleteStoreValue(ACTIVE_PROVIDER_ID_KEY)
+  return { providers, activeProviderId }
 }
 
 export function validateProvider(provider: AiProviderInput) {
