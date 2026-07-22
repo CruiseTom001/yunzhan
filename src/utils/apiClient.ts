@@ -26,6 +26,29 @@ function readErrorMessage(value: unknown) {
   return isRecord(value) && typeof value.error === 'string' ? value.error : '请求失败，请稍后重试。'
 }
 
+function isDesktopApiResponse(value: unknown): value is DesktopApiResponse {
+  return (
+    isRecord(value)
+    && typeof value.ok === 'boolean'
+    && Number.isInteger(value.status)
+    && 'payload' in value
+  )
+}
+
+function serializeHeaders(headers: Headers) {
+  const output: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    output[key] = value
+  })
+  return output
+}
+
+function readDesktopRequestBody(body: BodyInit | null | undefined) {
+  if (body === undefined || body === null) return undefined
+  if (typeof body === 'string') return body
+  throw new ApiError('桌面端暂不支持该请求体格式。', 0, null)
+}
+
 function normalizeApiBaseUrl(value: unknown) {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) return null
   if (value.startsWith('/') && !value.startsWith('//')) return value.replace(/\/$/, '')
@@ -50,19 +73,51 @@ function resolveApiBaseUrl() {
   return apiBaseUrlPromise
 }
 
+async function desktopApiRequest(
+  path: string,
+  options: RequestInit,
+  headers: Headers,
+  timeoutMs: number,
+) {
+  if (!window.electronAPI) throw new ApiError('桌面端接口未就绪。', 0, null)
+  const payload: DesktopApiRequestInput = {
+    path,
+    method: options.method,
+    headers: serializeHeaders(headers),
+    body: readDesktopRequestBody(options.body),
+    timeoutMs,
+  }
+  const response = await window.electronAPI.invoke<DesktopApiResponse>('desktop:apiRequest', payload)
+  if (!isDesktopApiResponse(response)) {
+    throw new ApiError('桌面端返回了无效 API 响应。', 0, null)
+  }
+  if (!response.ok) {
+    throw new ApiError(readErrorMessage(response.payload), response.status, response.payload)
+  }
+  return response.payload
+}
+
 export async function apiRequest(path: string, options: ApiRequestOptions = {}): Promise<unknown> {
   const { timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options
-  const apiBaseUrl = await resolveApiBaseUrl()
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   const headers = new Headers(fetchOptions.headers)
   headers.set('Accept', 'application/json')
   if (fetchOptions.body !== undefined) {
     headers.set('Content-Type', 'application/json')
   }
+
   if (window.electronAPI) {
     headers.set('X-Yunzhan-Client', 'desktop')
+    try {
+      return await desktopApiRequest(path, fetchOptions, headers, timeoutMs)
+    } catch (error: unknown) {
+      if (error instanceof ApiError) throw error
+      throw new ApiError('无法连接云栈账号服务。', 0, null)
+    }
   }
+
+  const apiBaseUrl = await resolveApiBaseUrl()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await fetch(`${apiBaseUrl}${path}`, {

@@ -19,6 +19,16 @@ const aiResponseMaxBytes = 100_000
 const aiRequestTimeoutMs = 60_000
 const aiProviderErrorMaxLength = 600
 const aiProviderErrorKeys = ['message', 'detail', 'reason', 'type', 'code', 'param']
+const desktopApiAllowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+const desktopApiPathMaxLength = 2048
+const desktopApiHeaderValueMaxLength = 2048
+const desktopApiBodyMaxBytes = 2 * 1024 * 1024
+const desktopApiResponseMaxBytes = 2 * 1024 * 1024
+const desktopApiTimeoutDefaultMs = 15_000
+const desktopApiTimeoutMaxMs = 70_000
+const desktopApiCookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const desktopApiForwardedHeaders = new Set(['accept', 'content-type'])
+const desktopApiCookies = new Map()
 
 function normalizeAccountId(value) {
   if (value === null || value === undefined) return null
@@ -83,6 +93,207 @@ function validateAiProvider(value) {
     apiKey,
     format: value.format,
     model,
+  }
+}
+
+function validateDesktopApiPath(value) {
+  if (
+    typeof value !== 'string'
+    || value.length < 1
+    || value.length > desktopApiPathMaxLength
+    || !value.startsWith('/')
+    || value.startsWith('//')
+    || /[\u0000-\u001F\u007F]/.test(value)
+  ) {
+    throw new Error('invalid api path')
+  }
+  return value
+}
+
+function validateDesktopApiMethod(value) {
+  const method = typeof value === 'string' && value.trim()
+    ? value.trim().toUpperCase()
+    : 'GET'
+  if (!desktopApiAllowedMethods.has(method)) {
+    throw new Error('invalid api method')
+  }
+  return method
+}
+
+function validateDesktopApiTimeout(value) {
+  if (value === undefined || value === null) return desktopApiTimeoutDefaultMs
+  if (!Number.isInteger(value) || value < 1000 || value > desktopApiTimeoutMaxMs) {
+    throw new Error('invalid api timeout')
+  }
+  return value
+}
+
+function validateDesktopApiBody(value) {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > desktopApiBodyMaxBytes) {
+    throw new Error('invalid api body')
+  }
+  return value
+}
+
+function validateDesktopApiHeaders(value) {
+  const headers = {}
+  if (value === undefined || value === null) return headers
+  if (!isPlainObject(value)) throw new Error('invalid api headers')
+
+  Object.entries(value).forEach(([key, headerValue]) => {
+    const normalizedKey = key.toLowerCase()
+    if (!desktopApiForwardedHeaders.has(normalizedKey)) return
+    if (typeof headerValue !== 'string' || headerValue.length > desktopApiHeaderValueMaxLength) {
+      throw new Error('invalid api header')
+    }
+    headers[normalizedKey] = headerValue
+  })
+  return headers
+}
+
+function validateDesktopApiRequest(value) {
+  if (!isPlainObject(value)) throw new Error('invalid api payload')
+  return {
+    path: validateDesktopApiPath(value.path),
+    method: validateDesktopApiMethod(value.method),
+    headers: validateDesktopApiHeaders(value.headers),
+    body: validateDesktopApiBody(value.body),
+    timeoutMs: validateDesktopApiTimeout(value.timeoutMs),
+  }
+}
+
+function splitSetCookieHeader(value) {
+  const cookies = []
+  let segmentStart = 0
+  let insideExpires = false
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.slice(index, index + 8).toLowerCase() === 'expires=') {
+      insideExpires = true
+    }
+    if (insideExpires && value[index] === ';') {
+      insideExpires = false
+    }
+    if (!insideExpires && value[index] === ',') {
+      const cookie = value.slice(segmentStart, index).trim()
+      if (cookie) cookies.push(cookie)
+      segmentStart = index + 1
+    }
+  }
+  const cookie = value.slice(segmentStart).trim()
+  if (cookie) cookies.push(cookie)
+  return cookies
+}
+
+function readSetCookieHeaders(headers) {
+  if (typeof headers.getSetCookie === 'function') {
+    return headers.getSetCookie()
+  }
+  const combined = headers.get('set-cookie')
+  return combined ? splitSetCookieHeader(combined) : []
+}
+
+function updateDesktopApiCookies(headers) {
+  readSetCookieHeaders(headers).forEach((setCookieValue) => {
+    const [cookiePair, ...attributes] = setCookieValue.split(';')
+    const separatorIndex = cookiePair.indexOf('=')
+    if (separatorIndex <= 0) return
+
+    const name = cookiePair.slice(0, separatorIndex).trim()
+    const value = cookiePair.slice(separatorIndex + 1).trim()
+    if (!desktopApiCookieNamePattern.test(name)) return
+
+    const shouldDelete = value === '' || attributes.some((attribute) => {
+      const normalized = attribute.trim().toLowerCase()
+      return normalized === 'max-age=0' || normalized.startsWith('expires=thu, 01 jan 1970')
+    })
+    if (shouldDelete) {
+      desktopApiCookies.delete(name)
+      return
+    }
+    desktopApiCookies.set(name, value)
+  })
+}
+
+function buildDesktopApiCookieHeader() {
+  return Array.from(desktopApiCookies.entries())
+    .map(([name, value]) => `${name}=${value}`)
+    .join('; ')
+}
+
+async function readLimitedJsonPayload(response) {
+  const reader = response.body && response.body.getReader ? response.body.getReader() : null
+  if (!reader) return null
+  const chunks = []
+  let total = 0
+  let reading = true
+  while (reading) {
+    const { done, value } = await reader.read()
+    if (done) {
+      reading = false
+      continue
+    }
+    total += value.byteLength
+    if (total > desktopApiResponseMaxBytes) {
+      throw new Error('api response too large')
+    }
+    chunks.push(value)
+  }
+  const rawText = new TextDecoder().decode(Buffer.concat(chunks))
+  if (!rawText.trim()) return null
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) return null
+  return JSON.parse(rawText)
+}
+
+function buildDesktopApiUrl(configuredApiOrigin, requestPath) {
+  const url = new URL(`/api${requestPath}`, configuredApiOrigin)
+  if (url.origin !== configuredApiOrigin || !url.pathname.startsWith('/api/')) {
+    throw new Error('invalid api target')
+  }
+  return url.toString()
+}
+
+function buildDesktopApiError(error) {
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+    return { ok: false, status: 0, payload: { error: '服务器响应超时。' } }
+  }
+  return { ok: false, status: 0, payload: { error: '无法连接云栈账号服务。' } }
+}
+
+async function requestDesktopApi(input) {
+  const configuredApiOrigin = getConfiguredApiOrigin()
+  if (!configuredApiOrigin) {
+    return { ok: false, status: 0, payload: { error: '桌面端尚未配置云栈账号服务地址。' } }
+  }
+
+  const request = validateDesktopApiRequest(input)
+  const headers = {
+    Accept: request.headers.accept ?? 'application/json',
+    'X-Yunzhan-Client': 'desktop',
+    Origin: 'null',
+  }
+  if (request.body !== undefined) {
+    headers['Content-Type'] = request.headers['content-type'] ?? 'application/json'
+  }
+  const cookieHeader = buildDesktopApiCookieHeader()
+  if (cookieHeader) headers.Cookie = cookieHeader
+
+  try {
+    const response = await fetch(buildDesktopApiUrl(configuredApiOrigin, request.path), {
+      method: request.method,
+      headers,
+      body: request.body,
+      signal: AbortSignal.timeout(request.timeoutMs),
+    })
+    updateDesktopApiCookies(response.headers)
+    return {
+      ok: response.ok,
+      status: response.status,
+      payload: await readLimitedJsonPayload(response),
+    }
+  } catch (error) {
+    return buildDesktopApiError(error)
   }
 }
 
@@ -433,6 +644,7 @@ function registerIpc() {
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
   ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
+  ipcMain.handle('desktop:apiRequest', async (_event, payload) => requestDesktopApi(payload))
   ipcMain.handle('ai:polishStudyNote', async (_event, payload) => requestAiProvider(payload, 'polish'))
   ipcMain.handle('ai:testProvider', async (_event, provider) => requestAiProvider({ provider }, 'test'))
 
