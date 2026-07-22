@@ -1,5 +1,5 @@
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
-const API_TIMEOUT_MS = 15_000
+const API_TIMEOUT_MS = 45_000
 let apiBaseUrlPromise: Promise<string> | null = null
 
 export interface ApiRequestOptions extends RequestInit {
