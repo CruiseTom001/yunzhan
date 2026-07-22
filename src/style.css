@@ -763,3 +763,20 @@ body {
   padding: 0.1em 0.3em;
   border-radius: 3px;
 }
+/* ========== 原生 select 下拉选项颜色修正 ========== */
+/* 深色主题下，原生 <option> 默认使用系统白底，会与继承的白色文字撞色，导致看不见选中项。
+   这里显式给 option 设置深色背景与浅色文字，下拉项即可在深色主题下正常可读。 */
+[data-theme="dark"] select option,
+[data-theme="dark"] select option:checked,
+[data-theme="dark"] select option:hover {
+  background-color: #1f2937 !important;
+  color: #f3f4f6 !important;
+}
+
+/* 浅色主题下，option 用浅灰背景 + 深色文字，保持与页面浅色基调一致 */
+[data-theme="light"] select option,
+[data-theme="light"] select option:checked,
+[data-theme="light"] select option:hover {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
