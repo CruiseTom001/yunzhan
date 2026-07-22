@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron')
 const fs = require('fs/promises')
 const fsSync = require('fs')
 const path = require('path')
@@ -280,7 +280,7 @@ async function requestDesktopApi(input) {
   if (cookieHeader) headers.Cookie = cookieHeader
 
   try {
-    const response = await fetch(buildDesktopApiUrl(configuredApiOrigin, request.path), {
+    const response = await net.fetch(buildDesktopApiUrl(configuredApiOrigin, request.path), {
       method: request.method,
       headers,
       body: request.body,
