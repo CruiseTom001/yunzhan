@@ -28,6 +28,13 @@ export interface AiProviderInput {
   model: string
 }
 
+export interface ServerAiProviderSummary {
+  id: string
+  name: string
+  format: AiProviderFormat
+  model: string
+}
+
 export interface PolishResult {
   content: string
   providerName: string
@@ -36,6 +43,27 @@ export interface PolishResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isFormat(value: unknown): value is AiProviderFormat {
+  return value === 'anthropic_messages' || value === 'chat_completions' || value === 'responses'
+}
+
+function readServerAiProviderSummary(value: unknown): ServerAiProviderSummary | null {
+  if (
+    !isRecord(value)
+    || typeof value.id !== 'string'
+    || !value.id.trim()
+    || !isFormat(value.format)
+    || typeof value.name !== 'string'
+    || typeof value.model !== 'string'
+  ) return null
+  return {
+    id: value.id,
+    name: value.name,
+    format: value.format,
+    model: value.model,
+  }
 }
 
 function isTimestamp(value: unknown): value is number {
@@ -136,9 +164,22 @@ export async function deleteStudyNote(date: string) {
   if (!readOkPayload(payload)) throw new Error('账号服务返回了无效删除结果。')
 }
 
-export async function testServerAiProvider(): Promise<PolishResult> {
+export async function listServerAiProviders(): Promise<ServerAiProviderSummary[]> {
+  const payload = await apiRequest('/study-notes/ai/providers')
+  if (!isRecord(payload) || !Array.isArray(payload.providers)) {
+    throw new Error('账号服务返回了无效 AI 供应商列表。')
+  }
+  const providers = payload.providers.map(readServerAiProviderSummary)
+  if (providers.some(item => item === null)) {
+    throw new Error('账号服务返回了无效 AI 供应商列表。')
+  }
+  return providers.filter((item): item is ServerAiProviderSummary => item !== null)
+}
+
+export async function testServerAiProvider(providerId?: string): Promise<PolishResult> {
   const payload = await apiRequest('/study-notes/ai/test', {
     method: 'POST',
+    body: JSON.stringify(buildProviderIdBody(providerId)),
     timeoutMs: AI_API_TIMEOUT_MS,
   })
   const result = readPolishPayload(payload)
@@ -146,15 +187,20 @@ export async function testServerAiProvider(): Promise<PolishResult> {
   return result
 }
 
-export async function polishStudyNoteViaServer(content: string): Promise<PolishResult> {
+export async function polishStudyNoteViaServer(content: string, providerId?: string): Promise<PolishResult> {
   const payload = await apiRequest('/study-notes/ai/polish', {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, ...buildProviderIdBody(providerId) }),
     timeoutMs: AI_API_TIMEOUT_MS,
   })
   const result = readPolishPayload(payload)
   if (!result) throw new Error('账号服务返回了无效 AI 润色结果。')
   return result
+}
+
+function buildProviderIdBody(providerId?: string): Record<string, string> {
+  if (typeof providerId === 'string' && providerId.trim()) return { providerId: providerId.trim() }
+  return {}
 }
 
 /**
@@ -163,6 +209,7 @@ export async function polishStudyNoteViaServer(content: string): Promise<PolishR
  */
 export async function polishStudyNoteViaServerStream(
   content: string,
+  providerId: string | null,
   onDelta: (text: string) => void,
   onDone: (result: PolishResult) => void,
 ): Promise<void> {
@@ -177,7 +224,7 @@ export async function polishStudyNoteViaServerStream(
         'Accept': 'text/event-stream',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, ...buildProviderIdBody(providerId ?? undefined) }),
       credentials: 'include',
     })
   } catch {

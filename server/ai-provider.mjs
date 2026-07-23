@@ -3,6 +3,9 @@ const AI_PROVIDER_NAME_MAX_LENGTH = 80
 const AI_BASE_URL_MAX_LENGTH = 2048
 const AI_KEY_MAX_LENGTH = 4096
 const AI_MODEL_MAX_LENGTH = 128
+const AI_PROVIDER_ID_MAX_LENGTH = 64
+const AI_PROVIDERS_JSON_MAX_LENGTH = 200_000
+const AI_PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
 const AI_CONTENT_MAX_LENGTH = 20_000
 const AI_POLISHED_MAX_LENGTH = 30_000
 const AI_TEST_MAX_LENGTH = 1000
@@ -20,37 +23,130 @@ function validateBoundedString(value, maxLength, label) {
   return trimmed
 }
 
-function validateAiBaseUrl(value) {
+function validateAiBaseUrl(value, label = 'AI_BASE_URL') {
   if (typeof value !== 'string' || value.trim().length > AI_BASE_URL_MAX_LENGTH) {
-    throw new Error('AI_BASE_URL 配置无效。')
+    throw new Error(`${label} 配置无效。`)
   }
   let parsed
   try {
     parsed = new URL(value.trim())
   } catch {
-    throw new Error('AI_BASE_URL 配置无效。')
+    throw new Error(`${label} 配置无效。`)
   }
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error('AI_BASE_URL 必须是 https 地址，且不能包含账号、查询参数或片段。')
+    throw new Error(`${label} 必须是 https 地址，且不能包含账号、查询参数或片段。`)
   }
   return value.trim().replace(/\/+$/, '')
 }
 
-export function loadServerAiProvider(environment = process.env) {
+export class AIProviderError extends Error {
+  constructor(message, statusCode = 500) {
+    super(message)
+    this.statusCode = statusCode
+  }
+}
+
+function validateProviderId(value) {
+  if (typeof value !== 'string' || !AI_PROVIDER_ID_PATTERN.test(value.trim())) {
+    throw new AIProviderError('AI 供应商 id 格式无效。', 400)
+  }
+  return value.trim()
+}
+
+function normalizeProvider(raw, index) {
+  const label = `AI 提供商配置第 ${index + 1} 项`
+  if (!isPlainObject(raw)) throw new Error(`${label} 无效。`)
+  const id = validateProviderId(raw.id)
+  const name = validateBoundedString(raw.name, AI_PROVIDER_NAME_MAX_LENGTH, `${label} name`)
+  const baseUrl = validateAiBaseUrl(raw.baseUrl, `${label} baseUrl`)
+  const apiKey = validateBoundedString(raw.apiKey, AI_KEY_MAX_LENGTH, `${label} apiKey`)
+  const model = validateBoundedString(raw.model, AI_MODEL_MAX_LENGTH, `${label} model`)
+  const format = typeof raw.format === 'string' ? raw.format.trim() : 'chat_completions'
+  if (!AI_ALLOWED_FORMATS.has(format)) throw new Error(`${label} format 无效。`)
+  return { id, name, baseUrl, apiKey, format, model }
+}
+
+function loadLegacyProvider(environment) {
   const baseUrlRaw = environment.AI_BASE_URL?.trim() ?? ''
   const apiKeyRaw = environment.AI_API_KEY?.trim() ?? ''
   const modelRaw = environment.AI_MODEL?.trim() ?? ''
   if (!baseUrlRaw || !apiKeyRaw || !modelRaw) return null
-
   const format = environment.AI_API_FORMAT?.trim() || 'chat_completions'
   if (!AI_ALLOWED_FORMATS.has(format)) throw new Error('AI_API_FORMAT 配置无效。')
-  return {
+      return {
+    id: safeHostToId(baseUrlRaw),
     name: validateBoundedString(environment.AI_PROVIDER_NAME ?? '云栈 AI', AI_PROVIDER_NAME_MAX_LENGTH, 'AI_PROVIDER_NAME'),
     baseUrl: validateAiBaseUrl(baseUrlRaw),
     apiKey: validateBoundedString(apiKeyRaw, AI_KEY_MAX_LENGTH, 'AI_API_KEY'),
     format,
     model: validateBoundedString(modelRaw, AI_MODEL_MAX_LENGTH, 'AI_MODEL'),
   }
+}
+
+function safeHostToId(baseUrl) {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase()
+    const slugged = hostname.replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
+    if (slugged && AI_PROVIDER_ID_PATTERN.test(slugged)) return slugged
+  } catch { /* ignore */ }
+  // host 不合规时降级为稳定默认值，避免抛错泄露内部细节
+  return 'default'
+}
+
+function loadProvidersFromJson(environment) {
+  const raw = environment.AI_PROVIDERS_JSON
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  if (raw.trim().length > AI_PROVIDERS_JSON_MAX_LENGTH) {
+    throw new Error('AI_PROVIDERS_JSON 配置过大。')
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error('AI_PROVIDERS_JSON 不是有效的 JSON。')
+  }
+  const list = Array.isArray(parsed) ? parsed : null
+  if (!list) throw new Error('AI_PROVIDERS_JSON 必须是对象数组。')
+  if (list.length === 0) return []
+  const providers = []
+  const seenIds = new Set()
+  list.forEach((item, index) => {
+    const provider = normalizeProvider(item, index)
+    if (seenIds.has(provider.id)) {
+      throw new Error(`AI 提供商配置第 ${index + 1} 项 id 重复。`)
+    }
+    seenIds.add(provider.id)
+    providers.push(provider)
+  })
+  return providers
+}
+
+/** 加载所有服务端 AI 供应商配置，不影响旧单供应商环境变量。 */
+export function loadServerAiProviders(environment = process.env) {
+  const fromJson = loadProvidersFromJson(environment)
+  if (fromJson !== null) return fromJson
+  const legacy = loadLegacyProvider(environment)
+  return legacy ? [legacy] : []
+}
+
+/** 选定单项供应商；providerId 为空则返回第一个。 */
+export function loadServerAiProvider(environment = process.env, providerId) {
+  const providers = loadServerAiProviders(environment)
+  if (providers.length === 0) return null
+  if (!providerId) return providers[0]
+  const match = providers.find(item => item.id === providerId)
+  if (!match) throw new AIProviderError('选择的 AI 供应商不存在。', 404)
+  return match
+}
+
+/** 列出不含 apiKey 的安全摘要，用于下发到前端。 */
+export function listServerAiProviderSummaries(environment = process.env) {
+  return loadServerAiProviders(environment).map(provider => ({
+    id: provider.id,
+    name: provider.name,
+    format: provider.format,
+    model: provider.model,
+  }))
 }
 
 function buildStudyNotePolishPrompt() {
@@ -193,8 +289,9 @@ export async function requestStudyNoteAi({
   environment = process.env,
   fetchImplementation = globalThis.fetch,
   purpose = 'polish',
+  providerId,
 }) {
-  const provider = loadServerAiProvider(environment)
+  const provider = loadServerAiProvider(environment, providerId)
   if (!provider) {
     const error = new Error('服务端 AI 尚未配置。')
     error.statusCode = 503
@@ -272,8 +369,15 @@ export async function requestStudyNoteAiStream({
   onDelta,
   onDone,
   onError,
+  providerId,
 }) {
-  const provider = loadServerAiProvider(environment)
+  let provider
+  try {
+    provider = loadServerAiProvider(environment, providerId)
+  } catch (error) {
+    onError(error instanceof Error ? error.message : '选择的 AI 供应商不存在。')
+    return
+  }
   if (!provider) {
     onError('服务端 AI 尚未配置。')
     return

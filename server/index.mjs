@@ -10,7 +10,7 @@ import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
-import { requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
+import { listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
 import { isDesktopOriginAllowed } from './origin-validation.mjs'
 import {
@@ -161,6 +161,28 @@ function summarizeProgress(payload) {
 
 function hasOnlyKeys(value, allowedKeys) {
   return isRecord(value) && Object.keys(value).every(key => allowedKeys.has(key))
+}
+
+const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
+
+/** 解析可选 providerId；返回 string | null | undefined。undefined 表示格式非法。 */
+function readOptionalProviderId(value) {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return PROVIDER_ID_RE.test(trimmed) ? trimmed : undefined
+}
+
+function handleAiRequestError(error, response) {
+  if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
+    const statusCode = error.statusCode
+    if (statusCode >= 400 && statusCode < 600) {
+      response.status(statusCode).json({ error: error.message || 'AI 请求失败。' })
+      return
+    }
+  }
+  response.status(502).json({ error: error instanceof Error ? error.message : 'AI 请求失败。' })
 }
 
 function validateStudyNoteDate(value) {
@@ -1234,15 +1256,38 @@ app.delete('/api/study-notes/:date', requireAuth, asyncRoute(async (request, res
   response.json({ ok: true })
 }))
 
-app.post('/api/study-notes/ai/test', requireAuth, asyncRoute(async (_request, response) => {
-  const result = await requestStudyNoteAi({ purpose: 'test' })
-  response.json(result)
+app.get('/api/study-notes/ai/providers', requireAuth, asyncRoute(async (_request, response) => {
+  response.json({ providers: listServerAiProviderSummaries() })
+}))
+
+app.post('/api/study-notes/ai/test', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['providerId'])
+  if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
+    response.status(400).json({ error: 'AI 测试参数无效。' })
+    return
+  }
+  const providerId = readOptionalProviderId(request.body?.providerId)
+  if (providerId === undefined) {
+    response.status(400).json({ error: 'AI 供应商 id 格式无效。' })
+    return
+  }
+  try {
+    const result = await requestStudyNoteAi({ purpose: 'test', providerId })
+    response.json(result)
+  } catch (error) {
+    handleAiRequestError(error, response)
+  }
 }))
 
 app.post('/api/study-notes/ai/polish', requireAuth, asyncRoute(async (request, response) => {
-  const allowedKeys = new Set(['content'])
-  if (!hasOnlyKeys(request.body, allowedKeys)) {
+  const allowedKeys = new Set(['content', 'providerId'])
+  if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
     response.status(400).json({ error: 'AI 润色参数无效。' })
+    return
+  }
+  const providerId = readOptionalProviderId(request.body?.providerId)
+  if (providerId === undefined) {
+    response.status(400).json({ error: 'AI 供应商 id 格式无效。' })
     return
   }
   const content = validateStudyNoteContent(request.body.content, STUDY_NOTE_CONTENT_MAX_LENGTH)
@@ -1250,14 +1295,23 @@ app.post('/api/study-notes/ai/polish', requireAuth, asyncRoute(async (request, r
     response.status(400).json({ error: '学习记录内容需为 1-20000 个字符。' })
     return
   }
-  const result = await requestStudyNoteAi({ content, purpose: 'polish' })
-  response.json(result)
+  try {
+    const result = await requestStudyNoteAi({ content, purpose: 'polish', providerId })
+    response.json(result)
+  } catch (error) {
+    handleAiRequestError(error, response)
+  }
 }))
 
 app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (request, response) => {
-  const allowedKeys = new Set(['content'])
-  if (!hasOnlyKeys(request.body, allowedKeys)) {
+  const allowedKeys = new Set(['content', 'providerId'])
+  if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
     response.status(400).json({ error: 'AI 润色参数无效。' })
+    return
+  }
+  const providerId = readOptionalProviderId(request.body?.providerId)
+  if (providerId === undefined) {
+    response.status(400).json({ error: 'AI 供应商 id 格式无效。' })
     return
   }
   const content = validateStudyNoteContent(request.body.content, STUDY_NOTE_CONTENT_MAX_LENGTH)
@@ -1287,6 +1341,7 @@ app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (req
   try {
     await requestStudyNoteAiStream({
       content,
+      providerId,
       onDelta(text) {
         sendEvent('delta', { content: text })
       },

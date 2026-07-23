@@ -3,6 +3,11 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/) 简化版,每条变更在括号内标注功能象限:
 A = 必须同步(进度/实验/IPC/Schema) · B = 推荐同步(UI/内容) · C = 桌面专属 · D = 桌面跳过。
 
+## [1.2.3] - 2026-07-23
+
+### 新增
+- 网页端每日学习记录支持从后端配置多个 AI 供应商，并在润色前选择使用。后端通过 `AI_PROVIDERS_JSON` 环境变量配置；新增 `GET /api/study-notes/ai/providers` 接口下发不含 API Key 的供应商列表；向前兼容旧的 `AI_API_KEY` 等单供应商环境变量。(Web 端 B 象限同步)
+
 ## [1.2.2] - 2026-07-23
 
 ### 新增

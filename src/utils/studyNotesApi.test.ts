@@ -8,6 +8,7 @@ vi.mock('@/utils/apiClient', () => ({
 import { apiRequest, resolveApiOrigin } from '@/utils/apiClient'
 import {
   deleteStudyNote,
+  listServerAiProviders,
   listStudyNotes,
   polishStudyNoteViaServer,
   polishStudyNoteViaServerStream,
@@ -80,10 +81,11 @@ describe('studyNotesApi type guards', () => {
       providerName: '云栈 AI',
       model: 'deepseek-chat',
     }))
-    const result = await testServerAiProvider()
+    const result = await testServerAiProvider('deepseek')
     expect(result.providerName).toBe('云栈 AI')
     expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/test', expect.objectContaining({
       method: 'POST',
+      body: JSON.stringify({ providerId: 'deepseek' }),
       timeoutMs: 65_000,
     }))
   })
@@ -94,18 +96,52 @@ describe('studyNotesApi type guards', () => {
       providerName: '云栈 AI',
       model: 'deepseek-chat',
     }))
-    const result = await polishStudyNoteViaServer('学了 Docker 网络')
+    const result = await polishStudyNoteViaServer('学了 Docker 网络', 'glm')
     expect(result.content).toContain('Docker')
     expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/polish', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ content: '学了 Docker 网络' }),
+      body: JSON.stringify({ content: '学了 Docker 网络', providerId: 'glm' }),
       timeoutMs: 65_000,
     }))
+  })
+
+  it('omits providerId in polish request body when not provided', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      content: 'ok',
+      providerName: '云栈 AI',
+      model: 'm',
+    }))
+    await polishStudyNoteViaServer('内容')
+    const body = JSON.parse(mockedApiRequest.mock.calls[0]?.[1]?.body as string)
+    expect(body).toEqual({ content: '内容' })
   })
 
   it('rejects invalid server AI response', async () => {
     mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
     await expect(testServerAiProvider()).rejects.toThrow('无效 AI 测试结果')
+  })
+
+  it('parses server provider list', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      providers: [
+        { id: 'deepseek', name: 'DeepSeek', format: 'chat_completions', model: 'deepseek-chat' },
+        { id: 'glm', name: '智谱 GLM', format: 'chat_completions', model: 'glm-4-flash' },
+      ],
+    }))
+    const providers = await listServerAiProviders()
+    expect(providers).toHaveLength(2)
+    expect(providers[0].id).toBe('deepseek')
+    expect(providers[1].model).toBe('glm-4-flash')
+    expect(mockedApiRequest).toHaveBeenCalledWith('/study-notes/ai/providers')
+  })
+
+  it('rejects invalid server provider list', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      providers: [{ id: 'bad', name: 'Bad', format: 'unsupported', model: 'm' }],
+    }))
+    await expect(listServerAiProviders()).rejects.toThrow('无效 AI 供应商列表')
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
+    await expect(listServerAiProviders()).rejects.toThrow('无效 AI 供应商列表')
   })
 })
 
@@ -142,11 +178,16 @@ describe('studyNotesApi streaming', () => {
     ]
 
     const originalFetch = globalThis.fetch
-    vi.stubGlobal('fetch', async () => createSseResponse(sseLines))
+    let requestBody = ''
+    vi.stubGlobal('fetch', async (_url, options) => {
+      requestBody = options?.body as string
+      return createSseResponse(sseLines)
+    })
 
     try {
       await polishStudyNoteViaServerStream(
         '学了 Docker',
+        'glm',
         (delta) => { deltas.push(delta) },
         (result) => { doneResult = result },
       )
@@ -160,6 +201,7 @@ describe('studyNotesApi streaming', () => {
       providerName: '云栈 AI',
       model: 'deepseek-chat',
     })
+    expect(JSON.parse(requestBody)).toEqual({ content: '学了 Docker', providerId: 'glm' })
   })
 
   it('throws on error event from server', async () => {
@@ -172,6 +214,7 @@ describe('studyNotesApi streaming', () => {
 
     await expect(polishStudyNoteViaServerStream(
       '内容',
+      null,
       () => {},
       () => {},
     )).rejects.toThrow('服务端 AI 尚未配置。')

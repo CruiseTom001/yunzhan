@@ -16,12 +16,15 @@ import {
 import {
   type AiProviderInput,
   type AiProviderFormat,
+  type ServerAiProviderSummary,
   type StudyNote,
   deleteStudyNote,
+  listServerAiProviders,
   listStudyNotes,
   polishStudyNoteViaServer,
   polishStudyNoteViaServerStream,
   saveStudyNote,
+  testServerAiProvider,
 } from '@/utils/studyNotesApi'
 import {
   type LocalAiProviderEntry,
@@ -55,6 +58,9 @@ const activeProviderId = ref<string | null>(null)
 const selectedPolishProviderId = ref<string | null>(null)
 const editingProviderId = ref<string | null>(null)
 const deletingProviderId = ref<string | null>(null)
+const serverAiProviders = ref<ServerAiProviderSummary[]>([])
+const selectedServerProviderId = ref<string | null>(null)
+const loadingServerProviders = ref(false)
 const desktopLocalAi = computed(() => typeof window !== 'undefined' && Boolean(window.electronAPI))
 
 const provider = reactive({
@@ -81,16 +87,26 @@ const selectedPolishProvider = computed(() => {
     ?? localAiProviders.value[0]
     ?? null
 })
-const aiReady = computed(() => desktopLocalAi.value ? Boolean(selectedPolishProvider.value) : true)
+const aiReady = computed(() => {
+  if (desktopLocalAi.value) return Boolean(selectedPolishProvider.value)
+  // 网页端：必须加载完成且至少有一个可用供应商
+  return !loadingServerProviders.value && serverAiProviders.value.length > 0
+})
+const selectedServerProvider = computed(() => {
+  if (desktopLocalAi.value) return null
+  return serverAiProviders.value.find(item => item.id === selectedServerProviderId.value)
+    ?? serverAiProviders.value[0]
+    ?? null
+})
 const canPolish = computed(() => content.value.trim().length > 0 && aiReady.value && !polishing.value)
 const displayProviderName = computed(() => {
   if (currentAiProviderName.value) return currentAiProviderName.value
-  if (!desktopLocalAi.value) return '云栈服务端 AI'
+  if (!desktopLocalAi.value) return selectedServerProvider.value?.name ?? null
   return selectedPolishProvider.value?.name.trim() ?? null
 })
 const displayModel = computed(() => {
   if (currentAiModel.value) return currentAiModel.value
-  if (!desktopLocalAi.value) return '服务端配置'
+  if (!desktopLocalAi.value) return selectedServerProvider.value?.model ?? null
   return selectedPolishProvider.value?.model.trim() ?? null
 })
 
@@ -207,6 +223,7 @@ async function loadNotes() {
 
 async function loadAiProvider() {
   if (!desktopLocalAi.value) {
+    await loadServerProviders()
     return
   }
   try {
@@ -218,6 +235,23 @@ async function loadAiProvider() {
     if (selectedProvider) fillProviderDraft(selectedProvider)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '本地 AI 配置读取失败。'
+  }
+}
+
+async function loadServerProviders() {
+  loadingServerProviders.value = true
+  try {
+    const providers = await listServerAiProviders()
+    serverAiProviders.value = providers
+    const activeMatch = selectedServerProviderId.value
+      && providers.some(item => item.id === selectedServerProviderId.value)
+      ? selectedServerProviderId.value
+      : providers[0]?.id ?? null
+    selectedServerProviderId.value = activeMatch
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '服务端 AI 供应商加载失败。'
+  } finally {
+    loadingServerProviders.value = false
   }
 }
 
@@ -370,7 +404,7 @@ async function testAiConfig() {
   try {
     const result = desktopLocalAi.value
       ? await testAiProviderLocally(readProviderInput())
-      : await testAiProviderLocally()
+      : await testServerAiProvider(selectedServerProvider.value?.id)
     providerTestOk.value = true
     providerTestMessage.value = `连接成功：${result.providerName} / ${result.model}`
   } catch (error) {
@@ -411,9 +445,11 @@ async function polishCurrentNote() {
       setTransientMessage('AI 润色已生成，确认后可保存。')
     } else {
       // 网页端：优先走流式 API，失败回退非流式
+      const serverProviderId = selectedServerProvider.value?.id ?? null
       try {
         await polishStudyNoteViaServerStream(
           text,
+          serverProviderId,
           (delta) => {
             polishedContent.value += delta
           },
@@ -427,7 +463,7 @@ async function polishCurrentNote() {
         )
       } catch {
         // 流式失败：回退到非流式 API
-        const result = await polishStudyNoteViaServer(text)
+        const result = await polishStudyNoteViaServer(text, serverProviderId ?? undefined)
         polishedContent.value = result.content
         currentAiProviderName.value = result.providerName
         currentAiModel.value = result.model
@@ -560,6 +596,24 @@ onMounted(() => {
                   {{ entry.name }} / {{ entry.model }}
                 </option>
               </select>
+              <select
+                v-else-if="!desktopLocalAi && loadingServerProviders"
+                class="max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme-dim"
+                title="正在加载服务端 AI 供应商"
+                disabled
+              >
+                <option>加载中...</option>
+              </select>
+              <select
+                v-else-if="!desktopLocalAi && serverAiProviders.length > 1"
+                v-model="selectedServerProviderId"
+                class="max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme outline-none focus:border-purple-400/40"
+                title="选择本次 AI 润色使用的服务端供应商"
+              >
+                <option v-for="entry in serverAiProviders" :key="entry.id" :value="entry.id">
+                  {{ entry.name }} / {{ entry.model }}
+                </option>
+              </select>
               <button
                 type="button"
                 class="inline-flex items-center gap-2 rounded-md border border-purple-400/20 bg-purple-400/10 px-3 py-2 text-sm text-purple-300 hover:bg-purple-400/15 disabled:cursor-not-allowed disabled:opacity-50"
@@ -661,8 +715,37 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="!desktopLocalAi" class="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-100">
-          网页端使用云栈后端统一配置的 AI Key。前端只把学习记录内容发给云栈后端，由后端调用 AI 供应商后返回结果；浏览器不会看到 API Key。
+        <div v-if="!desktopLocalAi" class="space-y-3">
+          <div class="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-100">
+            网页端使用云栈后端统一配置的 AI Key。前端只把学习记录内容发给云栈后端，由后端调用 AI 供应商后返回结果；浏览器不会看到 API Key。
+          </div>
+          <div class="rounded-md border border-white/10 bg-white/[0.03] p-3">
+            <div class="text-sm font-semibold text-white">当前后端可用供应商</div>
+            <div class="mt-1 text-xs text-gray-500">润色前可在页面右上方选择本次使用哪个供应商。API Key 不会下发到浏览器。</div>
+            <div v-if="loadingServerProviders" class="mt-2 text-xs text-gray-400">正在加载服务端 AI 供应商...</div>
+            <div v-else-if="serverAiProviders.length > 0" class="mt-2 space-y-2">
+              <div
+                v-for="entry in serverAiProviders"
+                :key="entry.id"
+                class="flex items-center justify-between gap-2 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"
+              >
+                <button
+                  type="button"
+                  class="min-w-0 flex-1 text-left"
+                  @click="selectedServerProviderId = entry.id"
+                >
+                  <div class="truncate text-sm text-white">
+                    {{ entry.name }}
+                    <span v-if="entry.id === selectedServerProviderId" class="ml-2 text-xs text-cyan-300">当前使用</span>
+                  </div>
+                  <div class="mt-1 truncate text-xs text-gray-500">{{ entry.model }} · {{ entry.format }}</div>
+                </button>
+              </div>
+            </div>
+            <div v-else class="mt-2 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+              服务端 AI 未配置。请联系管理员在服务端环境变量中配置 AI_PROVIDERS_JSON 或旧的 AI_API_KEY 单供应商变量。
+            </div>
+          </div>
         </div>
 
         <div v-else class="space-y-4">
