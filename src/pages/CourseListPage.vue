@@ -21,6 +21,7 @@ interface RecommendedCourse {
   id: string
   note?: string
   optional?: boolean
+  directionRequired?: boolean
 }
 
 interface RecommendedStep {
@@ -59,22 +60,22 @@ const recommendedSteps: RecommendedStep[] = [
   },
   {
     title: '4. 补齐运维能力',
-    description: '能看监控、查日志、做基础加固，排障时才不会摸黑。',
+    description: '能看监控、查日志、做基础加固；自动化与脚本编程是运维方向必学能力。',
     courses: [
       { id: 'monitoring' },
       { id: 'logging', note: '可后置', optional: true },
       { id: 'security' },
+      { id: 'automation', note: '方向必学', directionRequired: true },
+      { id: 'python-ops', note: '方向必学', directionRequired: true },
     ],
   },
   {
-    title: '5. 按方向进阶',
-    description: '这些不是入门第一天必须学，等前四步顺了再选方向深入。',
+    title: '5. 进阶与架构',
+    description: '虚拟化与高可用打基础，再深入容器编排、云原生与综合实战。',
     courses: [
+      { id: 'virtualization', note: '传统机房方向先学' },
+      { id: 'high-availability', note: '架构方向先学' },
       { id: 'kubernetes' },
-      { id: 'automation', note: '选学', optional: true },
-      { id: 'python-ops', note: '脚本方向选学', optional: true },
-      { id: 'virtualization', note: '传统机房方向选学', optional: true },
-      { id: 'high-availability', note: '架构方向选学', optional: true },
       { id: 'cloud-ops', note: '云方向选学', optional: true },
       { id: 'devops-sre', note: '进阶后再学', optional: true },
       { id: 'devops-project', note: '最后综合实战', optional: true },
@@ -177,7 +178,7 @@ onUnmounted(() => {
             </div>
             <h2 id="learning-order-title">初学者推荐路线</h2>
           </div>
-          <p>按阶段从左到右学；标记“可跳过/选学”的课程不影响入门主线。</p>
+          <p>按阶段从左到右学；“方向必学”不可跳过，标记“可跳过/选学”的课程不影响入门主线。</p>
         </div>
 
         <div class="learning-order-grid">
@@ -190,12 +191,22 @@ onUnmounted(() => {
                 :key="entry.id"
                 type="button"
                 class="learning-order-course"
-                :class="{ 'learning-order-course-optional': entry.optional }"
+                :class="{
+                  'learning-order-course-optional': entry.optional,
+                  'learning-order-course-required': entry.directionRequired,
+                }"
                 @click="goToCourse(entry.id)"
               >
                 <span class="learning-order-course-title">{{ getCourseTitle(entry.id) }}</span>
-                <span v-if="entry.optional" class="learning-order-course-tag">
-                  {{ entry.note ?? '可跳过' }}
+                <span
+                  v-if="entry.note"
+                  class="learning-order-course-tag"
+                  :class="{
+                    'learning-order-course-tag-optional': entry.optional,
+                    'learning-order-course-tag-required': entry.directionRequired,
+                  }"
+                >
+                  {{ entry.note }}
                 </span>
                 <ArrowRight class="w-3.5 h-3.5" aria-hidden="true" />
               </button>
@@ -204,7 +215,7 @@ onUnmounted(() => {
         </div>
 
         <p class="learning-order-hint">
-          建议：完全新手先学 Linux、网络、Web 服务、Docker、监控；Python、虚拟化、云服务、SRE 可按岗位方向后置。
+          建议：完全新手先完成阶段 1–4；虚拟化、高可用、K8s 与云服务在阶段 5 按岗位方向深入。
         </p>
       </section>
 
@@ -406,6 +417,30 @@ onUnmounted(() => {
   border-color: rgb(148 163 184 / 0.14);
   color: #cbd5e1;
   background: rgb(148 163 184 / 0.035);
+}
+
+.learning-order-course-required {
+  border-color: rgb(251 191 36 / 0.35);
+  color: #fde68a;
+  background: rgb(251 191 36 / 0.07);
+}
+
+.learning-order-course-required:hover {
+  border-color: rgb(251 191 36 / 0.5);
+  background: rgb(251 191 36 / 0.12);
+}
+
+.learning-order-course-tag-required {
+  border-color: rgb(251 191 36 / 0.45);
+  color: #fcd34d;
+  background: rgb(251 191 36 / 0.14);
+  font-weight: 600;
+}
+
+.learning-order-course-tag-optional {
+  border-color: rgb(148 163 184 / 0.16);
+  color: #94a3b8;
+  background: rgb(148 163 184 / 0.06);
 }
 
 .learning-order-hint {
