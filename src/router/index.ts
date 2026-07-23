@@ -19,21 +19,25 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('@/pages/HomePage.vue'),
+      meta: { public: true },
     },
     {
       path: '/courses',
       name: 'courses',
       component: () => import('@/pages/CourseListPage.vue'),
+      meta: { public: true },
     },
     {
       path: '/course/:id',
       name: 'course',
       component: () => import('@/pages/CourseDetailPage.vue'),
+      meta: { public: true },
     },
     {
       path: '/course/:id/chapter/:chapterIndex',
       name: 'courseChapter',
       component: () => import('@/pages/CourseDetailPage.vue'),
+      meta: { public: true },
     },
     {
       path: '/quiz',

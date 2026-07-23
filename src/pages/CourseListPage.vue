@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Filter } from 'lucide-vue-next'
+import { Search, Filter, Route, ArrowRight } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
 import type { Difficulty } from '@/types'
 import CourseCard from '@/components/common/CourseCard.vue'
@@ -16,6 +16,75 @@ const selectedDifficulty = ref<Difficulty | 'all'>('all')
 const selectedCategory = ref<string>('all')
 const courseGrid = ref<HTMLElement | null>(null)
 let courseRevealObserver: IntersectionObserver | null = null
+
+interface RecommendedCourse {
+  id: string
+  note?: string
+  optional?: boolean
+}
+
+interface RecommendedStep {
+  title: string
+  description: string
+  courses: RecommendedCourse[]
+}
+
+const recommendedSteps: RecommendedStep[] = [
+  {
+    title: '1. 先打底',
+    description: '零基础先按这三门走，后面的容器、监控、云服务都会用到。',
+    courses: [
+      { id: 'computer-basics', note: '有基础可快过', optional: true },
+      { id: 'linux-basics' },
+      { id: 'networking' },
+    ],
+  },
+  {
+    title: '2. 会部署服务',
+    description: '先能把常见服务跑起来，再谈自动化和高可用。',
+    courses: [
+      { id: 'web-server' },
+      { id: 'database' },
+      { id: 'cache-queue', note: '先了解 Redis 即可', optional: true },
+    ],
+  },
+  {
+    title: '3. 进入交付流程',
+    description: '掌握版本、容器和流水线，形成从修改到上线的基本闭环。',
+    courses: [
+      { id: 'git', note: '可快速学常用命令', optional: true },
+      { id: 'docker' },
+      { id: 'cicd' },
+    ],
+  },
+  {
+    title: '4. 补齐运维能力',
+    description: '能看监控、查日志、做基础加固，排障时才不会摸黑。',
+    courses: [
+      { id: 'monitoring' },
+      { id: 'logging', note: '可后置', optional: true },
+      { id: 'security' },
+    ],
+  },
+  {
+    title: '5. 按方向进阶',
+    description: '这些不是入门第一天必须学，等前四步顺了再选方向深入。',
+    courses: [
+      { id: 'kubernetes' },
+      { id: 'automation', note: '选学', optional: true },
+      { id: 'python-ops', note: '脚本方向选学', optional: true },
+      { id: 'virtualization', note: '传统机房方向选学', optional: true },
+      { id: 'high-availability', note: '架构方向选学', optional: true },
+      { id: 'cloud-ops', note: '云方向选学', optional: true },
+      { id: 'devops-sre', note: '进阶后再学', optional: true },
+      { id: 'devops-project', note: '最后综合实战', optional: true },
+    ],
+  },
+]
+
+function getCourseTitle(id: string) {
+  return courseIndex.find(course => course.id === id)?.title ?? id
+}
 
 const categories = computed(() => {
   const cats = new Map<string, string>()
@@ -96,7 +165,54 @@ onUnmounted(() => {
           <Filter class="w-3 h-3" /> 课程库
         </div>
         <h1 class="text-3xl font-bold text-white mb-1">全部课程</h1>
-        <p class="text-gray-600 text-sm font-mono">共 {{ courseIndex.length }} 门课程</p>
+        <p class="text-gray-600 text-sm font-mono">新手先按推荐顺序学；已有基础再用筛选自由选择，共 {{ courseIndex.length }} 门课程</p>
+      </div>
+
+      <section class="learning-order mb-8" aria-labelledby="learning-order-title">
+        <div class="learning-order-header">
+          <div>
+            <div class="learning-order-kicker">
+              <Route class="w-3.5 h-3.5" aria-hidden="true" />
+              学习顺序
+            </div>
+            <h2 id="learning-order-title">初学者推荐路线</h2>
+          </div>
+          <p>按阶段从左到右学；标记“可跳过/选学”的课程不影响入门主线。</p>
+        </div>
+
+        <div class="learning-order-grid">
+          <article v-for="step in recommendedSteps" :key="step.title" class="learning-order-step">
+            <h3>{{ step.title }}</h3>
+            <p>{{ step.description }}</p>
+            <div class="learning-order-courses">
+              <button
+                v-for="entry in step.courses"
+                :key="entry.id"
+                type="button"
+                class="learning-order-course"
+                :class="{ 'learning-order-course-optional': entry.optional }"
+                @click="goToCourse(entry.id)"
+              >
+                <span class="learning-order-course-title">{{ getCourseTitle(entry.id) }}</span>
+                <span v-if="entry.optional" class="learning-order-course-tag">
+                  {{ entry.note ?? '可跳过' }}
+                </span>
+                <ArrowRight class="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </article>
+        </div>
+
+        <p class="learning-order-hint">
+          建议：完全新手先学 Linux、网络、Web 服务、Docker、监控；Python、虚拟化、云服务、SRE 可按岗位方向后置。
+        </p>
+      </section>
+
+      <div class="course-library-header">
+        <div>
+          <h2>课程库</h2>
+          <p>搜索或按难度、方向筛选课程</p>
+        </div>
       </div>
 
       <div class="flex flex-col md:flex-row gap-3 mb-6">
@@ -173,6 +289,136 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.learning-order {
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.018);
+  padding: 18px;
+}
+
+.learning-order-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.learning-order-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #22d3ee;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.learning-order-header h2,
+.course-library-header h2 {
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.learning-order-header p,
+.course-library-header p,
+.learning-order-step p,
+.learning-order-hint {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.learning-order-header > p {
+  max-width: 360px;
+  text-align: right;
+}
+
+.learning-order-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.learning-order-step {
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  border-radius: 10px;
+  background: rgb(15 23 42 / 0.35);
+  padding: 12px;
+}
+
+.learning-order-step h3 {
+  margin-bottom: 6px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.learning-order-courses {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.learning-order-course {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 9px;
+  border: 1px solid rgb(34 211 238 / 0.12);
+  border-radius: 8px;
+  color: #cffafe;
+  background: rgb(34 211 238 / 0.04);
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.learning-order-course:hover {
+  border-color: rgb(34 211 238 / 0.3);
+  background: rgb(34 211 238 / 0.08);
+  transform: translateY(-1px);
+}
+
+.learning-order-course-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.learning-order-course-tag {
+  grid-column: 1 / -1;
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgb(148 163 184 / 0.16);
+  color: #94a3b8;
+  background: rgb(148 163 184 / 0.06);
+  font-size: 10px;
+}
+
+.learning-order-course-optional {
+  border-color: rgb(148 163 184 / 0.14);
+  color: #cbd5e1;
+  background: rgb(148 163 184 / 0.035);
+}
+
+.learning-order-hint {
+  margin-top: 14px;
+}
+
+.course-library-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
 .course-entry {
   height: 100%;
   opacity: 0;
@@ -198,6 +444,32 @@ onUnmounted(() => {
     opacity: 1;
     transform: none;
     animation: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .learning-order-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .learning-order {
+    padding: 14px;
+  }
+
+  .learning-order-header {
+    display: block;
+  }
+
+  .learning-order-header > p {
+    margin-top: 8px;
+    max-width: none;
+    text-align: left;
+  }
+
+  .learning-order-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
