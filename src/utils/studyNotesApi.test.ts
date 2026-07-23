@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/utils/apiClient', () => ({
   apiRequest: vi.fn(),
+  resolveApiOrigin: vi.fn(() => 'https://yunzhan.vercel.app'),
 }))
 
-import { apiRequest } from '@/utils/apiClient'
+import { apiRequest, resolveApiOrigin } from '@/utils/apiClient'
 import {
   deleteStudyNote,
   listStudyNotes,
   polishStudyNoteViaServer,
+  polishStudyNoteViaServerStream,
   saveStudyNote,
   testServerAiProvider,
 } from './studyNotesApi'
@@ -32,6 +34,7 @@ function mockResponse(payload: unknown): ReturnType<typeof apiRequest> {
 
 beforeEach(() => {
   mockedApiRequest.mockReset()
+  vi.mocked(resolveApiOrigin).mockReturnValue('https://yunzhan.vercel.app')
 })
 
 describe('studyNotesApi type guards', () => {
@@ -103,5 +106,76 @@ describe('studyNotesApi type guards', () => {
   it('rejects invalid server AI response', async () => {
     mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
     await expect(testServerAiProvider()).rejects.toThrow('无效 AI 测试结果')
+  })
+})
+
+describe('studyNotesApi streaming', () => {
+  function createSseResponse(lines) {
+    const encoder = new TextEncoder()
+    const chunks = lines.map(line => encoder.encode(line))
+    let index = 0
+    const stream = new ReadableStream({
+      pull(controller) {
+        if (index < chunks.length) {
+          controller.enqueue(chunks[index])
+          index += 1
+        } else {
+          controller.close()
+        }
+      },
+    })
+    return new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })
+  }
+
+  it('streams delta content via callbacks', async () => {
+    const deltas = []
+    let doneResult = null
+
+    const sseLines = [
+      'event: delta\ndata: {"content":"今天"}\n\n',
+      'event: delta\ndata: {"content":"学了"}\n\n',
+      'event: delta\ndata: {"content":"Docker"}\n\n',
+      'event: done\ndata: {"content":"今天学了Docker","providerName":"云栈 AI","model":"deepseek-chat"}\n\n',
+    ]
+
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async () => createSseResponse(sseLines))
+
+    try {
+      await polishStudyNoteViaServerStream(
+        '学了 Docker',
+        (delta) => { deltas.push(delta) },
+        (result) => { doneResult = result },
+      )
+    } finally {
+      vi.stubGlobal('fetch', originalFetch)
+    }
+
+    expect(deltas).toEqual(['今天', '学了', 'Docker'])
+    expect(doneResult).toEqual({
+      content: '今天学了Docker',
+      providerName: '云栈 AI',
+      model: 'deepseek-chat',
+    })
+  })
+
+  it('throws on error event from server', async () => {
+    const sseLines = [
+      'event: error\ndata: {"error":"服务端 AI 尚未配置。"}\n\n',
+    ]
+
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async () => createSseResponse(sseLines))
+
+    await expect(polishStudyNoteViaServerStream(
+      '内容',
+      () => {},
+      () => {},
+    )).rejects.toThrow('服务端 AI 尚未配置。')
+
+    vi.stubGlobal('fetch', originalFetch)
   })
 })

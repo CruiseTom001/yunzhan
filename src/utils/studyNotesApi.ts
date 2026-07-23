@@ -1,4 +1,4 @@
-import { apiRequest } from '@/utils/apiClient'
+import { apiRequest, resolveApiOrigin } from '@/utils/apiClient'
 
 const AI_API_TIMEOUT_MS = 65_000
 
@@ -155,4 +155,117 @@ export async function polishStudyNoteViaServer(content: string): Promise<PolishR
   const result = readPolishPayload(payload)
   if (!result) throw new Error('账号服务返回了无效 AI 润色结果。')
   return result
+}
+
+/**
+ * 网页端流式 AI 润色：通过 SSE 逐段接收 AI 生成内容。
+ * 桌面端不应调用此函数（桌面端走本地 IPC 直连 AI 供应商）。
+ */
+export async function polishStudyNoteViaServerStream(
+  content: string,
+  onDelta: (text: string) => void,
+  onDone: (result: PolishResult) => void,
+): Promise<void> {
+  const origin = resolveApiOrigin()
+  if (!origin) throw new Error('尚未配置云栈账号服务地址。')
+
+  let response: Response
+  try {
+    response = await fetch(`${origin}/api/study-notes/ai/polish-stream`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+      credentials: 'include',
+    })
+  } catch {
+    throw new Error('无法连接云栈账号服务。')
+  }
+
+  if (!response.ok) {
+    // 尝试读取错误 JSON
+    let errorText = 'AI 润色请求失败。'
+    try {
+      const contentType = response.headers.get('content-type') ?? ''
+      if (contentType.includes('application/json')) {
+        const payload: unknown = await response.json()
+        if (isRecord(payload) && typeof payload.error === 'string') errorText = payload.error
+      }
+    } catch { /* ignore */ }
+    throw new Error(errorText)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('浏览器不支持流式响应。')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let errorSent = false
+
+  try {
+    let reading = true
+    while (reading) {
+      const { done, value } = await reader.read()
+      if (done) {
+        reading = false
+        continue
+      }
+      buffer += decoder.decode(value, { stream: true })
+
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() ?? ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        let eventType = ''
+        let dataLine = ''
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith('data: ')) {
+            dataLine = line.slice(6)
+          } else if (line.startsWith('data:')) {
+            dataLine = line.slice(5).trimStart()
+          }
+        }
+        if (!eventType || !dataLine) continue
+
+        if (eventType === 'error') {
+          if (errorSent) continue
+          errorSent = true
+          try { reader.cancel() } catch { /* ignore */ }
+          const parsed = JSON.parse(dataLine)
+          throw new Error(typeof parsed?.error === 'string' ? parsed.error : 'AI 润色服务异常。')
+        }
+
+        if (eventType === 'delta') {
+          const parsed = JSON.parse(dataLine)
+          if (typeof parsed?.content === 'string') {
+            onDelta(parsed.content)
+          }
+          continue
+        }
+
+        if (eventType === 'done') {
+          const parsed = JSON.parse(dataLine)
+          const result = readPolishPayload(parsed)
+          if (result) {
+            onDone(result)
+            return
+          }
+          throw new Error('AI 润色服务返回了无效结果。')
+        }
+      }
+    }
+
+    throw new Error('AI 润色流式响应提前结束。')
+  } catch (error) {
+    if (errorSent) throw error
+    // reader 异常（网络中断等）
+    try { reader.cancel() } catch { /* ignore */ }
+    if (error instanceof Error) throw error
+    throw new Error('AI 润色流式响应中断。')
+  }
 }

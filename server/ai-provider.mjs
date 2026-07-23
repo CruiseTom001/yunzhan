@@ -259,3 +259,129 @@ export async function requestStudyNoteAi({
     model: provider.model,
   }
 }
+
+/**
+ * 流式 AI 润色接口：通过回调逐段转发 AI 生成的内容。
+ * 当前优先支持 chat_completions 格式（OpenAI 兼容 SSE），
+ * 其他格式暂不支持流式，会直接返回错误。
+ */
+export async function requestStudyNoteAiStream({
+  content,
+  environment = process.env,
+  fetchImplementation = globalThis.fetch,
+  onDelta,
+  onDone,
+  onError,
+}) {
+  const provider = loadServerAiProvider(environment)
+  if (!provider) {
+    onError('服务端 AI 尚未配置。')
+    return
+  }
+  if (typeof fetchImplementation !== 'function') {
+    onError('当前 Node.js 运行时不支持 fetch。')
+    return
+  }
+  if (provider.format !== 'chat_completions') {
+    onError('当前 AI 格式暂不支持流式润色，请使用 OpenAI 兼容接口。')
+    return
+  }
+
+  const normalizedContent = validateBoundedString(content, AI_CONTENT_MAX_LENGTH, 'content')
+  const requestPayload = buildAiRequest(provider, normalizedContent, 'polish')
+  const streamBody = { ...requestPayload.body, stream: true }
+
+  let response
+  try {
+    response = await fetchImplementation(buildAiEndpoint(provider), {
+      method: 'POST',
+      headers: requestPayload.headers,
+      body: JSON.stringify(streamBody),
+    })
+  } catch (error) {
+    const message = error instanceof Error && error.name === 'TimeoutError'
+      ? 'AI 供应商响应超时。'
+      : '服务端无法连接 AI 供应商。'
+    onError(message)
+    return
+  }
+
+  if (!response.ok) {
+    onError(`AI 供应商返回错误：HTTP ${response.status}。`)
+    return
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    onError('AI 供应商未返回可读的流式响应。')
+    return
+  }
+
+  let buffer = ''
+  let errorSent = false
+  let finished = false
+
+  function finish() {
+    if (finished) return
+    finished = true
+    try { reader.cancel() } catch { /* ignore */ }
+  }
+
+  function sendError(message) {
+    if (errorSent) return
+    errorSent = true
+    finish()
+    onError(message)
+  }
+
+  try {
+    let reading = true
+    while (reading) {
+      const { done, value } = await reader.read()
+      if (done) {
+        reading = false
+        continue
+      }
+      buffer += new TextDecoder().decode(value, { stream: true })
+
+      // 按 \n\n（SSE 事件分隔符）分割
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() ?? ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        let dataLine = ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            dataLine += line.slice(6)
+          } else if (line.startsWith('data:')) {
+            dataLine += line.slice(5).trimStart()
+          }
+        }
+        if (!dataLine) continue
+
+        if (dataLine === '[DONE]') {
+          finish()
+          onDone({ providerName: provider.name, model: provider.model })
+          return
+        }
+
+        try {
+          const parsed = JSON.parse(dataLine)
+          const deltaContent = parsed?.choices?.[0]?.delta?.content
+          if (typeof deltaContent === 'string' && deltaContent.length > 0) {
+            onDelta(deltaContent)
+          }
+        } catch {
+          // 跳过无法解析的 data 行
+        }
+      }
+    }
+
+    // 流自然结束（无 [DONE] 标记的情况）
+    finish()
+    onDone({ providerName: provider.name, model: provider.model })
+  } catch (error) {
+    sendError('AI 供应商流式响应中断。')
+  }
+}

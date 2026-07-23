@@ -19,6 +19,8 @@ import {
   type StudyNote,
   deleteStudyNote,
   listStudyNotes,
+  polishStudyNoteViaServer,
+  polishStudyNoteViaServerStream,
   saveStudyNote,
 } from '@/utils/studyNotesApi'
 import {
@@ -392,15 +394,46 @@ async function polishCurrentNote() {
   }
   polishing.value = true
   errorMessage.value = ''
+  polishedContent.value = ''
+  currentAiProviderName.value = null
+  currentAiModel.value = null
+
   try {
-    const result = await polishStudyNoteLocally({
-      content: text,
-      provider: desktopLocalAi.value ? readSelectedProviderInput() : undefined,
-    })
-    polishedContent.value = result.content
-    currentAiProviderName.value = result.providerName
-    currentAiModel.value = result.model
-    setTransientMessage('AI 润色已生成，确认后可保存。')
+    if (desktopLocalAi.value) {
+      // 桌面端：保持现有 IPC 调用，不走流式
+      const result = await polishStudyNoteLocally({
+        content: text,
+        provider: readSelectedProviderInput(),
+      })
+      polishedContent.value = result.content
+      currentAiProviderName.value = result.providerName
+      currentAiModel.value = result.model
+      setTransientMessage('AI 润色已生成，确认后可保存。')
+    } else {
+      // 网页端：优先走流式 API，失败回退非流式
+      try {
+        await polishStudyNoteViaServerStream(
+          text,
+          (delta) => {
+            polishedContent.value += delta
+          },
+          (result) => {
+            // onDone 时 result.content 是完整结果，覆盖逐段拼接以保证一致性
+            polishedContent.value = result.content
+            currentAiProviderName.value = result.providerName
+            currentAiModel.value = result.model
+            setTransientMessage('AI 润色已生成，确认后可保存。')
+          },
+        )
+      } catch {
+        // 流式失败：回退到非流式 API
+        const result = await polishStudyNoteViaServer(text)
+        polishedContent.value = result.content
+        currentAiProviderName.value = result.providerName
+        currentAiModel.value = result.model
+        setTransientMessage('AI 润色已生成（非流式），确认后可保存。')
+      }
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'AI 润色失败。'
   } finally {

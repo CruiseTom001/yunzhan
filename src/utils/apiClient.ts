@@ -97,6 +97,13 @@ async function desktopApiRequest(
   return response.payload
 }
 
+export function resolveApiOrigin(): string {
+  // 仅网页端使用：返回 API 源站地址（如 https://yunzhan.vercel.app）
+  // 桌面端不应调用此函数（桌面端走 IPC）
+  const raw = normalizeApiBaseUrl(configuredApiBaseUrl) ?? ''
+  return raw.replace(/\/$/, '')
+}
+
 export async function apiRequest(path: string, options: ApiRequestOptions = {}): Promise<unknown> {
   const { timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options
   const headers = new Headers(fetchOptions.headers)

@@ -10,7 +10,7 @@ import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
-import { requestStudyNoteAi } from './ai-provider.mjs'
+import { requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
 import { isDesktopOriginAllowed } from './origin-validation.mjs'
 import {
@@ -1252,6 +1252,59 @@ app.post('/api/study-notes/ai/polish', requireAuth, asyncRoute(async (request, r
   }
   const result = await requestStudyNoteAi({ content, purpose: 'polish' })
   response.json(result)
+}))
+
+app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['content'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: 'AI 润色参数无效。' })
+    return
+  }
+  const content = validateStudyNoteContent(request.body.content, STUDY_NOTE_CONTENT_MAX_LENGTH)
+  if (!content) {
+    response.status(400).json({ error: '学习记录内容需为 1-20000 个字符。' })
+    return
+  }
+
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  })
+
+  let finished = false
+  function sendEvent(event, data) {
+    if (finished) return
+    response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  }
+  function shutdown() {
+    if (finished) return
+    finished = true
+    response.end()
+  }
+
+  try {
+    await requestStudyNoteAiStream({
+      content,
+      onDelta(text) {
+        sendEvent('delta', { content: text })
+      },
+      onDone(result) {
+        sendEvent('done', { providerName: result.providerName, model: result.model })
+        shutdown()
+      },
+      onError(errorMessage) {
+        sendEvent('error', { error: errorMessage })
+        shutdown()
+      },
+    })
+  } catch (error) {
+    if (!finished) {
+      sendEvent('error', { error: 'AI 润色服务异常。' })
+      shutdown()
+    }
+  }
 }))
 
 app.get('/api/admin/audit-logs', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
