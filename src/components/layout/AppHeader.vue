@@ -4,7 +4,6 @@ import { useRouter, useRoute } from 'vue-router'
 import {
   BarChart3,
   BookOpen,
-  Bot,
   Brain,
   Cloud,
   CloudOff,
@@ -55,7 +54,6 @@ const syncIcon = computed(() => {
 
 const emit = defineEmits<{
   openSearch: []
-  toggleAi: []
   toggleTerminal: []
 }>()
 
@@ -116,16 +114,6 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
         >
           <Terminal class="w-3.5 h-3.5" />
           <span class="text-cyan-400/50 text-[10px]">终端</span>
-        </button>
-
-        <!-- AI 助教按钮 -->
-        <button
-          @click="emit('toggleAi')"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-purple-400 hover:text-purple-300 hover:bg-purple-400/[0.05] transition-all mr-1 border border-purple-400/10"
-          title="AI 助教"
-        >
-          <Bot class="w-3.5 h-3.5" />
-          <span class="text-purple-400/50 text-[10px]">AI</span>
         </button>
 
         <!-- 搜索按钮 -->

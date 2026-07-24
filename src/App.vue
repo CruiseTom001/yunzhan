@@ -6,13 +6,11 @@ import AnnouncementModal from '@/components/common/AnnouncementModal.vue'
 import UpdateBanner from '@/components/common/UpdateBanner.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
-import AIChatPanel from '@/components/ai/AIChatPanel.vue'
 import FloatingTerminal from '@/components/ai/FloatingTerminal.vue'
 import { useProgressStore } from '@/stores/progress'
 import { useAuthStore } from '@/stores/auth'
 
 const globalSearch = ref<InstanceType<typeof GlobalSearch> | null>(null)
-const showAI = ref(false)
 const showTerminal = ref(false)
 const progressStore = useProgressStore()
 const authStore = useAuthStore()
@@ -33,10 +31,6 @@ const keepAliveIncludes = ['CourseDetailPage', 'CourseListPage']
 
 function openSearch() {
   globalSearch.value?.open()
-}
-
-function toggleAI() {
-  showAI.value = !showAI.value
 }
 
 function toggleTerminal() {
@@ -83,7 +77,6 @@ onUnmounted(() => {
     <AppHeader
       v-if="!route.meta.hideChrome"
       @open-search="openSearch"
-      @toggle-ai="toggleAI"
       @toggle-terminal="toggleTerminal"
     />
     <router-view v-slot="{ Component, route: pageRoute }">
@@ -98,7 +91,6 @@ onUnmounted(() => {
       <UpdateBanner />
       <ConceptPopover />
       <GlobalSearch ref="globalSearch" />
-      <AIChatPanel :visible="showAI" @close="showAI = false" />
       <FloatingTerminal :visible="showTerminal" @close="showTerminal = false" />
     </template>
   </div>
