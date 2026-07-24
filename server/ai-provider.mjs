@@ -202,6 +202,8 @@ function buildAiRequest(provider, content, purpose) {
       ? buildStudyNoteExportPrompt(content.split('\n').filter(l => l.startsWith('日期：')).length || 1)
       : buildStudyNotePolishPrompt()
   const maxTokens = purpose === 'test' ? 64 : purpose === 'export' ? 4000 : 2000
+  // export 排版长文档更适合用 deepseek-flash（更快、成本更低、上下文更大）
+  const effectiveModel = purpose === 'export' ? 'deepseek-flash' : provider.model
   if (provider.format === 'anthropic_messages') {
     return {
       headers: {
@@ -210,7 +212,7 @@ function buildAiRequest(provider, content, purpose) {
         'anthropic-version': '2023-06-01',
       },
       body: {
-        model: provider.model,
+        model: effectiveModel,
         system: systemPrompt,
         messages: [{ role: 'user', content }],
         max_tokens: maxTokens,
@@ -224,7 +226,7 @@ function buildAiRequest(provider, content, purpose) {
         Authorization: `Bearer ${provider.apiKey}`,
       },
       body: {
-        model: provider.model,
+        model: effectiveModel,
         instructions: systemPrompt,
         input: content,
         temperature: 0.3,
@@ -238,7 +240,7 @@ function buildAiRequest(provider, content, purpose) {
       Authorization: `Bearer ${provider.apiKey}`,
     },
     body: {
-      model: provider.model,
+      model: effectiveModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content },

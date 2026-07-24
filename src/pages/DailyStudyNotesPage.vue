@@ -77,9 +77,9 @@ const provider = reactive({
   baseUrl: 'https://api.deepseek.com/v1',
   apiKey: '',
   format: 'chat_completions' as AiProviderFormat,
-  model: 'deepseek-chat',
+  model: 'deepseek-flash',
 })
-const modelList = ref(['deepseek-chat'])
+const modelList = ref(['deepseek-flash'])
 
 const formatOptions: Array<{ value: AiProviderFormat; label: string }> = [
   { value: 'anthropic_messages', label: 'Anthropic Messages (/v1/messages)' },
@@ -177,7 +177,7 @@ function defaultProviderInput(): AiProviderInput {
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '',
     format: 'chat_completions',
-    model: 'deepseek-chat',
+    model: 'deepseek-flash',
   }
 }
 
