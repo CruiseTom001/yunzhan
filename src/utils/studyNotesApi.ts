@@ -215,12 +215,14 @@ export async function polishStudyNoteViaServerStream(
   onDelta: (text: string) => void,
   onDone: (result: PolishResult) => void,
 ): Promise<void> {
-  const origin = resolveApiOrigin()
-  if (!origin) throw new Error('尚未配置云栈账号服务地址。')
+  const rawOrigin = resolveApiOrigin()
+  if (!rawOrigin) throw new Error('尚未配置云栈账号服务地址。')
+  // 与 exportStudyNotesAsWord 相同：相对路径（如 /api）已是 API 根，完整域名需追加 /api
+  const apiBase = rawOrigin.startsWith('http') ? `${rawOrigin}/api` : rawOrigin
 
   let response: Response
   try {
-    response = await fetch(`${origin}/api/study-notes/ai/polish-stream`, {
+    response = await fetch(`${apiBase}/study-notes/ai/polish-stream`, {
       method: 'POST',
       headers: {
         'Accept': 'text/event-stream',
@@ -336,8 +338,12 @@ export async function exportStudyNotesAsWord(
     throw new Error('学习记录日期格式无效。')
   }
 
-  const origin = resolveApiOrigin()
-  if (!origin) throw new Error('尚未配置云栈账号服务地址。')
+  const rawOrigin = resolveApiOrigin()
+  if (!rawOrigin) throw new Error('尚未配置云栈账号服务地址。')
+  // rawOrigin 可能是相对路径（如 /api）或完整域名（如 https://yunzhan.vercel.app）。
+  // 相对路径本身就代表了 API 根目录；完整域名需要显式追加 /api 前缀。
+  const apiBase = rawOrigin.startsWith('http') ? `${rawOrigin}/api` : rawOrigin
+  const url = `${apiBase}/study-notes/export-word`
 
   const body: Record<string, unknown> = { dates, mode }
   if (mode === 'ai-layout' && typeof options.providerId === 'string' && options.providerId.trim()) {
@@ -346,7 +352,7 @@ export async function exportStudyNotesAsWord(
 
   let response: Response
   try {
-    response = await fetch(`${origin}/api/study-notes/export-word`, {
+    response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
