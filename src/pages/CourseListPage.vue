@@ -19,9 +19,6 @@ let courseRevealObserver: IntersectionObserver | null = null
 
 interface RecommendedCourse {
   id: string
-  note?: string
-  optional?: boolean
-  directionRequired?: boolean
 }
 
 interface RecommendedStep {
@@ -30,58 +27,81 @@ interface RecommendedStep {
   courses: RecommendedCourse[]
 }
 
+interface RecommendedCourseWithIndex {
+  id: string
+  index: number
+}
+
+interface RecommendedStepWithIndex {
+  title: string
+  description: string
+  courses: RecommendedCourseWithIndex[]
+}
+
 const recommendedSteps: RecommendedStep[] = [
   {
-    title: '1. 先打底',
-    description: '零基础先按这三门走，后面的容器、监控、云服务都会用到。',
+    title: '第 1 阶段：基础入门',
+    description: '从零开始：计算机基础、Linux 与网络是后面所有方向的地基。',
     courses: [
-      { id: 'computer-basics', note: '有基础可快过', optional: true },
+      { id: 'computer-basics' },
       { id: 'linux-basics' },
       { id: 'networking' },
     ],
   },
   {
-    title: '2. 会部署服务',
-    description: '先能把常见服务跑起来，再谈自动化和高可用。',
+    title: '第 2 阶段：服务部署',
+    description: '把常见 Web 服务、数据库与缓存消息队列跑起来，进入真实运维场景。',
     courses: [
       { id: 'web-server' },
       { id: 'database' },
-      { id: 'cache-queue', note: '先了解 Redis 即可', optional: true },
+      { id: 'cache-queue' },
     ],
   },
   {
-    title: '3. 进入交付流程',
-    description: '掌握版本、容器和流水线，形成从修改到上线的基本闭环。',
+    title: '第 3 阶段：日常运维能力',
+    description: '版本控制、脚本编程、自动化、监控、日志与安全，形成日常运维闭环。',
     courses: [
-      { id: 'git', note: '可快速学常用命令', optional: true },
-      { id: 'docker' },
-      { id: 'cicd' },
-    ],
-  },
-  {
-    title: '4. 补齐运维能力',
-    description: '能看监控、查日志、做基础加固；自动化与脚本编程是运维方向必学能力。',
-    courses: [
+      { id: 'git' },
+      { id: 'python-ops' },
+      { id: 'automation' },
       { id: 'monitoring' },
-      { id: 'logging', note: '可后置', optional: true },
+      { id: 'logging' },
       { id: 'security' },
-      { id: 'automation', note: '方向必学', directionRequired: true },
-      { id: 'python-ops', note: '方向必学', directionRequired: true },
     ],
   },
   {
-    title: '5. 进阶与架构',
-    description: '虚拟化与高可用打基础，再深入容器编排、云原生与综合实战。',
+    title: '第 4 阶段：平台与架构',
+    description: '从虚拟化到容器、Kubernetes，再到高可用与云服务，构建平台能力。',
     courses: [
-      { id: 'virtualization', note: '传统机房方向先学' },
-      { id: 'high-availability', note: '架构方向先学' },
+      { id: 'virtualization' },
+      { id: 'docker' },
       { id: 'kubernetes' },
-      { id: 'cloud-ops', note: '云方向选学', optional: true },
-      { id: 'devops-sre', note: '进阶后再学', optional: true },
-      { id: 'devops-project', note: '最后综合实战', optional: true },
+      { id: 'high-availability' },
+      { id: 'cloud-ops' },
+    ],
+  },
+  {
+    title: '第 5 阶段：工程化与实战',
+    description: 'CI/CD、DevOps 与 SRE，最后落地到企业级 DevOps 平台综合实战。',
+    courses: [
+      { id: 'cicd' },
+      { id: 'devops-sre' },
+      { id: 'devops-project' },
     ],
   },
 ]
+
+const recommendedStepsWithIndex = computed<RecommendedStepWithIndex[]>(() => {
+  let counter = 0
+  return recommendedSteps.map((step) => ({
+    title: step.title,
+    description: step.description,
+    courses: step.courses.map((course) => {
+      counter += 1
+      return { id: course.id, index: counter }
+    }),
+  }))
+})
 
 function getCourseTitle(id: string) {
   return courseIndex.find(course => course.id === id)?.title ?? id
@@ -178,11 +198,11 @@ onUnmounted(() => {
             </div>
             <h2 id="learning-order-title">初学者推荐路线</h2>
           </div>
-          <p>按阶段从左到右学；“方向必学”不可跳过，标记“可跳过/选学”的课程不影响入门主线。</p>
+          <p>从零开始建议按下面顺序学习，先打基础，再部署服务，最后进入容器、Kubernetes、云平台与综合实战。</p>
         </div>
 
         <div class="learning-order-grid">
-          <article v-for="step in recommendedSteps" :key="step.title" class="learning-order-step">
+          <article v-for="step in recommendedStepsWithIndex" :key="step.title" class="learning-order-step">
             <h3>{{ step.title }}</h3>
             <p>{{ step.description }}</p>
             <div class="learning-order-courses">
@@ -191,23 +211,10 @@ onUnmounted(() => {
                 :key="entry.id"
                 type="button"
                 class="learning-order-course"
-                :class="{
-                  'learning-order-course-optional': entry.optional,
-                  'learning-order-course-required': entry.directionRequired,
-                }"
                 @click="goToCourse(entry.id)"
               >
+                <span class="learning-order-course-index">{{ String(entry.index).padStart(2, '0') }}</span>
                 <span class="learning-order-course-title">{{ getCourseTitle(entry.id) }}</span>
-                <span
-                  v-if="entry.note"
-                  class="learning-order-course-tag"
-                  :class="{
-                    'learning-order-course-tag-optional': entry.optional,
-                    'learning-order-course-tag-required': entry.directionRequired,
-                  }"
-                >
-                  {{ entry.note }}
-                </span>
                 <ArrowRight class="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
@@ -215,7 +222,7 @@ onUnmounted(() => {
         </div>
 
         <p class="learning-order-hint">
-          建议：完全新手先完成阶段 1–4；虚拟化、高可用、K8s 与云服务在阶段 5 按岗位方向深入。
+          直接从第 1 阶段依次往下学即可，所有课程都在主线中，无需自行跳过。
         </p>
       </section>
 
@@ -375,7 +382,7 @@ onUnmounted(() => {
 
 .learning-order-course {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   min-height: 38px;
@@ -394,53 +401,20 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 
+.learning-order-course-index {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #22d3ee;
+  white-space: nowrap;
+}
+
 .learning-order-course-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-}
-
-.learning-order-course-tag {
-  grid-column: 1 / -1;
-  width: fit-content;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid rgb(148 163 184 / 0.16);
-  color: #94a3b8;
-  background: rgb(148 163 184 / 0.06);
-  font-size: 10px;
-}
-
-.learning-order-course-optional {
-  border-color: rgb(148 163 184 / 0.14);
-  color: #cbd5e1;
-  background: rgb(148 163 184 / 0.035);
-}
-
-.learning-order-course-required {
-  border-color: rgb(251 191 36 / 0.35);
-  color: #fde68a;
-  background: rgb(251 191 36 / 0.07);
-}
-
-.learning-order-course-required:hover {
-  border-color: rgb(251 191 36 / 0.5);
-  background: rgb(251 191 36 / 0.12);
-}
-
-.learning-order-course-tag-required {
-  border-color: rgb(251 191 36 / 0.45);
-  color: #fcd34d;
-  background: rgb(251 191 36 / 0.14);
-  font-weight: 600;
-}
-
-.learning-order-course-tag-optional {
-  border-color: rgb(148 163 184 / 0.16);
-  color: #94a3b8;
-  background: rgb(148 163 184 / 0.06);
 }
 
 .learning-order-hint {
