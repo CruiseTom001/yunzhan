@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import {
   CalendarDays,
   Check,
+  FileDown,
   FileText,
   Loader2,
   Plus,
@@ -16,9 +17,11 @@ import {
 import {
   type AiProviderInput,
   type AiProviderFormat,
+  type ExportMode,
   type ServerAiProviderSummary,
   type StudyNote,
   deleteStudyNote,
+  exportStudyNotesAsWord,
   listServerAiProviders,
   listStudyNotes,
   polishStudyNoteViaServer,
@@ -61,6 +64,12 @@ const deletingProviderId = ref<string | null>(null)
 const serverAiProviders = ref<ServerAiProviderSummary[]>([])
 const selectedServerProviderId = ref<string | null>(null)
 const loadingServerProviders = ref(false)
+// 导出 Word 文档相关状态
+const selectedExportDates = ref<string[]>([])
+const showExportConfirm = ref(false)
+const exporting = ref(false)
+const exportError = ref('')
+const exportMode = ref<ExportMode>('ai-layout')
 const desktopLocalAi = computed(() => typeof window !== 'undefined' && Boolean(window.electronAPI))
 
 const provider = reactive({
@@ -108,6 +117,32 @@ const displayModel = computed(() => {
   if (currentAiModel.value) return currentAiModel.value
   if (!desktopLocalAi.value) return selectedServerProvider.value?.model ?? null
   return selectedPolishProvider.value?.model.trim() ?? null
+})
+
+// 导出：选中的日期区间标签（中文）
+const exportDateRangeLabel = computed(() => {
+  if (selectedExportDates.value.length === 0) return ''
+  const sorted = [...selectedExportDates.value].sort()
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  if (sorted.length === 1 || first === last) return formatDateRangeCn(first, first, true)
+  return formatDateRangeCn(first, last, false)
+})
+
+function formatDateRangeCn(start: string, end: string, same: boolean): string {
+  const [y1, m1, d1] = start.split('-').map(Number)
+  if (same) return `${y1}年${m1}月${d1}日`
+  const [y2, m2, d2] = end.split('-').map(Number)
+  if (y1 === y2 && m1 === m2) return `${y1}年${m1}月${d1}日至${d2}日`
+  if (y1 === y2) return `${y1}年${m1}月${d1}日至${m2}月${d2}日`
+  return `${y1}年${m1}月${d1}日至${y2}年${m2}月${d2}日`
+}
+
+// 导出按钮可用条件
+const canExport = computed(() => selectedExportDates.value.length > 0 && !exporting.value)
+const exportCanUseAi = computed(() => {
+  if (desktopLocalAi.value) return Boolean(selectedPolishProvider.value)
+  return !loadingServerProviders.value && serverAiProviders.value.length > 0
 })
 
 function formatLocalDate(date: Date) {
@@ -483,6 +518,61 @@ function applyPolishedContent() {
   setTransientMessage('已把润色结果应用到正文。')
 }
 
+function openExportConfirm() {
+  if (!canExport.value) return
+  // 若用户选 AI 模式但当前没有可用 AI provider，自动切换到 raw
+  if (!exportCanUseAi.value) exportMode.value = 'raw'
+  exportError.value = ''
+  showExportConfirm.value = true
+}
+
+function closeExportConfirm() {
+  if (exporting.value) return
+  showExportConfirm.value = false
+  exportError.value = ''
+}
+
+function clearSelectedExportDates() {
+  selectedExportDates.value = []
+}
+
+function toggleNoteExportSelection(date: string, event: Event) {
+  // 阻止 checkbox 点击触发外层 selectDate，避免侧栏跳到该日期编辑
+  void date
+  event.stopPropagation()
+}
+
+async function executeExport() {
+  if (exporting.value || selectedExportDates.value.length === 0) return
+  exporting.value = true
+  exportError.value = ''
+  try {
+    const providerId: string | undefined = exportMode.value === 'ai-layout'
+      ? (selectedPolishProvider.value?.id ?? selectedServerProvider.value?.id ?? undefined)
+      : undefined
+    const { blob, filename } = await exportStudyNotesAsWord(
+      [...selectedExportDates.value].sort(),
+      exportMode.value,
+      { providerId },
+    )
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showExportConfirm.value = false
+    setTransientMessage(`已成功导出 ${filename}。`)
+  } catch (error) {
+    exportError.value = error instanceof Error ? error.message : '导出失败，请稍后再试。'
+  } finally {
+    exporting.value = false
+  }
+}
+
 onMounted(() => {
   void loadNotes()
   void loadAiProvider()
@@ -551,27 +641,66 @@ onMounted(() => {
             />
           </div>
           <div class="max-h-[520px] overflow-y-auto p-2">
-            <button
+            <div
               v-for="note in sortedNotes"
               :key="note.id"
-              type="button"
-              class="w-full rounded-md px-3 py-3 text-left transition hover:bg-white/[0.03]"
+              class="group relative rounded-md px-1 transition hover:bg-white/[0.03]"
               :class="note.date === selectedDate ? 'bg-cyan-400/10' : ''"
-              @click="selectDate(note.date)"
             >
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-sm font-semibold text-theme">{{ formatDateLabel(note.date) }}</span>
-                <span class="text-[11px] font-mono text-theme-dim">{{ note.date }}</span>
-              </div>
-              <p class="mt-1 line-clamp-2 text-xs leading-5 text-theme-muted">
-                {{ note.content }}
-              </p>
-              <p class="mt-2 text-[11px] text-theme-dim">
-                更新 {{ formatUpdatedAt(note.updatedAt) }}
-              </p>
-            </button>
+              <label class="absolute left-1 top-3 z-10 inline-flex h-4 w-4 cursor-pointer items-center justify-center">
+                <input
+                  type="checkbox"
+                  :value="note.date"
+                  v-model="selectedExportDates"
+                  class="h-4 w-4 rounded border-white/[0.12] bg-white/[0.02] text-cyan-500 outline-none focus:ring-1 focus:ring-cyan-400/40"
+                  :title="`勾选后可导出 ${note.date} 的笔记`"
+                  :aria-label="`勾选导出 ${note.date} 的笔记`"
+                  @click="toggleNoteExportSelection(note.date, $event)"
+                />
+              </label>
+              <button
+                type="button"
+                class="w-full rounded-md px-3 py-3 pl-8 text-left transition"
+                @click="selectDate(note.date)"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-sm font-semibold text-theme">{{ formatDateLabel(note.date) }}</span>
+                  <span class="text-[11px] font-mono text-theme-dim">{{ note.date }}</span>
+                </div>
+                <p class="mt-1 line-clamp-2 text-xs leading-5 text-theme-muted">
+                  {{ note.content }}
+                </p>
+                <p class="mt-2 text-[11px] text-theme-dim">
+                  更新 {{ formatUpdatedAt(note.updatedAt) }}
+                </p>
+              </button>
+            </div>
             <div v-if="!loading && notes.length === 0" class="px-3 py-10 text-center text-sm text-theme-muted">
               暂无学习记录。
+            </div>
+          </div>
+          <div v-if="selectedExportDates.length > 0" class="border-t border-theme-subtle p-3">
+            <p class="mb-2 text-xs text-theme-muted">
+              已选 {{ selectedExportDates.length }} 篇<span v-if="exportDateRangeLabel">（{{ exportDateRangeLabel }}）</span>
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm font-semibold text-cyan-400 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="exporting"
+                @click="openExportConfirm"
+              >
+                <FileDown class="h-4 w-4" :class="exporting ? 'animate-pulse' : ''" />
+                {{ exporting ? '生成中…' : '导出 Word 文档' }}
+              </button>
+              <button
+                v-if="!exporting"
+                type="button"
+                class="rounded-md border border-white/[0.08] px-3 py-2 text-sm text-gray-400 hover:bg-white/[0.03] hover:text-white"
+                @click="clearSelectedExportDates"
+              >
+                清除
+              </button>
             </div>
           </div>
         </aside>
@@ -695,6 +824,91 @@ onMounted(() => {
             </section>
           </div>
         </main>
+      </div>
+    </div>
+
+    <div v-if="showExportConfirm" class="fixed inset-0 z-[65] flex items-center justify-center bg-black/60 px-4 py-6" @click.self="closeExportConfirm">
+      <div class="w-full max-w-md rounded-lg border border-white/[0.1] bg-[#252525] p-5 shadow-2xl">
+        <div class="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-base font-bold text-white">导出 Word 文档</h3>
+            <p class="mt-1 text-xs text-gray-400">
+              已选 {{ selectedExportDates.length }} 篇<span v-if="exportDateRangeLabel">（{{ exportDateRangeLabel }}）</span>，将生成 .docx 文件。
+            </p>
+          </div>
+          <button
+            v-if="!exporting"
+            type="button"
+            class="rounded-md p-1 text-gray-400 hover:bg-white/[0.06] hover:text-white"
+            aria-label="关闭"
+            @click="closeExportConfirm"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+
+        <div class="mb-4">
+          <p class="mb-2 text-xs text-theme-muted">导出方式</p>
+          <label class="mb-2 flex cursor-pointer items-start gap-3 rounded-md border border-white/[0.08] px-3 py-2.5 transition hover:bg-white/[0.03]" :class="exportMode === 'ai-layout' ? 'border-cyan-400/30 bg-cyan-400/5' : ''">
+            <input
+              type="radio"
+              value="ai-layout"
+              v-model="exportMode"
+              :disabled="!exportCanUseAi || exporting"
+              class="mt-0.5 h-4 w-4 accent-cyan-500"
+            />
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-theme">AI 自动排版（推荐）</p>
+              <p class="mt-0.5 text-xs text-theme-muted">
+                AI 将整合所选笔记，提炼主题并生成结构化文档。
+              </p>
+              <p v-if="!exportCanUseAi" class="mt-1 text-xs text-amber-300">
+                当前未配置可用 AI，将自动按原样导出。
+              </p>
+            </div>
+          </label>
+          <label class="flex cursor-pointer items-start gap-3 rounded-md border border-white/[0.08] px-3 py-2.5 transition hover:bg-white/[0.03]" :class="exportMode === 'raw' ? 'border-cyan-400/30 bg-cyan-400/5' : ''">
+            <input
+              type="radio"
+              value="raw"
+              v-model="exportMode"
+              :disabled="exporting"
+              class="mt-0.5 h-4 w-4 accent-cyan-500"
+            />
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-theme">原样笔记输出</p>
+              <p class="mt-0.5 text-xs text-theme-muted">按日期保留全部内容，不经 AI 处理。</p>
+            </div>
+          </label>
+        </div>
+
+        <p v-if="exportError" class="mb-3 rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs text-red-200">
+          {{ exportError }}
+        </p>
+        <p v-else-if="exporting" class="mb-3 rounded-md border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs text-cyan-300">
+          {{ exportMode === 'ai-layout' ? '正在调用 AI 排版并生成文档，大约需要 10-30 秒…' : '正在生成文档…' }}
+        </p>
+
+        <div class="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-white/[0.08] px-3 py-2 text-sm text-gray-400 hover:bg-white/[0.03] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="exporting"
+            @click="closeExportConfirm"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm font-semibold text-cyan-400 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="exporting || selectedExportDates.length === 0"
+            @click="executeExport"
+          >
+            <Loader2 v-if="exporting" class="h-4 w-4 animate-spin" />
+            <FileDown v-else class="h-4 w-4" />
+            {{ exporting ? '生成中…' : '开始生成' }}
+          </button>
+        </div>
       </div>
     </div>
 

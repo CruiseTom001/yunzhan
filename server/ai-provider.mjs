@@ -8,6 +8,7 @@ const AI_PROVIDERS_JSON_MAX_LENGTH = 200_000
 const AI_PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
 const AI_CONTENT_MAX_LENGTH = 20_000
 const AI_POLISHED_MAX_LENGTH = 30_000
+const AI_EXPORT_MAX_LENGTH = 120_000
 const AI_TEST_MAX_LENGTH = 1000
 const AI_RESPONSE_MAX_BYTES = 100_000
 const AI_REQUEST_TIMEOUT_MS = 60_000
@@ -158,6 +159,33 @@ function buildStudyNotePolishPrompt() {
   ].join('\n')
 }
 
+function buildStudyNoteExportPrompt(noteCount) {
+  return [
+    '你是云栈运维学习笔记本排版助手。',
+    '任务：将下列多篇学习笔记整合为一份结构化的学习文档（语言用中文），按以下格式输出：',
+    '',
+    '# {智能概括的文档标题，如"7月下旬 容器与运维学习笔记"}',
+    '## 第1章 {主题标题}',
+    '{从相关笔记提炼融合的正文，保留命令、参数、配置示例等}',
+    '## 第2章 ...',
+    '## 学习小结',
+    '{全篇内容的提炼，100-200字}',
+    '',
+    '格式约定：',
+    '- 以"# "开头的是封面标题',
+    '- 以"## "开头的是章节标题',
+    '- 以4个半角空格（"    "）或制表符（"\\t"）开头的行是代码/命令示例',
+    '- 其余行是正文段落',
+    '- 空行仅用于段落间距',
+    '',
+    '重要规则：',
+    '- 保留技术细节（命令、参数、配置等），不要编造新知识点',
+    '- 对重复或类似内容进行合并，避免冗余',
+    '- 不产生任何非本文档的解释性元信息',
+    `- 请确保总计不超过 ${noteCount} 个日期对应的笔记主题覆盖`,
+  ].join('\n')
+}
+
 function buildAiEndpoint(provider) {
   const endpointByFormat = {
     anthropic_messages: '/messages',
@@ -169,9 +197,11 @@ function buildAiEndpoint(provider) {
 
 function buildAiRequest(provider, content, purpose) {
   const systemPrompt = purpose === 'test'
-    ? '请用中文简短回复“连接成功”。'
-    : buildStudyNotePolishPrompt()
-  const maxTokens = purpose === 'test' ? 64 : 2000
+    ? '请用中文简短回复”连接成功”。'
+    : purpose === 'export'
+      ? buildStudyNoteExportPrompt(content.split('\n').filter(l => l.startsWith('日期：')).length || 1)
+      : buildStudyNotePolishPrompt()
+  const maxTokens = purpose === 'test' ? 64 : purpose === 'export' ? 4000 : 2000
   if (provider.format === 'anthropic_messages') {
     return {
       headers: {
@@ -343,7 +373,7 @@ export async function requestStudyNoteAi({
   const parsedContent = parseAiContent(
     payload,
     provider.format,
-    purpose === 'test' ? AI_TEST_MAX_LENGTH : AI_POLISHED_MAX_LENGTH,
+    purpose === 'test' ? AI_TEST_MAX_LENGTH : purpose === 'export' ? AI_EXPORT_MAX_LENGTH : AI_POLISHED_MAX_LENGTH,
   )
   if (!parsedContent) {
     const error = new Error('AI 供应商返回内容无效。')

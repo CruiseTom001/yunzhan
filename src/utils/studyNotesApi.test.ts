@@ -8,6 +8,7 @@ vi.mock('@/utils/apiClient', () => ({
 import { apiRequest, resolveApiOrigin } from '@/utils/apiClient'
 import {
   deleteStudyNote,
+  exportStudyNotesAsWord,
   listServerAiProviders,
   listStudyNotes,
   polishStudyNoteViaServer,
@@ -220,5 +221,89 @@ describe('studyNotesApi streaming', () => {
     )).rejects.toThrow('服务端 AI 尚未配置。')
 
     vi.stubGlobal('fetch', originalFetch)
+  })
+})
+
+describe('studyNotesApi export word', () => {
+  function mockFetch(overrides: { ok?: boolean; status?: number; body?: Blob | string; contentType?: string; headers?: Record<string, string> } = {}) {
+    const body = overrides.body ?? new Blob(['mock docx'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+    const headers = new Headers({
+      'content-type': overrides.contentType ?? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'content-disposition': "attachment; filename*=UTF-8''%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0_2026%E5%B9%B47%E6%9C%8824%E6%97%A5.docx",
+      ...overrides.headers,
+    })
+    return Promise.resolve({
+      ok: overrides.ok ?? true,
+      status: overrides.status ?? 200,
+      json: async () => {
+        if (typeof overrides.body === 'string') {
+          try { return JSON.parse(overrides.body) } catch { return {} }
+        }
+        return {}
+      },
+      blob: async () => body instanceof Blob ? body : new Blob([body], { type: 'text/plain' }),
+      headers,
+    })
+  }
+
+  it('returns blob and filename', async () => {
+    vi.stubGlobal('fetch', () => mockFetch())
+    const { blob, filename } = await exportStudyNotesAsWord(['2026-07-24'], 'raw')
+    expect(blob).toBeInstanceOf(Blob)
+    expect(filename).toBe('学习笔记_2026年7月24日.docx')
+    vi.stubGlobal('fetch', globalThis.fetch)
+  })
+
+  it('throws on empty dates', async () => {
+    await expect(exportStudyNotesAsWord([], 'raw')).rejects.toThrow('请至少选择一篇学习记录。')
+  })
+
+  it('throws on invalid date format', async () => {
+    await expect(exportStudyNotesAsWord(['not-a-date'], 'raw')).rejects.toThrow('学习记录日期格式无效。')
+  })
+
+  it('throws on server error response', async () => {
+    vi.stubGlobal('fetch', () => mockFetch({ ok: false, status: 400, body: JSON.stringify({ error: 'AI 供应商 id 格式无效。' }), contentType: 'application/json' }))
+    await expect(exportStudyNotesAsWord(['2026-07-24'], 'ai-layout', { providerId: 'invalid' })).rejects.toThrow('AI 供应商 id 格式无效。')
+    vi.stubGlobal('fetch', globalThis.fetch)
+  })
+
+  it('throws on empty blob', async () => {
+    vi.stubGlobal('fetch', () => mockFetch({ body: new Blob() }))
+    await expect(exportStudyNotesAsWord(['2026-07-24'], 'raw')).rejects.toThrow('文档生成失败，服务返回了空内容。')
+    vi.stubGlobal('fetch', globalThis.fetch)
+  })
+
+  it('throws on network error', async () => {
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('Network error')))
+    await expect(exportStudyNotesAsWord(['2026-07-24'], 'raw')).rejects.toThrow('无法连接云栈账号服务。')
+    vi.stubGlobal('fetch', globalThis.fetch)
+  })
+
+  it('sends providerId only for ai-layout mode', async () => {
+    let capturedBody: string | null = null
+    vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+      capturedBody = init.body as string
+      return mockFetch()
+    })
+    await exportStudyNotesAsWord(['2026-07-24'], 'ai-layout', { providerId: 'deepseek_v3' })
+    expect(capturedBody).toBeTruthy()
+    const parsed = JSON.parse(capturedBody!)
+    expect(parsed.providerId).toBe('deepseek_v3')
+    expect(parsed.mode).toBe('ai-layout')
+    expect(parsed.dates).toEqual(['2026-07-24'])
+    vi.stubGlobal('fetch', globalThis.fetch)
+  })
+
+  it('omits providerId for raw mode', async () => {
+    let capturedBody: string | null = null
+    vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+      capturedBody = init.body as string
+      return mockFetch()
+    })
+    await exportStudyNotesAsWord(['2026-07-24'], 'raw', { providerId: 'deepseek_v3' })
+    const parsed = JSON.parse(capturedBody!)
+    expect(parsed.providerId).toBeUndefined()
+    vi.stubGlobal('fetch', globalThis.fetch)
   })
 })

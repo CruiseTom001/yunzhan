@@ -11,6 +11,13 @@ import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
+import {
+  buildDateRangeLabel,
+  buildDocxFromSections,
+  buildRawDocx,
+  parseAiLayout,
+  toDocxBuffer,
+} from './export-word.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
 import { isDesktopOriginAllowed } from './origin-validation.mjs'
 import {
@@ -1361,6 +1368,129 @@ app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (req
     }
   }
 }))
+// ═══════════════════════════════════════════════════
+// POST /api/study-notes/export-word — 导出笔记为 Word 文档
+// ═══════════════════════════════════════════════════
+app.post('/api/study-notes/export-word', requireAuth, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['dates', 'mode', 'providerId'])
+  if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
+    response.status(400).json({ error: '导出参数无效。' })
+    return
+  }
+
+  // ---- 校验 dates ----
+  const rawDates = request.body?.dates
+  if (!Array.isArray(rawDates) || rawDates.length < 1 || rawDates.length > 30) {
+    response.status(400).json({ error: '请选择 1-30 篇学习记录。' })
+    return
+  }
+  const dates = []
+  for (const d of rawDates) {
+    const validated = validateStudyNoteDate(d)
+    if (!validated) {
+      response.status(400).json({ error: '学习记录日期格式无效。' })
+      return
+    }
+    dates.push(validated)
+  }
+
+  // ---- 校验 mode ----
+  const mode = typeof request.body?.mode === 'string'
+    ? request.body.mode.trim()
+    : 'ai-layout'
+  if (mode !== 'ai-layout' && mode !== 'raw') {
+    response.status(400).json({ error: '导出模式无效。' })
+    return
+  }
+
+  // ---- 校验 providerId（仅 ai-layout） ----
+  let providerId
+  if (mode === 'ai-layout') {
+    providerId = readOptionalProviderId(request.body?.providerId)
+    if (providerId === undefined) {
+      response.status(400).json({ error: 'AI 供应商 id 格式无效。' })
+      return
+    }
+  }
+
+  // ---- 查询笔记 ----
+  const placeholders = dates.map((_, i) => `$${i + 2}`)
+  const result = await pool.query(
+    `SELECT note_date, content, polished_content
+       FROM study_notes
+      WHERE user_id = $1
+        AND note_date IN (${placeholders.join(', ')})
+      ORDER BY note_date ASC`,
+    [request.auth.id, ...dates],
+  )
+  const rows = result.rows
+
+  if (rows.length === 0) {
+    // 全无数据仍然返回封面 docx，不含正文
+    const dateRangeLabel = buildDateRangeLabel(dates)
+    const generatedAt = formatGeneratedAt()
+    const sections = [{ title: '（无内容）', dateRangeLabel, mode, generatedAt }]
+    const doc = buildDocxFromSections(
+      parseAiLayout(`# ${dateRangeLabel} 学习笔记\n## 说明\n选定的日期内没有学习记录。`),
+      { title: `${dateRangeLabel} 学习笔记`, dateRangeLabel, mode, generatedAt },
+    )
+    const buffer = await toDocxBuffer(doc)
+    setDocxResponse(response, buffer, dateRangeLabel)
+    return
+  }
+
+  const dateRangeLabel = buildDateRangeLabel(rows.map(r => formatNoteDateISO(r.note_date)))
+  const generatedAt = formatGeneratedAt()
+
+  if (mode === 'raw') {
+    // ---- 原样模式：不经过 AI ----------
+    const notes = rows.map(row => ({
+      date: formatNoteDateISO(row.note_date),
+      dateLabel: buildNoteDateLabel(row.note_date),
+      content: row.polished_content?.trim() || row.content,
+    }))
+    const doc = buildRawDocx(notes, { dateRangeLabel, generatedAt })
+    const buffer = await toDocxBuffer(doc)
+    setDocxResponse(response, buffer, dateRangeLabel)
+    return
+  }
+
+  // ---- AI 排版模式 ----------
+  const assembledContent = buildExportUserPrompt(
+    rows.map(row => ({
+      date: formatNoteDateISO(row.note_date),
+      label: buildNoteDateLabel(row.note_date),
+      polished: row.polished_content?.trim() || '',
+      raw: row.content,
+    })),
+  )
+
+  try {
+    const aiResult = await requestStudyNoteAi({
+      content: assembledContent,
+      purpose: 'export',
+      providerId,
+    })
+    const sections = parseAiLayout(aiResult.content)
+    if (sections.length === 0) {
+      response.status(502).json({ error: 'AI 排版内容无法解析，请稍后重试。' })
+      return
+    }
+    // 提取文档标题（第一个 # 或用 dateRangeLabel fallback）
+    const titleSection = sections.find(s => s.level === 'title')
+    const docTitle = titleSection ? titleSection.text : `${dateRangeLabel} 学习笔记`
+    const doc = buildDocxFromSections(sections, {
+      title: docTitle,
+      dateRangeLabel,
+      mode,
+      generatedAt,
+    })
+    const buffer = await toDocxBuffer(doc)
+    setDocxResponse(response, buffer, dateRangeLabel)
+  } catch (error) {
+    handleAiRequestError(error, response)
+  }
+}))
 
 app.get('/api/admin/audit-logs', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
   const { limit, offset } = parsePagination(request.query)
@@ -2226,6 +2356,60 @@ app.delete('/api/admin/desktop-releases/:id', requireAuth, requireSuperAdmin, as
   }
   response.json({ ok: true })
 }))
+// ═══════════════════════════════════════════════════
+// Helper: export-word 专用工具函数
+// ═══════════════════════════════════════════════════
+
+function formatNoteDateISO(rowDate) {
+  // PostgreSQL DATE column → ISO string or Date object
+  const d = rowDate instanceof Date ? rowDate : new Date(`${rowDate}T00:00:00`)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function buildNoteDateLabel(rowDate) {
+  const d = rowDate instanceof Date ? rowDate : new Date(`${rowDate}T00:00:00`)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function formatGeneratedAt() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  const h = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${d} ${h}:${min}`
+}
+
+/**
+ * 构造发送给 AI 的 user prompt（笔记内容）。
+ * 优先使用 polishedContent，为空则使用 content。
+ */
+function buildExportUserPrompt(notes) {
+  const lines = [
+    `下面是用户 ${notes.length} 篇学习笔记（按日期从早到晚排列）。`,
+  ]
+  for (const n of notes) {
+    const body = n.polished || n.raw
+    lines.push('')
+    lines.push('---')
+    lines.push(`日期：${n.label}（${n.date}）`)
+    lines.push(body.slice(0, 15_000)) // 每篇上限 15000 字符
+  }
+  return lines.join('\n')
+}
+
+function setDocxResponse(response, buffer, dateRangeLabel) {
+  const filename = `学习笔记_${dateRangeLabel}.docx`
+  response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+  response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+  response.setHeader('Content-Length', buffer.length)
+  response.end(buffer)
+}
+
 app.use((error, _request, response, _next) => {
   if (error?.message === 'origin_not_allowed') {
     response.status(403).json({ error: '请求来源未获授权。' })

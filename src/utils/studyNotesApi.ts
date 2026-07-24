@@ -1,8 +1,10 @@
 import { apiRequest, resolveApiOrigin } from '@/utils/apiClient'
 
 const AI_API_TIMEOUT_MS = 65_000
+const EXPORT_API_TIMEOUT_MS = 120_000
 
 export type AiProviderFormat = 'anthropic_messages' | 'chat_completions' | 'responses'
+export type ExportMode = 'ai-layout' | 'raw'
 
 export interface StudyNote {
   id: string
@@ -315,4 +317,80 @@ export async function polishStudyNoteViaServerStream(
     if (error instanceof Error) throw error
     throw new Error('AI 润色流式响应中断。')
   }
+}
+
+/**
+ * 导出学习笔记为 Word 文档（.docx）。
+ *
+ * 走原生 fetch（不经过 apiRequest）以接收二进制 blob。
+ */
+export async function exportStudyNotesAsWord(
+  dates: string[],
+  mode: ExportMode,
+  options: { providerId?: string; onExportError?: (message: string) => void } = {},
+): Promise<{ blob: Blob; filename: string }> {
+  if (!Array.isArray(dates) || dates.length === 0) {
+    throw new Error('请至少选择一篇学习记录。')
+  }
+  if (dates.some(d => !isStudyDate(d))) {
+    throw new Error('学习记录日期格式无效。')
+  }
+
+  const origin = resolveApiOrigin()
+  if (!origin) throw new Error('尚未配置云栈账号服务地址。')
+
+  const body: Record<string, unknown> = { dates, mode }
+  if (mode === 'ai-layout' && typeof options.providerId === 'string' && options.providerId.trim()) {
+    body.providerId = options.providerId.trim()
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${origin}/api/study-notes/export-word`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include',
+      signal: AbortSignal.timeout(EXPORT_API_TIMEOUT_MS),
+    })
+  } catch (error) {
+    const message = error instanceof Error && error.name === 'TimeoutError'
+      ? '导出请求超时，请减少笔记数量后重试。'
+      : '无法连接云栈账号服务。'
+    options.onExportError?.(message)
+    throw new Error(message)
+  }
+
+  if (!response.ok) {
+    let errorText = '导出请求失败。'
+    try {
+      const ct = response.headers.get('content-type') ?? ''
+      if (ct.includes('application/json')) {
+        const payload: unknown = await response.json()
+        if (isRecord(payload) && typeof payload.error === 'string') errorText = payload.error
+      }
+    } catch { /* ignore */ }
+    options.onExportError?.(errorText)
+    throw new Error(errorText)
+  }
+
+  const blob = await response.blob()
+  if (blob.size === 0) throw new Error('文档生成失败，服务返回了空内容。')
+
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const filename = extractFilename(disposition) || '学习笔记.docx'
+
+  return { blob, filename }
+}
+
+function extractFilename(dispositionHeader: string): string | null {
+  // 优先匹配 filename*=UTF-8''...
+  const starMatch = dispositionHeader.match(/filename\*=UTF-8''(.+?)(?:;|$)/)
+  if (starMatch) {
+    try {
+      return decodeURIComponent(starMatch[1])
+    } catch { /* fall through */ }
+  }
+  const plainMatch = dispositionHeader.match(/filename="?(.+?)"?$/m)
+  return plainMatch ? plainMatch[1].replace(/["']/g, '') : null
 }
