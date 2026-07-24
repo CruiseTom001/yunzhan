@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import {
   CalendarDays,
   Check,
+  ChevronDown,
   FileDown,
   FileText,
   Loader2,
@@ -118,6 +119,38 @@ const displayModel = computed(() => {
   if (!desktopLocalAi.value) return selectedServerProvider.value?.model ?? null
   return selectedPolishProvider.value?.model.trim() ?? null
 })
+
+// 模型选择弹窗
+const showModelPicker = ref(false)
+const selectedModelDisplay = computed(() => {
+  if (!desktopLocalAi.value) {
+    if (loadingServerProviders.value) return '加载中…'
+    return selectedServerProvider.value?.model ?? '选择模型'
+  }
+  return selectedPolishProvider.value?.model ?? '选择模型'
+})
+const availableModels = computed(() => {
+  if (!desktopLocalAi.value) {
+    return serverAiProviders.value.map(p => ({ model: p.model, providerId: p.id, providerName: p.name }))
+  }
+  return localAiProviders.value.map(p => ({ model: p.model, providerId: p.id, providerName: p.name }))
+})
+function getModelDescription(model: string): string {
+  const map: Record<string, string> = {
+    'deepseek-flash': '极速响应，成本低，推荐日常使用',
+    'deepseek-chat': '更细致的表达，适合重要文档',
+  }
+  return map[model] ?? '兼容 OpenAI 接口的模型'
+}
+function selectModel(_modelName: string, providerId: string) {
+  if (!desktopLocalAi.value) {
+    selectedServerProviderId.value = providerId
+  } else {
+    selectedPolishProviderId.value = providerId
+    selectAiProvider(providerId)
+  }
+  showModelPicker.value = false
+}
 
 // 导出：选中的日期区间标签（中文）
 const exportDateRangeLabel = computed(() => {
@@ -714,35 +747,26 @@ onMounted(() => {
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <select
-                v-if="desktopLocalAi && localAiProviders.length > 0"
-                v-model="selectedPolishProviderId"
-                class="max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme outline-none focus:border-purple-400/40"
-                title="选择本次 AI 润色使用的供应商"
-                @change="selectedPolishProviderId && selectAiProvider(selectedPolishProviderId)"
-              >
-                <option v-for="entry in localAiProviders" :key="entry.id" :value="entry.id">
-                  {{ entry.name }} / {{ entry.model }}
-                </option>
-              </select>
-              <select
-                v-else-if="!desktopLocalAi && loadingServerProviders"
-                class="max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme-dim"
-                title="正在加载服务端 AI 供应商"
+              <!-- 模型选择按钮 -->
+              <button
+                v-if="!desktopLocalAi && loadingServerProviders"
+                type="button"
+                class="inline-flex items-center gap-1.5 max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme-dim"
                 disabled
               >
-                <option>加载中...</option>
-              </select>
-              <select
-                v-else-if="!desktopLocalAi && serverAiProviders.length > 1"
-                v-model="selectedServerProviderId"
-                class="max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme outline-none focus:border-purple-400/40"
-                title="选择本次 AI 润色使用的服务端供应商"
+                <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                加载中…
+              </button>
+              <button
+                v-else-if="aiReady"
+                type="button"
+                class="inline-flex items-center gap-1.5 max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme outline-none hover:border-purple-400/40 focus:border-purple-400/40"
+                title="选择 AI 模型"
+                @click="showModelPicker = true"
               >
-                <option v-for="entry in serverAiProviders" :key="entry.id" :value="entry.id">
-                  {{ entry.name }} / {{ entry.model }}
-                </option>
-              </select>
+                {{ selectedModelDisplay }}
+                <ChevronDown class="h-3.5 w-3.5 text-theme-dim" />
+              </button>
               <button
                 type="button"
                 class="inline-flex items-center gap-2 rounded-md border border-purple-400/20 bg-purple-400/10 px-3 py-2 text-sm text-purple-300 hover:bg-purple-400/15 disabled:cursor-not-allowed disabled:opacity-50"
@@ -822,6 +846,42 @@ onMounted(() => {
                 <div>当前模型：{{ displayModel || '未配置' }}</div>
               </div>
             </section>
+          </div>
+
+          <!-- 模型选择弹窗 -->
+          <div v-if="showModelPicker" class="fixed inset-0 z-[75] flex items-center justify-center bg-black/60 px-4 py-6" @click.self="showModelPicker = false">
+            <div class="w-full max-w-sm rounded-lg border border-white/[0.1] bg-[#252525] p-5 shadow-2xl">
+              <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white">选择 AI 模型</h3>
+                <button
+                  type="button"
+                  class="rounded-md p-1 text-gray-400 hover:bg-white/10 hover:text-white"
+                  @click="showModelPicker = false"
+                >
+                  <X class="h-4 w-4" />
+                </button>
+              </div>
+              <div class="space-y-2 max-h-[360px] overflow-y-auto">
+                <button
+                  v-for="entry in availableModels"
+                  :key="entry.providerId"
+                  type="button"
+                  class="w-full rounded-md border px-3 py-2.5 text-left transition"
+                  :class="selectedModelDisplay === entry.model
+                    ? 'border-purple-400/40 bg-purple-400/10'
+                    : 'border-white/[0.06] hover:bg-white/[0.03]'"
+                  @click="selectModel(entry.model, entry.providerId)"
+                >
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-white">{{ entry.model }}</span>
+                    <span v-if="entry.model === 'deepseek-flash'" class="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">推荐</span>
+                    <span v-if="selectedModelDisplay === entry.model" class="rounded bg-purple-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">当前</span>
+                  </div>
+                  <p class="mt-1 text-xs text-gray-500">{{ entry.providerName }} · {{ getModelDescription(entry.model) }}</p>
+                </button>
+              </div>
+              <p class="mt-3 text-[11px] text-gray-500">切换模型后点击「AI 润色」即可使用新模型。</p>
+            </div>
           </div>
         </main>
       </div>
