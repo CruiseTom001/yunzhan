@@ -40,8 +40,8 @@ interface RecommendedStepWithIndex {
 
 const recommendedSteps: RecommendedStep[] = [
   {
-    title: '第 1 阶段：基础入门',
-    description: '从零开始：计算机基础、Linux 与网络是后面所有方向的地基。',
+    title: '第 1 阶段：先打底',
+    description: '计算机基础、Linux 与网络，打好后面所有方向的地基。',
     courses: [
       { id: 'computer-basics' },
       { id: 'linux-basics' },
@@ -49,8 +49,8 @@ const recommendedSteps: RecommendedStep[] = [
     ],
   },
   {
-    title: '第 2 阶段：服务部署',
-    description: '把常见 Web 服务、数据库与缓存消息队列跑起来，进入真实运维场景。',
+    title: '第 2 阶段：会部署服务',
+    description: '先把 Web 服务、数据库与缓存消息队列跑起来。',
     courses: [
       { id: 'web-server' },
       { id: 'database' },
@@ -58,33 +58,33 @@ const recommendedSteps: RecommendedStep[] = [
     ],
   },
   {
-    title: '第 3 阶段：日常运维能力',
-    description: '版本控制、脚本编程、自动化、监控、日志与安全，形成日常运维闭环。',
+    title: '第 3 阶段：进入交付流程',
+    description: '掌握版本控制、容器化与 CI/CD，形成从修改到上线的闭环。',
     courses: [
       { id: 'git' },
-      { id: 'python-ops' },
-      { id: 'automation' },
+      { id: 'docker' },
+      { id: 'cicd' },
+    ],
+  },
+  {
+    title: '第 4 阶段：补齐运维能力',
+    description: '监控、日志、安全、自动化与脚本编程，形成日常运维能力。',
+    courses: [
       { id: 'monitoring' },
       { id: 'logging' },
       { id: 'security' },
+      { id: 'automation' },
+      { id: 'python-ops' },
     ],
   },
   {
-    title: '第 4 阶段：平台与架构',
-    description: '从虚拟化到容器、Kubernetes，再到高可用与云服务，构建平台能力。',
+    title: '第 5 阶段：进阶与架构',
+    description: '虚拟化与高可用打底，再深入 Kubernetes、云原生与综合实战。',
     courses: [
       { id: 'virtualization' },
-      { id: 'docker' },
-      { id: 'kubernetes' },
       { id: 'high-availability' },
+      { id: 'kubernetes' },
       { id: 'cloud-ops' },
-    ],
-  },
-  {
-    title: '第 5 阶段：工程化与实战',
-    description: 'CI/CD、DevOps 与 SRE，最后落地到企业级 DevOps 平台综合实战。',
-    courses: [
-      { id: 'cicd' },
       { id: 'devops-sre' },
       { id: 'devops-project' },
     ],
@@ -198,7 +198,7 @@ onUnmounted(() => {
             </div>
             <h2 id="learning-order-title">初学者推荐路线</h2>
           </div>
-          <p>从零开始建议按下面顺序学习，先打基础，再部署服务，最后进入容器、Kubernetes、云平台与综合实战。</p>
+          <p>按阶段从左到右依次学习；全部课程都在主线中，建议按顺序完成。</p>
         </div>
 
         <div class="learning-order-grid">
@@ -222,7 +222,7 @@ onUnmounted(() => {
         </div>
 
         <p class="learning-order-hint">
-          直接从第 1 阶段依次往下学即可，所有课程都在主线中，无需自行跳过。
+          建议：先完成阶段 1–4，再进入阶段 5 的虚拟化、高可用、Kubernetes 与综合实战。
         </p>
       </section>
 
