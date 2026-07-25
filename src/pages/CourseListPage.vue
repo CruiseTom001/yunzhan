@@ -36,6 +36,8 @@ interface RecommendedStepWithIndex {
   title: string
   description: string
   courses: RecommendedCourseWithIndex[]
+  completedCourses: number
+  totalCourses: number
 }
 
 const recommendedSteps: RecommendedStep[] = [
@@ -93,14 +95,25 @@ const recommendedSteps: RecommendedStep[] = [
 
 const recommendedStepsWithIndex = computed<RecommendedStepWithIndex[]>(() => {
   let counter = 0
-  return recommendedSteps.map((step) => ({
-    title: step.title,
-    description: step.description,
-    courses: step.courses.map((course) => {
+  return recommendedSteps.map((step) => {
+    const courses = step.courses.map((course) => {
       counter += 1
       return { id: course.id, index: counter }
-    }),
-  }))
+    })
+    const completedCourses = courses.filter((course) => {
+      const total = chapterCounts[course.id] ?? 0
+      if (total <= 0) return false
+      const completed = progressStore.progress.completedChapters[course.id]?.length ?? 0
+      return completed >= total
+    }).length
+    return {
+      title: step.title,
+      description: step.description,
+      courses,
+      completedCourses,
+      totalCourses: courses.length,
+    }
+  })
 })
 
 function getCourseTitle(id: string) {
@@ -203,8 +216,25 @@ onUnmounted(() => {
 
         <div class="learning-order-grid">
           <article v-for="step in recommendedStepsWithIndex" :key="step.title" class="learning-order-step">
-            <h3>{{ step.title }}</h3>
+            <div class="learning-order-step-head">
+              <h3>{{ step.title }}</h3>
+              <span class="learning-order-step-progress">
+                {{ step.completedCourses }}/{{ step.totalCourses }}
+              </span>
+            </div>
             <p>{{ step.description }}</p>
+            <div
+              class="learning-order-step-bar"
+              role="progressbar"
+              :aria-valuenow="step.completedCourses"
+              :aria-valuemin="0"
+              :aria-valuemax="step.totalCourses"
+              :aria-label="`${step.title} 完成进度`"
+            >
+              <span
+                :style="{ width: `${step.totalCourses > 0 ? Math.round((step.completedCourses / step.totalCourses) * 100) : 0}%` }"
+              />
+            </div>
             <div class="learning-order-courses">
               <button
                 v-for="entry in step.courses"
@@ -368,10 +398,41 @@ onUnmounted(() => {
 }
 
 .learning-order-step h3 {
-  margin-bottom: 6px;
+  margin-bottom: 0;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 700;
+}
+
+.learning-order-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.learning-order-step-progress {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  color: var(--accent-cyan);
+}
+
+.learning-order-step-bar {
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.learning-order-step-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-cyan);
+  transition: width 0.25s ease;
 }
 
 .learning-order-courses {

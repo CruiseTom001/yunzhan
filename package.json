@@ -32,6 +32,7 @@
     "icon:windows": "node scripts/generate-windows-icon.mjs",
     "release:check": "npm run quality",
     "release:windows": "npm run release:check && npm run icon:windows && electron-builder --win nsis",
+    "release:desktop": "node scripts/release-desktop.mjs",
     "electron:dev": "vite build && electron .",
     "electron:build": "vite build && electron-builder --dir",
     "electron:installer": "vite build && electron-builder --win nsis",

@@ -167,35 +167,111 @@ interface CourseMeta {
   chapterCount: number
 }
 
-const lastVisitedCourse = computed<CourseMeta | null>(() => {
-  const id = progressStore.progress.lastVisited
-  if (!id || !courseIndex.find((c) => c.id === id)) return null
-  const meta = courseIndex.find((c) => c.id === id)!
+const BEGINNER_PATH_IDS = [
+  'computer-basics',
+  'linux-basics',
+  'networking',
+  'web-server',
+  'database',
+  'cache-queue',
+  'git',
+  'docker',
+  'cicd',
+  'monitoring',
+  'logging',
+  'security',
+  'automation',
+  'python-ops',
+  'virtualization',
+  'high-availability',
+  'kubernetes',
+  'cloud-ops',
+  'devops-sre',
+  'devops-project',
+] as const
+
+function toCourseMeta(id: string): CourseMeta | null {
+  const meta = courseIndex.find((c) => c.id === id)
+  if (!meta) return null
   return {
     id: meta.id,
     title: meta.title,
     icon: meta.icon,
     chapterCount: chapterCounts[id] ?? 0,
   }
-})
+}
 
-const lastVisitedChapter = computed(() => {
-  if (!lastVisitedCourse.value) return 0
-  const completed = progressStore.progress.completedChapters[lastVisitedCourse.value.id] ?? []
-  // 找到下一个未完成的章节
-  for (let i = 0; i < lastVisitedCourse.value.chapterCount; i++) {
+function parseCourseIdFromRoute(route: string): string | null {
+  const match = route.match(/^\/course\/([^/?#]+)/)
+  return match?.[1] ?? null
+}
+
+function nextIncompleteChapter(courseId: string, chapterCount: number): number {
+  const completed = progressStore.progress.completedChapters[courseId] ?? []
+  for (let i = 0; i < chapterCount; i++) {
     if (!completed.includes(i)) return i
   }
-  return lastVisitedCourse.value.chapterCount - 1
+  return Math.max(0, chapterCount - 1)
+}
+
+function isCourseComplete(courseId: string): boolean {
+  const total = chapterCounts[courseId] ?? 0
+  if (total <= 0) return false
+  const completed = progressStore.progress.completedChapters[courseId]?.length ?? 0
+  return completed >= total
+}
+
+const continueCourse = computed<CourseMeta | null>(() => {
+  const visitedId = progressStore.progress.lastVisited
+  if (visitedId) {
+    const visited = toCourseMeta(visitedId)
+    if (visited) return visited
+  }
+
+  const routeCourseId = parseCourseIdFromRoute(progressStore.progress.lastRoute || '')
+  if (routeCourseId) {
+    const fromRoute = toCourseMeta(routeCourseId)
+    if (fromRoute) return fromRoute
+  }
+
+  for (const id of BEGINNER_PATH_IDS) {
+    if (!isCourseComplete(id)) {
+      return toCourseMeta(id)
+    }
+  }
+
+  return toCourseMeta(BEGINNER_PATH_IDS[0])
 })
 
-const lastVisitedProgress = computed(() => {
-  if (!lastVisitedCourse.value) return 0
-  const total = lastVisitedCourse.value.chapterCount
+const continueChapter = computed(() => {
+  if (!continueCourse.value) return 0
+  return nextIncompleteChapter(continueCourse.value.id, continueCourse.value.chapterCount)
+})
+
+const continueProgress = computed(() => {
+  if (!continueCourse.value) return 0
+  const total = continueCourse.value.chapterCount
   if (total === 0) return 0
-  const completed = progressStore.progress.completedChapters[lastVisitedCourse.value.id]?.length ?? 0
+  const completed = progressStore.progress.completedChapters[continueCourse.value.id]?.length ?? 0
   return Math.round((completed / total) * 100)
 })
+
+const hasLearningProgress = computed(() => {
+  const p = progressStore.progress
+  return (
+    Boolean(p.lastVisited)
+    || Boolean(p.lastRoute && p.lastRoute !== '/' && p.lastRoute !== '/login')
+    || Object.values(p.completedChapters).some((chapters) => chapters.length > 0)
+  )
+})
+
+function goContinueLearning() {
+  if (!continueCourse.value) {
+    router.push('/courses')
+    return
+  }
+  router.push(`/course/${continueCourse.value.id}/chapter/${continueChapter.value}`)
+}
 
 const colorMap: Record<string, { border: string; bg: string; text: string; dot: string; ring: string; fill: string }> = {
   emerald: { border: 'border-emerald-400/20', bg: 'bg-emerald-400/5', text: 'text-emerald-400', dot: 'bg-emerald-400', ring: 'ring-emerald-400/30', fill: 'fill-emerald-400' },
@@ -272,18 +348,18 @@ const termLines = computed(() => [
         <!-- CTA 按钮 -->
         <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14 animate-fade-in">
           <button
-            @click="router.push('/courses')"
+            @click="hasLearningProgress ? goContinueLearning() : router.push('/courses')"
             class="action-button group flex items-center gap-2.5 px-8 py-4 rounded-xl bg-cyan-500 text-[#06060b] font-bold text-base shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 hover:bg-cyan-400 transition-all duration-300"
           >
             <Play class="w-4 h-4" />
-            开始学习
+            {{ hasLearningProgress ? '继续学习' : '开始学习' }}
             <ArrowRight class="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
           <button
-            @click="router.push('/quiz')"
+            @click="router.push(hasLearningProgress ? '/courses' : '/quiz')"
             class="action-button flex items-center gap-2 px-8 py-4 rounded-xl border border-white/10 bg-white/[0.02] text-gray-300 font-medium text-base hover:bg-white/[0.05] hover:border-white/20 transition-all duration-300"
           >
-            问答练习
+            {{ hasLearningProgress ? '浏览课程' : '问答练习' }}
           </button>
         </div>
 
@@ -308,12 +384,14 @@ const termLines = computed(() => [
     </section>
 
     <!-- ===== 继续学习 ===== -->
-    <section v-if="lastVisitedCourse" class="max-w-6xl mx-auto px-6 pb-8">
+    <section class="max-w-6xl mx-auto px-6 pb-8">
       <div class="rounded-xl border border-cyan-400/10 bg-gradient-to-r from-cyan-400/[0.03] to-transparent p-5 md:p-6">
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
             <div class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
-            <span class="text-xs font-mono text-cyan-400 font-semibold">继续学习</span>
+            <span class="text-xs font-mono text-cyan-400 font-semibold">
+              {{ hasLearningProgress ? '继续学习' : '从这里开始' }}
+            </span>
           </div>
           <button
             @click="router.push('/courses')"
@@ -323,31 +401,35 @@ const termLines = computed(() => [
           </button>
         </div>
         <button
-          @click="router.push(`/course/${lastVisitedCourse.id}/chapter/${lastVisitedChapter}`)"
+          v-if="continueCourse"
+          @click="goContinueLearning"
           class="group flex items-center gap-4 w-full text-left"
         >
           <div class="w-12 h-12 rounded-lg bg-cyan-400/10 border border-cyan-400/15 flex items-center justify-center font-mono text-cyan-400 text-lg flex-shrink-0">
-            {{ getCourseIconChar(lastVisitedCourse.icon) }}
+            {{ getCourseIconChar(continueCourse.icon) }}
           </div>
           <div class="flex-1 min-w-0">
             <div class="text-white font-semibold text-sm group-hover:text-cyan-400 transition-colors truncate">
-              {{ lastVisitedCourse.title }}
+              {{ continueCourse.title }}
             </div>
             <div class="text-gray-500 text-xs mt-0.5 font-mono">
-              第 {{ lastVisitedChapter + 1 }} 章 · 共 {{ lastVisitedCourse.chapterCount }} 章
+              第 {{ continueChapter + 1 }} 章 · 共 {{ continueCourse.chapterCount }} 章
             </div>
             <div class="flex items-center gap-2 mt-1.5">
               <div class="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
                 <div
                   class="h-full bg-cyan-400/60 rounded-full transition-all"
-                  :style="{ width: `${lastVisitedProgress}%` }"
+                  :style="{ width: `${continueProgress}%` }"
                 ></div>
               </div>
-              <span class="text-[10px] text-gray-600 font-mono">{{ lastVisitedProgress }}%</span>
+              <span class="text-[10px] text-gray-600 font-mono">{{ continueProgress }}%</span>
             </div>
           </div>
           <ChevronRight class="w-4 h-4 text-gray-700 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
         </button>
+        <p v-else class="text-xs text-gray-500 font-mono">
+          先打开课程列表，从推荐路线第 1 阶段开始。
+        </p>
       </div>
     </section>
 

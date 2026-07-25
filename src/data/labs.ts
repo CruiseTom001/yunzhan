@@ -417,6 +417,42 @@ export const labTasks: LabTask[] = [
     ],
     hints: ['综合实战必须验证完整链路，不能只看单个组件状态。'],
   },
+  {
+    id: 'docker-image-inspect',
+    courseId: 'docker',
+    chapterIndex: 2,
+    title: '镜像与容器清单复核',
+    description: '用 docker images 与 docker ps 确认本地镜像和运行中容器。',
+    estimatedMinutes: 8,
+    difficulty: 'intermediate',
+    steps: [
+      { title: '查看本地镜像', command: 'docker images', description: '确认可用镜像列表。' },
+      { title: '查看运行容器', command: 'docker ps', description: '确认当前运行中的容器。' },
+    ],
+    checks: [
+      { id: 'docker-images-run', label: '成功执行 docker images', type: 'command_exact', target: 'docker images' },
+      { id: 'docker-ps-run', label: '成功执行 docker ps', type: 'command_exact', target: 'docker ps' },
+    ],
+    hints: ['先看镜像是否存在，再看容器是否按预期启动。'],
+  },
+  {
+    id: 'git-diff-before-commit',
+    courseId: 'git',
+    chapterIndex: 2,
+    title: '提交前差异核对',
+    description: '用 git status 与 git diff 在提交前确认变更范围。',
+    estimatedMinutes: 8,
+    difficulty: 'beginner',
+    steps: [
+      { title: '查看工作区', command: 'git status', description: '确认变更文件列表。' },
+      { title: '查看差异', command: 'git diff', description: '核对尚未暂存的具体改动。' },
+    ],
+    checks: [
+      { id: 'git-status-check', label: '成功执行 git status', type: 'command_exact', target: 'git status' },
+      { id: 'git-diff-check', label: '成功执行 git diff', type: 'command_exact', target: 'git diff' },
+    ],
+    hints: ['提交前先看 status，再看 diff，能减少误提交。'],
+  },
 ]
 
 export function getLabsForChapter(courseId: string, chapterIndex: number): LabTask[] {

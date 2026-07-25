@@ -10,6 +10,18 @@ npm run release:windows
 安装包会生成到 `release/云栈-Setup-<version>.exe`。
 Windows 图标由发布命令根据 `public/favicon.svg` 自动生成。
 
+一键发版（构建 + 上传 GitHub Release + 打印 downloadUrl）：
+
+```powershell
+npm run release:desktop
+```
+
+仅上传已有产物：
+
+```powershell
+node scripts/release-desktop.mjs --skip-build
+```
+
 ## 更新规则
 
 1. 修改 `package.json` 与 `package-lock.json` 中的版本号。

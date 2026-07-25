@@ -884,6 +884,7 @@ function executePlatformCommand(main: string, fullCmd: string): SandboxResult | 
       return { output: 'Docker sandbox ready. Try: docker ps, docker images, docker logs nginx-demo' }
     case 'git':
       if (fullCmd.includes('status')) return { output: 'On branch main\nYour branch is up to date with origin/main.\n\nChanges not staged for commit:\n  modified: src/App.vue\n\nno changes added to commit' }
+      if (fullCmd.includes('diff')) return { output: 'diff --git a/src/App.vue b/src/App.vue\n--- a/src/App.vue\n+++ b/src/App.vue\n@@ -10,3 +10,4 @@\n   <AppHeader />\n+  <UpdateBanner />\n   <RouterView />' }
       if (fullCmd.includes('log')) return { output: 'a1b2c3d feat: add lab workflow\nf6e5d4c fix: improve course navigation\nc9b8a7d docs: update deployment notes' }
       return { output: 'main\nfeature/lab-sandbox\nrelease/2026-q2' }
     case 'kubectl':

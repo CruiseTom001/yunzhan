@@ -17,6 +17,7 @@ import { questions as computerBasics } from './computer-basics'
 import { questions as git } from './git'
 import { questions as pythonOps } from './python-ops'
 import { questions as virtualization } from './virtualization'
+import { questions as devopsProject } from './devops-project'
 
 export const allQuestions = [
   ...linuxBasics,
@@ -38,6 +39,7 @@ export const allQuestions = [
   ...git,
   ...pythonOps,
   ...virtualization,
+  ...devopsProject,
 ]
 
 export function getQuestionsByCategory(categoryId: string) {

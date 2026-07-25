@@ -1,0 +1,86 @@
+import type { QuizQuestion } from '@/types'
+
+export const questions: QuizQuestion[] = [
+  {
+    id: 'devops-project-001',
+    categoryId: 'devops-project',
+    type: 'single',
+    question: '企业级 DevOps 平台冒烟测试时，最合理的检查顺序是？',
+    options: [
+      { id: 'a', text: '先查业务入口 HTTP，再查容器，最后查 Kubernetes', isCorrect: false },
+      { id: 'b', text: '先查基础设施与容器，再查工作负载，最后查业务入口', isCorrect: true },
+      { id: 'c', text: '只检查 Kubernetes Pod 是否 Running 即可', isCorrect: false },
+      { id: 'd', text: '只看监控大盘，无需执行命令', isCorrect: false },
+    ],
+    explanation: '端到端冒烟应从底层到上层：先确认容器/依赖存活，再确认编排层工作负载正常，最后验证业务入口返回。只看单层容易漏掉链路故障。',
+    difficulty: 'advanced',
+  },
+  {
+    id: 'devops-project-002',
+    categoryId: 'devops-project',
+    type: 'single',
+    question: 'Docker Compose 在本地联调多服务时，核心价值是什么？',
+    options: [
+      { id: 'a', text: '替代生产环境的 Kubernetes', isCorrect: false },
+      { id: 'b', text: '用声明式文件编排多容器依赖、网络与启动顺序', isCorrect: true },
+      { id: 'c', text: '自动完成代码编译', isCorrect: false },
+      { id: 'd', text: '只能启动单个容器', isCorrect: false },
+    ],
+    explanation: 'Compose 适合本地/测试环境声明多服务拓扑（依赖、端口、网络、卷）。它不是生产 K8s 的替代品，但能显著降低联调成本。',
+    difficulty: 'intermediate',
+  },
+  {
+    id: 'devops-project-003',
+    categoryId: 'devops-project',
+    type: 'single',
+    question: 'Nginx 反向代理放在平台入口层，主要解决什么问题？',
+    options: [
+      { id: 'a', text: '替代数据库备份', isCorrect: false },
+      { id: 'b', text: '统一入口、转发到后端服务，并可做 TLS 与负载均衡', isCorrect: true },
+      { id: 'c', text: '只用于静态文件缓存，不能转发请求', isCorrect: false },
+      { id: 'd', text: '专门替换 Prometheus', isCorrect: false },
+    ],
+    explanation: '反向代理作为统一入口，把外部请求转发到后端应用；常见能力包括 TLS 终结、路径路由与简单负载均衡。',
+    difficulty: 'intermediate',
+  },
+  {
+    id: 'devops-project-004',
+    categoryId: 'devops-project',
+    type: 'truefalse',
+    question: '综合实战平台中，只要 docker ps 正常就可以认为整条业务链路健康。',
+    options: [
+      { id: 'a', text: '正确', isCorrect: false },
+      { id: 'b', text: '错误', isCorrect: true },
+    ],
+    explanation: '容器进程存活不等于业务可用。还需要确认编排层状态与 HTTP/业务入口响应。',
+    difficulty: 'beginner',
+  },
+  {
+    id: 'devops-project-005',
+    categoryId: 'devops-project',
+    type: 'single',
+    question: '平台同时部署 Prometheus + Grafana 的主要目的是？',
+    options: [
+      { id: 'a', text: '用监控替代日志系统', isCorrect: false },
+      { id: 'b', text: '采集指标并可视化，支撑告警与容量判断', isCorrect: true },
+      { id: 'c', text: '只为了美化首页', isCorrect: false },
+      { id: 'd', text: '自动修复所有故障', isCorrect: false },
+    ],
+    explanation: 'Prometheus 负责指标采集与告警规则，Grafana 负责可视化。它们帮助发现异常与容量问题，但不能替代日志与完整排障流程。',
+    difficulty: 'intermediate',
+  },
+  {
+    id: 'devops-project-006',
+    categoryId: 'devops-project',
+    type: 'single',
+    question: '企业平台日常运维中，自动备份最应优先覆盖哪类数据？',
+    options: [
+      { id: 'a', text: '临时缓存目录', isCorrect: false },
+      { id: 'b', text: '数据库与关键配置等不可重建的状态数据', isCorrect: true },
+      { id: 'c', text: '所有容器日志原文永久全量保存到本机磁盘', isCorrect: false },
+      { id: 'd', text: '仅备份操作系统 ISO', isCorrect: false },
+    ],
+    explanation: '备份应优先保护不可轻易重建的数据：数据库、密钥与关键配置。缓存与可再生产物优先级较低。',
+    difficulty: 'advanced',
+  },
+]
