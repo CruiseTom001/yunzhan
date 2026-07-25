@@ -759,10 +759,11 @@ onMounted(() => {
               <button
                 v-else-if="aiReady"
                 type="button"
-                class="inline-flex items-center gap-1.5 max-w-[220px] rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-theme outline-none hover:border-purple-400/40 focus:border-purple-400/40"
+                class="inline-flex items-center gap-1.5 max-w-[220px] rounded-lg border border-purple-400/25 bg-purple-400/5 px-3 py-2 text-sm text-white outline-none transition hover:border-purple-400/40 hover:bg-purple-400/10 focus:border-purple-400/40"
                 title="选择 AI 模型"
                 @click="showModelPicker = true"
               >
+                <Sparkles class="h-3.5 w-3.5 text-purple-300 shrink-0" />
                 {{ selectedModelDisplay }}
                 <ChevronDown class="h-3.5 w-3.5 text-theme-dim" />
               </button>
