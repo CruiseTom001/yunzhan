@@ -144,6 +144,7 @@ function getModelTraits(model: string): { green: string; red: string } {
 function selectModel(_modelName: string, providerId: string) {
   if (!desktopLocalAi.value) {
     selectedServerProviderId.value = providerId
+    localStorage.setItem('yunzhan_preferred_provider', providerId)
   } else {
     selectedPolishProviderId.value = providerId
     selectAiProvider(providerId)
@@ -313,7 +314,13 @@ async function loadServerProviders() {
     const activeMatch = selectedServerProviderId.value
       && providers.some(item => item.id === selectedServerProviderId.value)
       ? selectedServerProviderId.value
-      : providers[0]?.id ?? null
+      : (() => {
+          const stored = localStorage.getItem('yunzhan_preferred_provider')
+          if (stored && providers.some(item => item.id === stored)) return stored
+          return providers.find(item => item.model.toLowerCase().includes('flash'))?.id
+            ?? providers[0]?.id
+            ?? null
+        })()
     selectedServerProviderId.value = activeMatch
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '服务端 AI 供应商加载失败。'
