@@ -333,7 +333,7 @@ const stats = [
 
 .typing-caret {
   display: inline-block;
-  color: #22d3ee;
+  color: var(--accent-cyan);
   animation: caret-blink 1s steps(1, end) infinite;
 }
 

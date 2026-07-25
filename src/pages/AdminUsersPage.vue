@@ -592,8 +592,8 @@ onMounted(() => {
 }
 
 .form-field select option {
-  color: #ffffff;
-  background-color: #0c0f18;
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
 }
 
 .form-field small {

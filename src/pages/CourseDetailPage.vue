@@ -1173,7 +1173,7 @@ function saveWorkbenchDraft() {
   padding: 5px 8px;
   border: 1px solid rgb(52 211 153 / 0.25);
   border-radius: 6px;
-  color: #6ee7b7;
+  color: var(--accent-emerald);
   background: rgb(6 78 59 / 0.72);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
@@ -1190,7 +1190,7 @@ function saveWorkbenchDraft() {
   padding: 12px 18px;
   border: 1px solid rgb(52 211 153 / 0.32);
   border-radius: 8px;
-  color: #6ee7b7;
+  color: var(--accent-emerald);
   background: rgb(3 18 16 / 0.94);
   box-shadow: 0 18px 48px rgb(0 0 0 / 0.45), 0 0 28px rgb(52 211 153 / 0.12);
   place-items: center;
@@ -1208,7 +1208,7 @@ function saveWorkbenchDraft() {
 
 .lab-deploy-success span {
   margin-top: 2px;
-  color: #6ee7b7;
+  color: var(--accent-emerald);
   font-size: 10px;
 }
 
@@ -1236,8 +1236,8 @@ function saveWorkbenchDraft() {
   overflow-y: auto;
   border: 1px solid rgb(34 211 238 / 0.22);
   border-radius: 12px;
-  color: #cbd5e1;
-  background: #090d16;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
   box-shadow: 0 28px 90px rgb(0 0 0 / 0.7), 0 0 40px rgb(34 211 238 / 0.08);
   text-align: center;
 }
@@ -1252,12 +1252,12 @@ function saveWorkbenchDraft() {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .course-completion-close:hover {
-  color: #f8fafc;
-  background: rgb(255 255 255 / 0.05);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
 }
 
 .course-completion-emblem {
@@ -1283,14 +1283,14 @@ function saveWorkbenchDraft() {
 
 .course-completion-panel h2 {
   margin-top: 5px;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 24px;
   font-weight: 700;
 }
 
 .course-completion-panel > p {
   margin-top: 6px;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -1304,9 +1304,9 @@ function saveWorkbenchDraft() {
 .course-completion-stats > div {
   min-width: 0;
   padding: 12px 8px;
-  border: 1px solid rgb(255 255 255 / 0.05);
+  border: 1px solid var(--border-card);
   border-radius: 7px;
-  background: rgb(255 255 255 / 0.018);
+  background: var(--bg-elevated);
 }
 
 .course-completion-stats span,
@@ -1315,14 +1315,14 @@ function saveWorkbenchDraft() {
 }
 
 .course-completion-stats span {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 10px;
 }
 
 .course-completion-stats strong {
   margin-top: 5px;
   overflow-wrap: anywhere;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
 }
@@ -1382,8 +1382,8 @@ function saveWorkbenchDraft() {
 
 .celebration-summary {
   padding-top: 3px;
-  border-top: 1px solid rgb(255 255 255 / 0.08);
-  color: #94a3b8 !important;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-dim) !important;
   font-size: 10px !important;
 }
 
@@ -1467,7 +1467,7 @@ function saveWorkbenchDraft() {
 }
 
 .celebration-prompt {
-  color: #94a3b8;
+  color: var(--text-dim);
   font-size: 10px;
 }
 

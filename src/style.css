@@ -43,8 +43,26 @@
   --border-card: rgba(255, 255, 255, 0.04);
   --border-hover: rgba(255, 255, 255, 0.08);
 
+  --accent-cyan: #00f0ff;
+  --accent-purple: #a78bfa;
+  --accent-amber: #fbbf24;
+  --accent-emerald: #34d399;
+
+  /* shiki css-variables 主题：深色参考 github-dark-variable */
+  --shiki-foreground: #e2e8f0;
+  --shiki-background: transparent;
+  --shiki-token-constant: #79c0ff;
+  --shiki-token-string: #a5d6ff;
+  --shiki-token-comment: #8b949e;
+  --shiki-token-keyword: #ff7b72;
+  --shiki-token-function: #d2a8ff;
+  --shiki-token-parameter: #ffa657;
+  --shiki-token-punctuation: #c9d1d9;
+  --shiki-token-link: #79c0ff;
+
   --overlay: rgba(0, 0, 0, 0.5);
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --skeleton: #374151;
 }
 
 [data-theme="light"] {
@@ -73,8 +91,21 @@
   --accent-amber: #d97706;
   --accent-emerald: #059669;
 
+  /* shiki css-variables 主题：浅色参考 github-light-variable */
+  --shiki-foreground: #24292f;
+  --shiki-background: transparent;
+  --shiki-token-constant: #0550ae;
+  --shiki-token-string: #0a3069;
+  --shiki-token-comment: #6e7781;
+  --shiki-token-keyword: #cf222e;
+  --shiki-token-function: #8250df;
+  --shiki-token-parameter: #953800;
+  --shiki-token-punctuation: #24292f;
+  --shiki-token-link: #0969da;
+
   --overlay: rgba(0, 0, 0, 0.15);
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --skeleton: #94a3b8;
 }
 
 /* 基础应用 */
@@ -324,20 +355,6 @@ body {
   color: var(--accent-emerald) !important;
 }
 
-/* 实验里小标签 / 灰字（text-gray-200/500/600 已被全局 text-gray-* 规则覆盖，这里只补一条 card 内部背景层） */
-[data-theme="light"] .lab-card .bg-white\/\[0\.01\],
-[data-theme="light"] .lab-card .bg-white\/\[0\.015\],
-[data-theme="light"] .lab-card .bg-white\/\[0\.03\],
-[data-theme="light"] .lab-card .bg-white\/\[0\.05\] {
-  background-color: var(--bg-card-hover) !important;
-}
-
-[data-theme="light"] .lab-card .border-white\/\[0\.03\],
-[data-theme="light"] .lab-card .border-white\/\[0\.04\],
-[data-theme="light"] .lab-card .border-white\/\[0\.05\] {
-  border-color: var(--border-card) !important;
-}
-
 /* 自动判题按钮：emerald-500 在浅色下字色偏黑可读，但背景过浓，调浅 */
 [data-theme="light"] .lab-card .bg-emerald-500 {
   background-color: var(--accent-emerald) !important;
@@ -356,9 +373,277 @@ body {
   background-color: var(--bg-card-hover) !important;
 }
 
+/* ===== 全局浅色补丁：硬编码深底色块 → 浅色卡片 ===== */
+[data-theme="light"] .bg-\[\#0c0f18\] {
+  background-color: var(--bg-card) !important;
+}
+[data-theme="light"] .bg-\[\#0c0c14\] {
+  background-color: var(--bg-card) !important;
+}
+[data-theme="light"] .bg-\[\#252525\] {
+  background-color: var(--bg-card) !important;
+}
+[data-theme="light"] .bg-\[\#0c0c14\]\/80 {
+  background-color: var(--bg-card) !important;
+}
+[data-theme="light"] .bg-\[\#0a0a0a\/30\] {
+  background-color: var(--bg-elevated) !important;
+}
+
+/* ===== 全局浅色补丁：bg-white 半透明叠加 → 浅色辨识容器背景 ===== */
+[data-theme="light"] .bg-white\/\[0\.01\] {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.015\] {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.02\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.025\] {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.03\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.04\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.05\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.06\] {
+  background-color: var(--bg-card-hover) !important;
+}
+
+/* 全局浅色补丁：border-white 半透明 → 浅色边框 */
+[data-theme="light"] .border-white\/\[0\.01\] {
+  border-color: var(--border-card) !important;
+}
+[data-theme="light"] .border-white\/\[0\.02\] {
+  border-color: var(--border-card) !important;
+}
+[data-theme="light"] .border-white\/\[0\.03\] {
+  border-color: var(--border-card) !important;
+}
+[data-theme="light"] .border-white\/\[0\.04\] {
+  border-color: var(--border-card) !important;
+}
+[data-theme="light"] .border-white\/\[0\.05\] {
+  border-color: var(--border-card) !important;
+}
+[data-theme="light"] .border-white\/\[0\.06\] {
+  border-color: var(--border-light) !important;
+}
+[data-theme="light"] .border-white\/\[0\.08\] {
+  border-color: var(--border-light) !important;
+}
+[data-theme="light"] .border-white\/\[0\.10\],
+[data-theme="light"] .border-white\/\[0\.1\],
+[data-theme="light"] .border-white\/10 {
+  border-color: var(--border-hover) !important;
+}
+[data-theme="light"] .border-white\/\[0\.12\] {
+  border-color: var(--border-hover) !important;
+}
+
+/* 全局浅色补丁：bg-black/20 半透明黑底在浅色下变背景色并加重边框 */
+[data-theme="light"] .bg-black\/20 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-light) !important;
+}
+
+/* 全局浅色补丁：骨架占位 bg-gray-700/* → --skeleton */
+[data-theme="light"] .bg-gray-700\/10 {
+  background-color: color-mix(in srgb, var(--skeleton) 10%, transparent) !important;
+}
+[data-theme="light"] .bg-gray-700\/20 {
+  background-color: color-mix(in srgb, var(--skeleton) 16%, transparent) !important;
+}
+[data-theme="light"] .bg-gray-700\/30 {
+  background-color: color-mix(in srgb, var(--skeleton) 22%, transparent) !important;
+}
+
+/* ===== 全局浅色补丁：低阶文字色沉一档 ===== */
+[data-theme="light"] .text-gray-100 {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .text-gray-950 {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .text-gray-600 {
+  color: var(--text-dim) !important;
+}
+
+/* 彩色强调色阶沉档：400 阶在浅底太淡，统一接到 --accent-* */
+[data-theme="light"] .text-emerald-400 {
+  color: var(--accent-emerald) !important;
+}
+[data-theme="light"] .text-amber-400 {
+  color: var(--accent-amber) !important;
+}
+[data-theme="light"] .text-rose-400 {
+  color: var(--accent-purple) !important;
+}
+[data-theme="light"] .text-red-200 {
+  color: #b91c1c !important;
+}
+[data-theme="light"] .text-emerald-300 {
+  color: var(--accent-emerald) !important;
+}
+[data-theme="light"] .text-blue-400 {
+  color: #1d4ed8 !important;
+}
+[data-theme="light"] .text-blue-300 {
+  color: #1d4ed8 !important;
+}
+
+/* 浅色元素的悬停态 hover:bg-white/* → 浅色重背景 */
+[data-theme="light"] .hover\:bg-white\/\[0\.01\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .hover\:bg-white\/\[0\.03\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .hover\:bg-white\/\[0\.05\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .hover\:bg-white\/\[0\.08\] {
+  background-color: var(--bg-card-hover) !important;
+}
+
+/* ===== 浅色补丁：登录页面表单元素 ===== */
+[data-theme="light"] .login-input-wrap input,
+[data-theme="light"] .login-input-wrap textarea {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .login-form label {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .login-input-wrap {
+  border-color: var(--border-light) !important;
+}
+
+/* ===== 浅色补丁：account / admin modal 深底 + metric-cell ===== */
+[data-theme="light"] .account-modal,
+[data-theme="light"] .modal-panel {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .metric-cell {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .metric-cell strong {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .metric-cell span {
+  color: var(--text-dim) !important;
+}
+/* scoped @apply 的表单控件：元素上没有 Tailwind 工具类，需按组件类覆盖 */
+[data-theme="light"] .text-input,
+[data-theme="light"] .form-field input,
+[data-theme="light"] .form-field select,
+[data-theme="light"] .form-field textarea {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .form-field select,
+[data-theme="light"] select {
+  color-scheme: light !important;
+}
+[data-theme="light"] .form-field select option,
+[data-theme="light"] select option {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* ===== 浅色补丁：全局搜索面板 ===== */
+[data-theme="light"] .bg-\[\#0c0c14\] {
+  background-color: var(--bg-card) !important;
+}
+
+/* ===== 浅色补丁：课程详情左侧工具栏 ===== */
+[data-theme="light"] .bg-\[\#090d16\] {
+  background-color: var(--bg-elevated) !important;
+}
+
+/* ===== 浅色补丁：进度页 .progress-stat-card 等容器 ===== */
+[data-theme="light"] .bg-white\/\[0\.01\] {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .progress-stat-card {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-card) !important;
+}
+
+/* ===== 浅色补丁：讲解面板示例代码示例 ===== */
+[data-theme="light"] .explain-example-code {
+  background: var(--bg-code) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ===== 浅色补丁：软提示 / 难度标签 / Quiz tab 色块 ===== */
+[data-theme="light"] .bg-emerald-400\/10,
+[data-theme="light"] .bg-emerald-400\/\[0\.08\] {
+  background-color: rgba(5, 150, 105, 0.16) !important;
+}
+[data-theme="light"] .bg-amber-400\/10 {
+  background-color: rgba(217, 119, 6, 0.16) !important;
+}
+[data-theme="light"] .bg-rose-400\/10 {
+  background-color: rgba(159, 18, 57, 0.14) !important;
+}
+[data-theme="light"] .bg-cyan-400\/10 {
+  background-color: rgba(8, 145, 178, 0.14) !important;
+}
+[data-theme="light"] .bg-emerald-400\/5 {
+  background-color: rgba(5, 150, 105, 0.10) !important;
+}
+[data-theme="light"] .bg-amber-400\/5 {
+  background-color: rgba(217, 119, 6, 0.10) !important;
+}
+[data-theme="light"] .bg-cyan-400\/5 {
+  background-color: rgba(8, 145, 178, 0.10) !important;
+}
+[data-theme="light"] .bg-blue-400\/5 {
+  background-color: rgba(29, 78, 216, 0.08) !important;
+}
+[data-theme="light"] .bg-red-400\/5 {
+  background-color: rgba(185, 28, 28, 0.08) !important;
+}
+[data-theme="light"] .bg-purple-400\/5 {
+  background-color: rgba(124, 58, 237, 0.08) !important;
+}
+[data-theme="light"] .bg-emerald-400\/\[0\.03\] {
+  background-color: rgba(5, 150, 105, 0.08) !important;
+}
+[data-theme="light"] .bg-red-400\/\[0\.03\] {
+  background-color: rgba(185, 28, 28, 0.08) !important;
+}
+[data-theme="light"] .bg-red-400\/10 {
+  background-color: rgba(185, 28, 28, 0.10) !important;
+}
+[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: var(--bg-card-hover) !important;
+}
+
+/* ===== 浅色补丁：header / navbar 半塗 ===== */
+[data-theme="light"] .bg-surface-primary\/80 {
+  background-color: color-mix(in srgb, var(--bg-secondary) 80%, transparent) !important;
+}
+[data-theme="light"] .bg-surface-secondary\/80 {
+  background-color: color-mix(in srgb, var(--bg-elevated) 80%, transparent) !important;
+}
+
+/* ===== 浅色补丁：select option（确保出现时已正确显示） ===== */
+/* 已在第 777-782 行定义，此处不重复 */
+
 ::selection {
-  background: rgba(0, 240, 255, 0.2);
-  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.15);
+  color: var(--accent-cyan);
 }
 
 .prose-content {
@@ -380,7 +665,7 @@ body {
 
 .prose-content h2 {
   font-size: 1.5rem;
-  border-left: 3px solid #00f0ff;
+  border-left: 3px solid var(--accent-cyan);
   padding-left: 1rem;
   background: linear-gradient(90deg, rgba(0, 240, 255, 0.06), transparent);
   line-height: 2;
@@ -388,7 +673,7 @@ body {
 
 .prose-content h3 {
   font-size: 1.2rem;
-  color: #a78bfa;
+  color: var(--accent-purple);
 }
 
 .prose-content p {
@@ -406,12 +691,12 @@ body {
 }
 
 .prose-content li::marker {
-  color: #00f0ff;
+  color: var(--accent-cyan);
 }
 
 .prose-content code {
   background: rgba(0, 240, 255, 0.08);
-  color: #00f0ff;
+  color: var(--accent-cyan);
   padding: 0.15em 0.4em;
   border-radius: 4px;
   font-family: 'JetBrains Mono', monospace;
@@ -443,7 +728,7 @@ body {
   left: 1.5em;
   right: 1.5em;
   height: 1px;
-  background: linear-gradient(90deg, rgba(0, 240, 255, 0.3), transparent);
+  background: linear-gradient(90deg, var(--accent-cyan) 0%, transparent 100%);
 }
 
 .prose-content blockquote {
@@ -452,7 +737,7 @@ body {
   margin-bottom: 1.25em;
   background: rgba(124, 58, 237, 0.05);
   border-radius: 0 8px 8px 0;
-  color: #a78bfa;
+  color: var(--accent-purple);
 }
 
 .prose-content table {
@@ -464,7 +749,7 @@ body {
 
 .prose-content th {
   background: rgba(0, 240, 255, 0.08);
-  color: #00f0ff;
+  color: var(--accent-cyan);
   font-weight: 600;
   padding: 0.75em 1em;
   text-align: left;
@@ -484,7 +769,7 @@ body {
 }
 
 .prose-content a {
-  color: #00f0ff;
+  color: var(--accent-cyan);
   text-decoration: none;
   border-bottom: 1px dashed rgba(0, 240, 255, 0.3);
 }
@@ -511,55 +796,28 @@ body {
   color: #6b7280;
 }
 
-.token.punctuation {
-  color: #9ca3af;
-}
-
-.token.property,
-.token.tag,
-.token.boolean,
-.token.number,
-.token.constant,
-.token.symbol,
-.token.deleted {
-  color: #a78bfa;
-}
-
-.token.selector,
-.token.attr-name,
-.token.string,
-.token.char,
-.token.builtin,
-.token.inserted {
-  color: #34d399;
-}
-
-.token.operator,
-.token.entity,
-.token.url {
-  color: #00f0ff;
-}
-
-.token.atrule,
-.token.attr-value,
-.token.keyword {
-  color: #f472b6;
-}
-
+.token.keyword,
 .token.function,
-.token.class-name {
-  color: #fbbf24;
+.token.string,
+.token.number,
+.token.operator,
+.token.property {
+  color: inherit;
 }
 
-.token.regex,
-.token.important,
-.token.variable {
-  color: #fb923c;
+/* ========== shiki 代码块结构（css-variables 主题） ========== */
+.shiki,
+.shiki span {
+  color: var(--shiki-foreground);
+  background-color: var(--shiki-background);
+}
+.shiki span {
+  /* span 无需变背景，仅继承变量驱动的颜色 */
 }
 
 /* ========== 知识点术语悬停标记 ========== */
 .knowledge-term {
-  color: #a78bfa;
+  color: var(--accent-purple);
   border-bottom: 1px dashed rgba(167, 139, 250, 0.4);
   cursor: pointer;
   transition: all 0.2s;
@@ -570,11 +828,11 @@ body {
 .knowledge-term:hover {
   color: #c4b5fd;
   background: rgba(167, 139, 250, 0.1);
-  border-bottom-color: #a78bfa;
+  border-bottom-color: var(--accent-purple);
 }
 
 .knowledge-term-core {
-  color: #fbbf24;
+  color: var(--accent-amber);
   font-weight: 700;
   background: linear-gradient(180deg, transparent 52%, rgba(251, 191, 36, 0.22) 52%);
   border-bottom-color: rgba(251, 191, 36, 0.75);
@@ -592,7 +850,7 @@ body {
   border-radius: 999px;
   background: rgba(251, 191, 36, 0.16);
   border: 1px solid rgba(251, 191, 36, 0.45);
-  color: #fbbf24;
+  color: var(--accent-amber);
   font-size: 0.65em;
   font-weight: 800;
   line-height: 1;
@@ -602,7 +860,7 @@ body {
 .knowledge-term-core:hover {
   color: #fde68a;
   background: linear-gradient(180deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.22));
-  border-bottom-color: #fbbf24;
+  border-bottom-color: var(--accent-amber);
 }
 
 /* ========== 代码块交互工具条 ========== */
@@ -661,17 +919,17 @@ body {
 
 .code-btn-copy:hover {
   border-color: rgba(0, 240, 255, 0.3);
-  color: #00f0ff;
+  color: var(--accent-cyan);
 }
 
 .code-btn-explain:hover {
   border-color: rgba(167, 139, 250, 0.3);
-  color: #a78bfa;
+  color: var(--accent-purple);
 }
 
 .code-btn-demo:hover {
   border-color: rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
+  color: var(--accent-amber);
 }
 
 /* ========== 讲解面板 ========== */
@@ -695,7 +953,7 @@ body {
   font-family: 'JetBrains Mono', 'Noto Sans SC', monospace;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #a78bfa;
+  color: var(--accent-purple);
   margin-bottom: 0.6em;
 }
 
@@ -723,7 +981,7 @@ body {
 
 .explain-options-table th {
   background: rgba(167, 139, 250, 0.08);
-  color: #a78bfa;
+  color: var(--accent-purple);
   font-weight: 600;
   padding: 0.4em 0.8em;
   text-align: left;
@@ -739,7 +997,7 @@ body {
 
 .explain-opt-name {
   font-family: 'JetBrains Mono', monospace !important;
-  color: #fbbf24 !important;
+  color: var(--accent-amber) !important;
   white-space: nowrap;
   width: 1%;
 }
@@ -759,7 +1017,7 @@ body {
 /* ========== 搜索结果页面关键字高亮 ========== */
 .search-highlight {
   background: rgba(0, 240, 255, 0.2);
-  color: #00f0ff;
+  color: var(--accent-cyan);
   padding: 0.1em 0.3em;
   border-radius: 3px;
 }
@@ -779,4 +1037,18 @@ body {
 [data-theme="light"] select option:hover {
   background-color: #f1f5f9 !important;
   color: #1e293b !important;
+}
+
+/* ===== 终端强制深色策略 ===== */
+/* 终端（xterm / FloatingTerminal / TerminalView）在浅色模式下依旧保持深色，
+ * 体现终端的专业技术感，避免强行浅色导致色块错乱。
+ * 仅确保外框 header/工具栏在浅色下略微加深以保持对比，终端内部不作干扰。 */
+[data-theme="light"] .floating-terminal,
+[data-theme="light"] .terminal-view-container,
+[data-theme="light"] .xterm-viewport {
+  background: #0a0a14 !important;
+}
+[data-theme="light"] .floating-terminal-header,
+[data-theme="light"] .terminal-title span {
+  color: #e2e8f0 !important;
 }

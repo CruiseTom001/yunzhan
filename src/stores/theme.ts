@@ -20,6 +20,7 @@ function loadTheme(): boolean {
 
 function applyTheme(dark: boolean) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+  document.documentElement.classList.toggle('dark', dark)
 }
 
 function persistTheme(dark: boolean) {

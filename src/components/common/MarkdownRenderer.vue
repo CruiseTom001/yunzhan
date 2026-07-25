@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, onHighlighterReady } from '@/utils/markdown'
 import { lookupCommand, extractCommand, getDemoUrl, type CommandExplanation } from '@/utils/explainer'
 import { findKnowledgeTerms } from '@/utils/knowledge'
 
@@ -9,6 +9,9 @@ const props = defineProps<{
 }>()
 
 const proseRef = ref<HTMLElement | null>(null)
+// shiki highlighter 异步就绪后递增，驱动 :key 重渲染与代码块工具栏重绑
+const highlightTick = ref(0)
+
 
 interface ActiveExplain {
   codeBlock: HTMLElement
@@ -345,6 +348,13 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside)
 })
 
+// 监听 shiki highlighter 异步就绪：若首屏渲染时尚未加载完成，
+// 待就绪后再次触发 v-html 重计算，让 pending 代码块补上语法高亮。
+let cancelReady: (() => void) | null = null
+cancelReady = onHighlighterReady(() => {
+  highlightTick.value++
+})
+
 // 内容变化时重新处理（支持异步加载的内容）
 watch(() => props.content, (newVal) => {
   if (!newVal || !proseRef.value) return
@@ -355,13 +365,27 @@ watch(() => props.content, (newVal) => {
   })
 })
 
+// highlighter 就绪 / tick 变化后重新增强代码块工具栏
+watch(highlightTick, () => {
+  nextTick(() => {
+    if (!proseRef.value) return
+    // 清除旧 enhanced 标记，让工具栏在重渲染后重新绑定
+    proseRef.value.querySelectorAll('pre[data-enhanced]').forEach((el) => {
+      delete (el as HTMLElement).dataset.enhanced
+    })
+    enhanceCodeBlocks()
+    annotateKnowledgeTerms()
+  })
+})
+
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  cancelReady?.()
 })
 </script>
 
 <template>
-  <div ref="proseRef" class="prose-content" v-html="renderMarkdown(content)"></div>
+  <div ref="proseRef" class="prose-content" :key="highlightTick" v-html="renderMarkdown(content)"></div>
 </template>
 
 <style scoped>

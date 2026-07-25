@@ -535,17 +535,17 @@ onUnmounted(stopCountdown)
   min-height: 100vh;
   padding: 24px;
   overflow-y: auto;
-  background: #070a11;
+  background: var(--bg-primary);
   place-items: center;
 }
 
 .login-panel {
   width: min(460px, 100%);
   padding: 30px;
-  border: 1px solid rgb(34 211 238 / 0.16);
+  border: 1px solid var(--border-light);
   border-radius: 8px;
-  background: #0b1019;
-  box-shadow: 0 28px 80px rgb(0 0 0 / 0.48);
+  background: var(--bg-tertiary);
+  box-shadow: var(--shadow);
 }
 
 .login-brand {
@@ -554,17 +554,17 @@ onUnmounted(stopCountdown)
   height: 36px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgb(34 211 238 / 0.2);
+  border: 1px solid var(--border-light);
   border-radius: 6px;
-  color: #67e8f9;
-  background: rgb(34 211 238 / 0.06);
+  color: var(--accent-cyan);
+  background: var(--bg-elevated);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-weight: 700;
 }
 
 .login-kicker {
   margin-top: 18px;
-  color: #22d3ee;
+  color: var(--accent-cyan);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
 }
@@ -575,32 +575,32 @@ onUnmounted(stopCountdown)
   gap: 3px;
   margin: 14px 0 20px;
   padding: 3px;
-  border: 1px solid rgb(255 255 255 / 0.06);
+  border: 1px solid var(--border-card);
   border-radius: 6px;
-  background: rgb(255 255 255 / 0.018);
+  background: var(--bg-elevated);
 }
 
 .auth-segments button {
   min-height: 34px;
   border-radius: 4px;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .auth-segments button.active {
-  color: #cffafe;
-  background: rgb(34 211 238 / 0.1);
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
 }
 
 .login-panel h1 {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 26px;
   font-weight: 700;
 }
 
 .login-subtitle {
   margin-top: 6px;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -612,7 +612,7 @@ onUnmounted(stopCountdown)
 .login-form label {
   display: block;
   margin: 13px 0 6px;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -622,21 +622,21 @@ onUnmounted(stopCountdown)
   align-items: center;
   gap: 9px;
   padding: 0 12px;
-  border: 1px solid rgb(255 255 255 / 0.07);
+  border: 1px solid var(--border-light);
   border-radius: 6px;
-  color: #64748b;
-  background: rgb(255 255 255 / 0.018);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
 }
 
 .login-input-wrap:focus-within {
-  border-color: rgb(34 211 238 / 0.35);
-  color: #67e8f9;
+  border-color: var(--border-hover);
+  color: var(--accent-cyan);
 }
 
 .login-input-wrap input {
   min-width: 0;
   flex: 1;
-  color: #f1f5f9;
+  color: var(--text-primary);
   background: transparent;
   font-size: 13px;
   outline: none;
@@ -653,13 +653,13 @@ onUnmounted(stopCountdown)
 }
 
 .login-password-toggle:hover {
-  color: #e2e8f0;
-  background: rgb(255 255 255 / 0.04);
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
 }
 
 .forgot-password-button,
 .back-to-login-button {
-  color: #67e8f9;
+  color: var(--accent-cyan);
   font-size: 11px;
 }
 
@@ -674,7 +674,7 @@ onUnmounted(stopCountdown)
 
 .forgot-password-button:hover,
 .back-to-login-button:hover {
-  color: #cffafe;
+  color: var(--accent-cyan);
   text-decoration: underline;
 }
 
@@ -687,14 +687,14 @@ onUnmounted(stopCountdown)
   justify-content: center;
   gap: 5px;
   padding: 0 8px;
-  border-left: 1px solid rgb(255 255 255 / 0.07);
-  color: #67e8f9;
+  border-left: 1px solid var(--border-light);
+  color: var(--accent-cyan);
   font-size: 11px;
 }
 
 .send-code-button:disabled {
   cursor: not-allowed;
-  color: #475569;
+  color: var(--text-very-dim);
 }
 
 .register-grid {
@@ -710,8 +710,8 @@ onUnmounted(stopCountdown)
   line-height: 1.6;
 }
 
-.login-error { color: #fca5a5; }
-.login-message { color: #6ee7b7; }
+.login-error { color: #ef4444; }
+.login-message { color: var(--accent-emerald); }
 
 .login-submit {
   display: inline-flex;
@@ -723,12 +723,12 @@ onUnmounted(stopCountdown)
   margin-top: 18px;
   border-radius: 6px;
   color: #061014;
-  background: #22d3ee;
+  background: var(--accent-cyan);
   font-size: 13px;
   font-weight: 700;
 }
 
-.login-submit:hover:not(:disabled) { background: #67e8f9; }
+.login-submit:hover:not(:disabled) { background: var(--accent-cyan); }
 
 .login-submit:disabled {
   cursor: not-allowed;

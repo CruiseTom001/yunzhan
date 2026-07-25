@@ -695,12 +695,12 @@ const termLines = computed(() => [
 }
 
 .brand-glitch::before {
-  color: #22d3ee;
+  color: var(--accent-cyan);
   animation: brand-glitch-cyan 5.4s steps(1, end) 1.2s infinite;
 }
 
 .brand-glitch::after {
-  color: #a78bfa;
+  color: var(--accent-purple);
   animation: brand-glitch-violet 5.4s steps(1, end) 1.2s infinite;
 }
 
@@ -804,7 +804,7 @@ const termLines = computed(() => [
   padding: 1px 5px;
   border: 1px solid rgb(251 191 36 / 0.22);
   border-radius: 3px;
-  color: #fbbf24;
+  color: var(--accent-amber);
   background: rgb(251 191 36 / 0.06);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 9px;
