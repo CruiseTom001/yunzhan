@@ -135,12 +135,11 @@ const availableModels = computed(() => {
   }
   return localAiProviders.value.map(p => ({ model: p.model, providerId: p.id, providerName: p.name }))
 })
-function getModelDescription(model: string): string {
-  const map: Record<string, string> = {
-    'deepseek-flash': '极速响应，成本低，推荐日常使用',
-    'deepseek-chat': '更细致的表达，适合重要文档',
-  }
-  return map[model] ?? '兼容 OpenAI 接口的模型'
+function getModelTraits(model: string): { green: string; red: string } {
+  const lower = model.toLowerCase()
+  if (lower.includes('flash')) return { green: '响应快 · 日常够用 · 较快速', red: '' }
+  if (lower.includes('pro')) return { green: '推理深 · 逻辑严', red: '较拥挤' }
+  return { green: '', red: '' }
 }
 function selectModel(_modelName: string, providerId: string) {
   if (!desktopLocalAi.value) {
@@ -874,10 +873,19 @@ onMounted(() => {
                 >
                   <div class="flex items-center gap-2">
                     <span class="text-sm font-medium text-white">{{ entry.model }}</span>
-                    <span v-if="entry.model === 'deepseek-flash'" class="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">推荐</span>
+                    <span v-if="entry.model.includes('flash')" class="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">推荐使用</span>
                     <span v-if="selectedModelDisplay === entry.model" class="rounded bg-purple-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">当前</span>
                   </div>
-                  <p class="mt-1 text-xs text-gray-500">{{ entry.providerName }} · {{ getModelDescription(entry.model) }}</p>
+                  <div class="mt-1 flex items-center gap-2">
+                    <span class="text-xs text-gray-500">{{ entry.providerName }}</span>
+                    <template v-for="(traitsText, traitsColor) in getModelTraits(entry.model)" :key="traitsColor">
+                      <span
+                        v-if="traitsText"
+                        class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                        :class="traitsColor === 'green' ? 'bg-emerald-950/40 text-emerald-300' : 'bg-red-950/40 text-red-300'"
+                      >{{ traitsText }}</span>
+                    </template>
+                  </div>
                 </button>
               </div>
               <p class="mt-3 text-[11px] text-gray-500">切换模型后点击「AI 润色」即可使用新模型。</p>
