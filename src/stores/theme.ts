@@ -1,12 +1,14 @@
 /**
  * 主题切换：支持显式深/浅，以及跟随系统 prefers-color-scheme。
- * 无本地偏好时默认跟随系统；用户手动切换后写入 localStorage。
+ * 无本地偏好时默认跟随系统；用户可在 system / light / dark 三态间循环。
  */
 import { computed, ref, watch } from 'vue'
 
 const STORAGE_KEY = 'yunzhan-theme'
 
-type ThemePreference = 'dark' | 'light' | 'system'
+export type ThemePreference = 'dark' | 'light' | 'system'
+
+const THEME_CYCLE: ThemePreference[] = ['system', 'light', 'dark']
 
 function getSystemDark(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -59,9 +61,14 @@ function syncResolvedTheme() {
   isDark.value = resolveDark(preference.value)
 }
 
+function setThemePreference(next: ThemePreference) {
+  preference.value = next
+}
+
 function toggleTheme() {
-  // 手动切换写入显式偏好，不再跟随系统，直到清除存储
-  preference.value = isDark.value ? 'light' : 'dark'
+  const currentIndex = THEME_CYCLE.indexOf(preference.value)
+  const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % THEME_CYCLE.length
+  preference.value = THEME_CYCLE[nextIndex]
 }
 
 applyTheme(isDark.value)
@@ -93,5 +100,5 @@ const theme = computed<'dark' | 'light'>(() => (isDark.value ? 'dark' : 'light')
 const themePreference = computed(() => preference.value)
 
 export function useTheme() {
-  return { isDark, theme, themePreference, toggleTheme }
+  return { isDark, theme, themePreference, toggleTheme, setThemePreference }
 }

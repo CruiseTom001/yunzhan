@@ -13,6 +13,7 @@ import {
   Megaphone,
   Menu,
   MessageSquare,
+  Monitor,
   MonitorCog,
   Moon,
   PenTool,
@@ -35,9 +36,15 @@ const mobileMenuOpen = ref(false)
 const accountMenuOpen = ref(false)
 const accountMenuRoot = ref<HTMLElement | null>(null)
 const loggingOut = ref(false)
-const { theme, toggleTheme } = useTheme()
+const { themePreference, toggleTheme } = useTheme()
 const authStore = useAuthStore()
 const progressStore = useProgressStore()
+
+const themeToggleTitle = computed(() => {
+  if (themePreference.value === 'system') return '当前：跟随系统（点击切换）'
+  if (themePreference.value === 'light') return '当前：浅色（点击切换）'
+  return '当前：深色（点击切换）'
+})
 
 const syncLabel = computed(() => {
   if (progressStore.cloudSyncStatus === 'syncing') return '正在同步'
@@ -126,13 +133,16 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
           <span class="text-gray-700 border border-white/[0.04] rounded px-1.5 py-0.5 text-[10px]">Ctrl+K</span>
         </button>
         <div class="w-px h-5 bg-white/[0.04] mr-1"></div>
-        <!-- 主题切换 -->
+        <!-- 主题切换：跟随系统 → 浅色 → 深色 → 跟随系统 -->
         <button
+          type="button"
           @click="toggleTheme"
           class="flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:text-gray-300 hover:bg-white/[0.02] transition-all mr-1"
-          :title="theme === 'dark' ? '切换浅色模式' : '切换深色模式'"
+          :title="themeToggleTitle"
+          :aria-label="themeToggleTitle"
         >
-          <Sun v-if="theme === 'dark'" class="w-4 h-4" />
+          <Monitor v-if="themePreference === 'system'" class="w-4 h-4" />
+          <Sun v-else-if="themePreference === 'light'" class="w-4 h-4" />
           <Moon v-else class="w-4 h-4" />
         </button>
         <div class="w-px h-5 bg-white/[0.04] mr-1"></div>
