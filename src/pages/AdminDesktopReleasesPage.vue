@@ -282,7 +282,7 @@ onMounted(() => {
 }
 .modal-panel {
   @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg
-    border border-white/[0.08] bg-[#0c0f18] shadow-2xl;
+    border border-edge-card bg-surface-tertiary shadow-2xl;
 }
 .modal-header {
   @apply flex items-center justify-between gap-4 px-5 py-4 border-b border-white/[0.06];

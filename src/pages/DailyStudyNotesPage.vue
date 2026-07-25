@@ -857,7 +857,7 @@ onMounted(() => {
 
           <!-- 模型选择弹窗 -->
           <div v-if="showModelPicker" class="fixed inset-0 z-[75] flex items-center justify-center bg-black/60 px-4 py-6" @click.self="showModelPicker = false">
-            <div class="w-full max-w-sm rounded-lg border border-white/[0.1] bg-[#252525] p-5 shadow-2xl">
+            <div class="w-full max-w-sm rounded-lg border border-edge-light bg-surface-tertiary p-5 shadow-2xl">
               <div class="mb-4 flex items-center justify-between">
                 <h3 class="text-base font-bold text-white">选择 AI 模型</h3>
                 <button
@@ -904,7 +904,7 @@ onMounted(() => {
     </div>
 
     <div v-if="showExportConfirm" class="fixed inset-0 z-[65] flex items-center justify-center bg-black/60 px-4 py-6" @click.self="closeExportConfirm">
-      <div class="w-full max-w-md rounded-lg border border-white/[0.1] bg-[#252525] p-5 shadow-2xl">
+      <div class="w-full max-w-md rounded-lg border border-edge-light bg-surface-tertiary p-5 shadow-2xl">
         <div class="mb-4 flex items-start justify-between gap-4">
           <div>
             <h3 class="text-base font-bold text-white">导出 Word 文档</h3>
@@ -989,7 +989,7 @@ onMounted(() => {
     </div>
 
     <div v-if="showAiConfig" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 py-6">
-      <div class="w-full max-w-2xl rounded-lg border border-white/[0.1] bg-[#252525] p-5 shadow-2xl">
+      <div class="w-full max-w-2xl rounded-lg border border-edge-light bg-surface-tertiary p-5 shadow-2xl">
         <div class="mb-5 flex items-start justify-between gap-4">
           <div>
             <h3 class="text-lg font-bold text-white">添加模型供应商</h3>

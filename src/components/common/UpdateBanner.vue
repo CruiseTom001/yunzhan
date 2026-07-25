@@ -148,7 +148,7 @@ onMounted(() => {
 }
 .banner-notes {
   @apply absolute top-12 left-0 right-0 px-4 py-2
-    bg-white dark:bg-[#0c0f18] dark:text-gray-200
+    bg-surface-tertiary text-ink-secondary
     border-b border-amber-300 dark:border-amber-700 text-sm;
 }
 .banner-close {
@@ -161,7 +161,7 @@ onMounted(() => {
 }
 .modal-panel {
   @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg
-    border border-white/[0.08] bg-[#0c0f18] shadow-2xl;
+    border border-edge-card bg-surface-tertiary shadow-2xl;
 }
 .modal-header {
   @apply flex items-start justify-between gap-4 px-5 py-4 border-b border-white/[0.06];

@@ -571,7 +571,7 @@ onMounted(() => {
 }
 
 .modal-panel {
-  @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0f18] shadow-2xl;
+  @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-edge-card bg-surface-tertiary shadow-2xl;
 }
 
 .modal-header {
@@ -623,7 +623,7 @@ onMounted(() => {
 }
 
 .metric-cell {
-  @apply min-h-24 bg-[#0c0f18] p-4 flex flex-col justify-center;
+  @apply min-h-24 bg-surface-tertiary p-4 flex flex-col justify-center;
 }
 
 .metric-cell :deep(svg) {

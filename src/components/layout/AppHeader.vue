@@ -166,7 +166,7 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
 
           <div
             v-if="accountMenuOpen"
-            class="absolute right-0 mt-2 w-64 rounded-md border border-white/[0.08] bg-[#0c0f18] shadow-2xl overflow-hidden"
+            class="absolute right-0 mt-2 w-64 rounded-md border border-edge-card bg-surface-tertiary shadow-2xl overflow-hidden"
             role="menu"
           >
             <div class="px-4 py-3 border-b border-white/[0.06]">

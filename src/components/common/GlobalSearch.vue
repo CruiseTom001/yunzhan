@@ -303,7 +303,7 @@ defineExpose({ open, close })
         @click.self="close"
       >
         <!-- 搜索面板 -->
-        <div class="w-full max-w-2xl mx-4 bg-[#0c0c14] border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+        <div class="w-full max-w-2xl mx-4 bg-surface-tertiary border border-edge-card rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
           <!-- 搜索输入框 -->
           <div class="flex items-center gap-3 px-5 py-4 border-b border-white/[0.04]">
             <Search class="w-4 h-4 text-gray-500 flex-shrink-0" />

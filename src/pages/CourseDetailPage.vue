@@ -612,7 +612,7 @@ function saveWorkbenchDraft() {
     <!-- 侧边栏切换 -->
     <button
       @click="sidebarOpen = !sidebarOpen"
-      class="fixed top-20 z-50 p-1 bg-[#0c0c14] border border-white/[0.04] border-l-0 rounded-r-md text-gray-500 hover:text-white transition-all duration-300"
+      class="fixed top-20 z-50 p-1 bg-surface-tertiary border border-edge-card border-l-0 rounded-r-md text-gray-500 hover:text-white transition-all duration-300"
       :class="sidebarOpen ? 'left-64' : 'left-0'"
     >
       <ChevronRight v-if="!sidebarOpen" class="w-3.5 h-3.5" />
@@ -955,7 +955,7 @@ function saveWorkbenchDraft() {
           class="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center"
           @click.self="showConfirm = false"
         >
-          <div class="bg-[#0c0c14] border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/50 p-6 mx-4 w-full max-w-sm">
+          <div class="bg-surface-tertiary border border-edge-card rounded-2xl shadow-2xl shadow-black/50 p-6 mx-4 w-full max-w-sm">
             <div class="text-center mb-4">
               <div
                 class="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center"

@@ -228,7 +228,7 @@ const termLines = computed(() => [
         <!-- 终端窗口装饰 -->
         <div class="max-w-2xl mx-auto mb-10 animate-fade-in">
           <div
-            class="hero-terminal interactive-surface relative rounded-xl border border-white/[0.06] bg-[#0c0c14]/80 backdrop-blur overflow-hidden shadow-2xl shadow-black/50"
+            class="hero-terminal interactive-surface relative rounded-xl border border-edge-card backdrop-blur overflow-hidden shadow-2xl shadow-black/50"
             @pointermove="handleInteractiveMove"
             @pointerleave="resetInteractiveSurface"
           >
@@ -846,6 +846,7 @@ const termLines = computed(() => [
 }
 
 .hero-terminal {
+  background-color: color-mix(in srgb, var(--bg-tertiary) 80%, transparent);
   transition: transform 0.16s ease-out, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 

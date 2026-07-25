@@ -309,7 +309,7 @@ onMounted(() => {
 }
 
 .modal-panel {
-  @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0f18] shadow-2xl;
+  @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-edge-card bg-surface-tertiary shadow-2xl;
 }
 
 .modal-header {
