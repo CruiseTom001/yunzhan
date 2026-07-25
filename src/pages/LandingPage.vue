@@ -132,18 +132,18 @@ const stats = [
     <ParticleBg />
 
     <!-- 落地页自带 Header -->
-    <header class="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-theme/80 border-b border-white/[0.03]">
+    <header class="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-theme/80 border-b border-edge-subtle">
       <nav class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div class="flex items-center gap-2.5 cursor-pointer group" @click="goToHome">
           <span class="text-cyan-400 font-mono font-bold text-sm bg-cyan-400/10 px-1.5 py-0.5 rounded border border-cyan-400/20">>_</span>
-          <span class="text-white font-semibold tracking-wide text-sm">云栈<span class="text-cyan-400 font-mono">.dev</span></span>
+          <span class="text-ink-primary font-semibold tracking-wide text-sm">云栈<span class="text-cyan-400 font-mono">.dev</span></span>
         </div>
 
         <div class="flex items-center gap-2">
           <button
             v-if="desktopDownloadUrl"
             type="button"
-            class="inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-md border border-white/[0.08] text-gray-300 hover:text-white hover:bg-white/[0.04] text-sm"
+            class="inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-md border border-edge-card text-ink-secondary hover:text-ink-primary hover:bg-surface-elevated text-sm"
             title="下载桌面端"
             @click="openDesktopDownload"
           >
@@ -163,7 +163,7 @@ const stats = [
           <template v-else>
             <button
               type="button"
-              class="inline-flex h-9 items-center justify-center px-4 rounded-md border border-white/[0.08] text-gray-300 hover:text-white hover:bg-white/[0.04] text-sm"
+              class="inline-flex h-9 items-center justify-center px-4 rounded-md border border-edge-card text-ink-secondary hover:text-ink-primary hover:bg-surface-elevated text-sm"
               @click="goToLogin"
             >
               登录
@@ -188,11 +188,11 @@ const stats = [
           <Lock class="w-3 h-3" />
           运维学习平台 · 在线实训
         </div>
-        <h1 class="text-4xl sm:text-6xl font-bold text-white leading-tight mb-6" data-reveal>
+        <h1 class="text-4xl sm:text-6xl font-bold text-ink-primary leading-tight mb-6" data-reveal>
           让运维学习<br />
           <span class="text-cyan-400 font-mono">像写代码一样</span>有节奏
         </h1>
-        <p class="text-base sm:text-lg text-gray-400 mb-10 min-h-7" data-reveal>
+        <p class="text-base sm:text-lg text-ink-muted mb-10 min-h-7" data-reveal>
           <span class="inline-block">{{ typedText }}<span v-if="typedText.length < fullText.length" class="typing-caret">_</span></span>
         </p>
 
@@ -207,7 +207,7 @@ const stats = [
           </button>
           <button
             type="button"
-            class="inline-flex h-12 items-center justify-center px-6 rounded-md border border-white/[0.08] text-gray-300 hover:text-white hover:bg-white/[0.04] text-base"
+            class="inline-flex h-12 items-center justify-center px-6 rounded-md border border-edge-card text-ink-secondary hover:text-ink-primary hover:bg-surface-elevated text-base"
             @click="goToLogin"
           >
             我已有账号
@@ -215,10 +215,10 @@ const stats = [
         </div>
 
         <!-- 数据统计 -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06] rounded-md overflow-hidden max-w-2xl mx-auto" data-reveal>
-          <div v-for="(item, idx) in stats" :key="idx" class="bg-[#0c0f18] p-5 flex flex-col items-center justify-center">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-edge-card border border-edge-card rounded-md overflow-hidden max-w-2xl mx-auto" data-reveal>
+          <div v-for="(item, idx) in stats" :key="idx" class="bg-surface-card p-5 flex flex-col items-center justify-center">
             <div class="text-2xl font-bold text-cyan-400 font-mono">{{ item.value }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ item.label }}</div>
+            <div class="text-xs text-ink-muted mt-1">{{ item.label }}</div>
           </div>
         </div>
       </div>
@@ -231,21 +231,21 @@ const stats = [
           <Zap class="w-4 h-4" />
           FEATURES
         </div>
-        <h2 class="text-2xl sm:text-3xl font-semibold text-white">六项核心能力，覆盖运维学习全流程</h2>
+        <h2 class="text-2xl sm:text-3xl font-semibold text-ink-primary">六项核心能力，覆盖运维学习全流程</h2>
       </div>
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div
           v-for="(feature, idx) in features"
           :key="idx"
-          class="feature-card p-6 rounded-lg border border-white/[0.08] bg-white/[0.015] hover:border-cyan-400/20 hover:bg-cyan-400/[0.02] transition-all"
+          class="feature-card p-6 rounded-lg border border-edge-card bg-surface-elevated hover:border-cyan-400/20 hover:bg-cyan-400/[0.02] transition-all"
           data-reveal
         >
           <span class="inline-flex w-10 h-10 items-center justify-center rounded-md border border-cyan-400/15 bg-cyan-400/[0.05] text-cyan-400 mb-4">
             <component :is="feature.icon" class="w-5 h-5" />
           </span>
-          <h3 class="text-base font-semibold text-white mb-2">{{ feature.title }}</h3>
-          <p class="text-sm text-gray-500 leading-6">{{ feature.desc }}</p>
+          <h3 class="text-base font-semibold text-ink-primary mb-2">{{ feature.title }}</h3>
+          <p class="text-sm text-ink-muted leading-6">{{ feature.desc }}</p>
         </div>
       </div>
     </section>
@@ -257,19 +257,19 @@ const stats = [
           <BookOpen class="w-4 h-4" />
           COURSES
         </div>
-        <h2 class="text-2xl sm:text-3xl font-semibold text-white">从基础到实战的 20 门课程</h2>
-        <p class="text-sm text-gray-500 mt-3">课程体系按学习路径组织，循序渐进，每章都配备可执行的实验与题目。</p>
+        <h2 class="text-2xl sm:text-3xl font-semibold text-ink-primary">从基础到实战的 20 门课程</h2>
+        <p class="text-sm text-ink-muted mt-3">课程体系按学习路径组织，循序渐进，每章都配备可执行的实验与题目。</p>
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div
           v-for="course in courseIndex.slice(0, 10)"
           :key="course.id"
-          class="course-pill px-4 py-3 rounded-md border border-white/[0.06] bg-white/[0.015] text-center hover:border-cyan-400/20 transition-all"
+          class="course-pill px-4 py-3 rounded-md border border-edge-card bg-surface-elevated text-center hover:border-cyan-400/20 transition-all"
           data-reveal
         >
-          <div class="text-sm text-gray-200 truncate">{{ course.title }}</div>
-          <div class="text-[11px] text-gray-600 font-mono mt-1">{{ course.id }}</div>
+          <div class="text-sm text-ink-secondary truncate">{{ course.title }}</div>
+          <div class="text-[11px] text-ink-dim font-mono mt-1">{{ course.id }}</div>
         </div>
       </div>
 
@@ -289,8 +289,8 @@ const stats = [
     <section class="relative max-w-4xl mx-auto px-6 py-24 text-center">
       <div class="p-10 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03]" data-reveal>
         <Cloud class="w-10 h-10 text-cyan-400 mx-auto mb-5" />
-        <h2 class="text-2xl sm:text-3xl font-semibold text-white mb-4">现在开始，免费注册</h2>
-        <p class="text-sm text-gray-400 leading-7 mb-7">注册账号后即可访问全部课程、实验、测验与云端进度同步。本地数据自动备份，多设备学习无缝衔接。</p>
+        <h2 class="text-2xl sm:text-3xl font-semibold text-ink-primary mb-4">现在开始，免费注册</h2>
+        <p class="text-sm text-ink-muted leading-7 mb-7">注册账号后即可访问全部课程、实验、测验与云端进度同步。本地数据自动备份，多设备学习无缝衔接。</p>
         <button
           type="button"
           class="inline-flex h-12 items-center justify-center gap-2 px-8 rounded-md bg-cyan-400 text-gray-950 text-base font-semibold hover:bg-cyan-300"
@@ -303,16 +303,16 @@ const stats = [
     </section>
 
     <!-- Footer -->
-    <footer class="relative border-t border-white/[0.04] py-8 px-6">
-      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-600">
+    <footer class="relative border-t border-edge-subtle py-8 px-6">
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-ink-dim">
         <div class="flex items-center gap-2">
           <span class="text-cyan-400 font-mono">>_</span>
-          <span class="text-gray-400">云栈 YUNZHAN</span>
-          <span class="font-mono text-gray-700">v{{ appVersion }}</span>
+          <span class="text-ink-muted">云栈 YUNZHAN</span>
+          <span class="font-mono text-ink-very-dim">v{{ appVersion }}</span>
         </div>
         <div class="flex items-center gap-4">
-          <button type="button" class="hover:text-gray-300" @click="goToLogin">登录</button>
-          <button type="button" class="hover:text-gray-300" @click="goToRegister">注册</button>
+          <button type="button" class="hover:text-ink-secondary" @click="goToLogin">登录</button>
+          <button type="button" class="hover:text-ink-secondary" @click="goToRegister">注册</button>
         </div>
       </div>
     </footer>

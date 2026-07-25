@@ -452,6 +452,9 @@ body {
   background-color: var(--bg-elevated) !important;
   border-color: var(--border-light) !important;
 }
+[data-theme="light"] .bg-black\/10 {
+  background-color: var(--bg-code) !important;
+}
 
 /* 全局浅色补丁：骨架占位 bg-gray-700/* → --skeleton */
 [data-theme="light"] .bg-gray-700\/10 {
@@ -503,6 +506,9 @@ body {
   background-color: var(--bg-card-hover) !important;
 }
 [data-theme="light"] .hover\:bg-white\/\[0\.03\] {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .hover\:bg-white\/\[0\.04\] {
   background-color: var(--bg-card-hover) !important;
 }
 [data-theme="light"] .hover\:bg-white\/\[0\.05\] {

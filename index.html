@@ -7,10 +7,17 @@
     <meta name="description" content="云栈 - 云计算从入门到精通的运维学习网站，覆盖 Linux 基础、网络、Web 服务器、Docker、Kubernetes、CI/CD、监控、自动化、云原生等 20 门课程，含命令讲解、互动实验、答题与遗忘曲线复习。" />
     <meta name="theme-color" content="#0a0a14" />
     <script>
-      // Prevent FOUC: apply theme before first paint
+      // Prevent FOUC: apply theme before first paint (explicit or system)
       (function() {
-        var stored = localStorage.getItem('yunzhan-theme');
-        var theme = (stored === 'light') ? 'light' : 'dark';
+        var stored = null;
+        try { stored = localStorage.getItem('yunzhan-theme'); } catch (e) {}
+        var theme;
+        if (stored === 'light' || stored === 'dark') {
+          theme = stored;
+        } else {
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          theme = prefersDark ? 'dark' : 'light';
+        }
         document.documentElement.setAttribute('data-theme', theme);
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) { meta.setAttribute('content', theme === 'dark' ? '#0a0a14' : '#f8fafc'); }

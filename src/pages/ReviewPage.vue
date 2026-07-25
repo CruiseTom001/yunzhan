@@ -61,26 +61,26 @@ function openSource(card: ReviewCard) {
         </div>
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 class="text-3xl font-bold text-white mb-2">复习中心</h1>
-            <p class="text-sm text-gray-600">按遗忘节奏复习错题、实验和重点概念。</p>
+            <h1 class="text-3xl font-bold text-ink-primary mb-2">复习中心</h1>
+            <p class="text-sm text-ink-dim">按遗忘节奏复习错题、实验和重点概念。</p>
           </div>
-          <div class="flex items-center gap-2 text-xs font-mono text-gray-500">
+          <div class="flex items-center gap-2 text-xs font-mono text-ink-muted">
             <Clock3 class="w-4 h-4 text-cyan-400" />
-            今日待复习 <span class="text-white font-bold">{{ progressStore.dueReviewCards.length }}</span>
+            今日待复习 <span class="text-ink-primary font-bold">{{ progressStore.dueReviewCards.length }}</span>
           </div>
         </div>
       </header>
 
-      <div class="flex items-center gap-1 mb-6 border-b border-white/[0.05] overflow-x-auto">
+      <div class="flex items-center gap-1 mb-6 border-b border-edge-card overflow-x-auto">
         <button
           v-for="filter in filters"
           :key="filter.id"
           @click="activeFilter = filter.id"
           class="flex items-center gap-2 px-4 py-3 text-xs font-mono border-b-2 transition-colors whitespace-nowrap"
-          :class="activeFilter === filter.id ? 'border-cyan-400 text-cyan-400' : 'border-transparent text-gray-600 hover:text-gray-300'"
+          :class="activeFilter === filter.id ? 'border-cyan-400 text-cyan-400' : 'border-transparent text-ink-dim hover:text-ink-secondary'"
         >
           {{ filter.label }}
-          <span class="min-w-5 h-5 px-1 rounded bg-white/[0.04] text-[10px] flex items-center justify-center">{{ filter.count }}</span>
+          <span class="min-w-5 h-5 px-1 rounded bg-surface-elevated text-[10px] flex items-center justify-center">{{ filter.count }}</span>
         </button>
       </div>
 
@@ -88,20 +88,20 @@ function openSource(card: ReviewCard) {
         <article
           v-for="card in cards"
           :key="card.id"
-          class="border border-white/[0.05] bg-white/[0.012] rounded-lg p-5"
+          class="border border-edge-card bg-surface-elevated rounded-lg p-5"
         >
           <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div class="flex items-center gap-2 text-[10px] font-mono">
               <span class="px-2 py-1 rounded border border-purple-400/15 bg-purple-400/5 text-purple-400">{{ sourceLabel(card) }}</span>
-              <span class="text-gray-600">{{ courseTitle(card) }}</span>
+              <span class="text-ink-dim">{{ courseTitle(card) }}</span>
               <span v-if="card.lapses" class="text-red-400">错 {{ card.lapses }} 次</span>
             </div>
-            <button @click="openSource(card)" class="inline-flex items-center gap-1 text-[10px] text-gray-600 hover:text-cyan-400 font-mono">
+            <button @click="openSource(card)" class="inline-flex items-center gap-1 text-[10px] text-ink-dim hover:text-cyan-400 font-mono">
               返回来源 <ChevronRight class="w-3 h-3" />
             </button>
           </div>
 
-          <h2 class="text-white text-sm leading-7 mb-4">{{ card.prompt }}</h2>
+          <h2 class="text-ink-primary text-sm leading-7 mb-4">{{ card.prompt }}</h2>
 
           <button
             v-if="!revealed[card.id]"
@@ -112,7 +112,7 @@ function openSource(card: ReviewCard) {
           </button>
 
           <div v-else>
-            <div class="border-l-2 border-cyan-400/30 bg-black/10 px-4 py-3 text-sm text-gray-400 leading-7 whitespace-pre-line mb-4">
+            <div class="border-l-2 border-cyan-400/30 bg-surface-code px-4 py-3 text-sm text-ink-muted leading-7 whitespace-pre-line mb-4">
               {{ card.answer }}
             </div>
             <div class="grid grid-cols-2 gap-2">
@@ -127,11 +127,11 @@ function openSource(card: ReviewCard) {
         </article>
       </section>
 
-      <section v-else class="py-20 text-center border border-dashed border-white/[0.06] rounded-lg">
+      <section v-else class="py-20 text-center border border-dashed border-edge-card rounded-lg">
         <CheckCircle2 v-if="activeFilter === 'due'" class="w-10 h-10 text-emerald-400/60 mx-auto mb-4" />
-        <XCircle v-else class="w-10 h-10 text-gray-700 mx-auto mb-4" />
-        <h2 class="text-white text-sm font-medium mb-2">{{ activeFilter === 'due' ? '今天的复习已完成' : '这里还没有复习卡片' }}</h2>
-        <p class="text-xs text-gray-600">答题和完成实验后，系统会自动生成复习内容。</p>
+        <XCircle v-else class="w-10 h-10 text-ink-very-dim mx-auto mb-4" />
+        <h2 class="text-ink-primary text-sm font-medium mb-2">{{ activeFilter === 'due' ? '今天的复习已完成' : '这里还没有复习卡片' }}</h2>
+        <p class="text-xs text-ink-dim">答题和完成实验后，系统会自动生成复习内容。</p>
       </section>
     </div>
   </main>

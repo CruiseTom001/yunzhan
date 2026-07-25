@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useTheme } from '@/stores/theme'
 
+const { theme } = useTheme()
 const canvas = ref<HTMLCanvasElement | null>(null)
 let animId = 0
 let resizeHandler: (() => void) | null = null
@@ -203,5 +205,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <canvas ref="canvas" class="absolute inset-0 pointer-events-none"></canvas>
+  <canvas
+    ref="canvas"
+    class="absolute inset-0 pointer-events-none transition-opacity duration-300"
+    :class="theme === 'light' ? 'opacity-35' : 'opacity-100'"
+  ></canvas>
 </template>
