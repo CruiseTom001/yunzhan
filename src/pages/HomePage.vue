@@ -197,11 +197,11 @@ const lastVisitedProgress = computed(() => {
   return Math.round((completed / total) * 100)
 })
 
-const colorMap: Record<string, { border: string; bg: string; text: string; dot: string; ring: string; fill: string; hexBg: string }> = {
-  emerald: { border: 'border-emerald-400/20', bg: 'bg-emerald-400/5', text: 'text-emerald-400', dot: 'bg-emerald-400', ring: 'ring-emerald-400/30', fill: 'fill-emerald-400', hexBg: '#0a1a14' },
-  cyan: { border: 'border-cyan-400/20', bg: 'bg-cyan-400/5', text: 'text-cyan-400', dot: 'bg-cyan-400', ring: 'ring-cyan-400/30', fill: 'fill-cyan-400', hexBg: '#0a141a' },
-  amber: { border: 'border-amber-400/20', bg: 'bg-amber-400/5', text: 'text-amber-400', dot: 'bg-amber-400', ring: 'ring-amber-400/30', fill: 'fill-amber-400', hexBg: '#1a160a' },
-  rose: { border: 'border-rose-400/20', bg: 'bg-rose-400/5', text: 'text-rose-400', dot: 'bg-rose-400', ring: 'ring-rose-400/30', fill: 'fill-rose-400', hexBg: '#1a0a10' },
+const colorMap: Record<string, { border: string; bg: string; text: string; dot: string; ring: string; fill: string }> = {
+  emerald: { border: 'border-emerald-400/20', bg: 'bg-emerald-400/5', text: 'text-emerald-400', dot: 'bg-emerald-400', ring: 'ring-emerald-400/30', fill: 'fill-emerald-400' },
+  cyan: { border: 'border-cyan-400/20', bg: 'bg-cyan-400/5', text: 'text-cyan-400', dot: 'bg-cyan-400', ring: 'ring-cyan-400/30', fill: 'fill-cyan-400' },
+  amber: { border: 'border-amber-400/20', bg: 'bg-amber-400/5', text: 'text-amber-400', dot: 'bg-amber-400', ring: 'ring-amber-400/30', fill: 'fill-amber-400' },
+  rose: { border: 'border-rose-400/20', bg: 'bg-rose-400/5', text: 'text-rose-400', dot: 'bg-rose-400', ring: 'ring-rose-400/30', fill: 'fill-rose-400' },
 }
 
 // 终端风格统计
@@ -222,7 +222,7 @@ const termLines = computed(() => [
     <!-- Hero Section - 终端风格 -->
     <section class="relative min-h-[90vh] flex flex-col items-center justify-center px-6 pt-20 pb-16 overflow-hidden">
       <ParticleBg />
-      <div class="absolute inset-0 bg-gradient-to-b from-[#06060b] via-transparent to-[#06060b] pointer-events-none"></div>
+      <div class="absolute inset-0 hero-veil pointer-events-none"></div>
 
       <div class="relative z-10 text-center max-w-5xl w-full">
         <!-- 终端窗口装饰 -->
@@ -849,9 +849,18 @@ const termLines = computed(() => [
   transition: transform 0.16s ease-out, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.hero-veil {
+  background: linear-gradient(
+    to bottom,
+    var(--bg-primary),
+    transparent,
+    var(--bg-primary)
+  );
+}
+
 .hero-terminal:hover {
-  border-color: rgb(34 211 238 / 0.18);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 0.48);
+  border-color: color-mix(in srgb, var(--accent-cyan) 18%, transparent);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--bg-primary) 48%, transparent);
 }
 
 .action-button:active {

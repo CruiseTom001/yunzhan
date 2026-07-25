@@ -280,13 +280,11 @@ onUnmounted(() => {
   max-width: min(420px, calc(100vw - 32px));
   max-height: min(500px, calc(100vh - 100px));
   overflow-y: auto;
-  background: #1a1a2e;
-  border: 1px solid rgba(167, 139, 250, 0.3);
+  background: var(--bg-tooltip);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 35%, transparent);
   border-radius: 12px;
   padding: 1em 1.2em;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(167, 139, 250, 0.1);
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--accent-purple) 12%, transparent);
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.2s ease;
   transform: translateX(-50%) translateY(-4px);
@@ -309,7 +307,7 @@ onUnmounted(() => {
   font-family: 'JetBrains Mono', 'Noto Sans SC', monospace;
   font-size: 1rem;
   font-weight: 700;
-  color: #a78bfa;
+  color: var(--accent-purple);
 }
 
 .popover-level {
@@ -317,7 +315,7 @@ onUnmounted(() => {
   font-weight: 600;
   padding: 0.15em 0.5em;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-elevated);
   border: 1px solid currentColor;
 }
 
@@ -326,41 +324,45 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 0.15em 0.5em;
   border-radius: 4px;
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.15));
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  color: #fbbf24;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-amber) 22%, transparent),
+    color-mix(in srgb, var(--accent-amber) 14%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 40%, transparent);
+  color: var(--accent-amber);
 }
 
 .popover-category {
   font-size: 0.7rem;
-  color: #6b7280;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  background: var(--bg-elevated);
   padding: 0.15em 0.5em;
   border-radius: 4px;
 }
 
 .popover-summary {
   font-size: 0.85rem;
-  color: #e2e8f0;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 0.6em;
   padding: 0.4em 0.6em;
-  background: rgba(0, 240, 255, 0.05);
-  border-left: 2px solid #00f0ff;
+  background: color-mix(in srgb, var(--accent-cyan) 8%, transparent);
+  border-left: 2px solid var(--accent-cyan);
   border-radius: 0 4px 4px 0;
 }
 
 .popover-desc {
   font-size: 0.8rem;
-  color: #cbd5e1;
+  color: var(--text-muted);
   line-height: 1.65;
   margin-bottom: 0.6em;
   white-space: pre-line;
 }
 
 .popover-desc :deep(code) {
-  background: rgba(0, 240, 255, 0.1);
-  color: #00f0ff;
+  background: color-mix(in srgb, var(--accent-cyan) 12%, transparent);
+  color: var(--accent-cyan);
   padding: 0.1em 0.3em;
   border-radius: 3px;
   font-family: 'JetBrains Mono', monospace;
@@ -369,9 +371,9 @@ onUnmounted(() => {
 
 .popover-tips {
   font-size: 0.8rem;
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.06);
-  border: 1px solid rgba(251, 191, 36, 0.15);
+  color: var(--accent-amber);
+  background: color-mix(in srgb, var(--accent-amber) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 18%, transparent);
   border-radius: 6px;
   padding: 0.5em 0.7em;
   margin-bottom: 0.5em;
@@ -383,8 +385,8 @@ onUnmounted(() => {
 }
 
 .popover-example pre {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-code);
+  border: 1px solid var(--border-light);
   border-radius: 8px;
   padding: 0.6em 0.8em;
   overflow-x: auto;
@@ -394,7 +396,7 @@ onUnmounted(() => {
 .popover-example code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.75rem;
-  color: #e2e8f0;
+  color: var(--text-secondary);
   white-space: pre;
 }
 
@@ -405,18 +407,18 @@ onUnmounted(() => {
   align-items: center;
   margin-top: 0.5em;
   padding-top: 0.5em;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-card);
 }
 
 .related-label {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-dim);
 }
 
 .related-tag {
   font-size: 0.72rem;
-  color: #a78bfa;
-  background: rgba(167, 139, 250, 0.1);
+  color: var(--accent-purple);
+  background: color-mix(in srgb, var(--accent-purple) 12%, transparent);
   padding: 0.15em 0.5em;
   border-radius: 4px;
   font-family: 'JetBrains Mono', monospace;

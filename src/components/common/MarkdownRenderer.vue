@@ -394,8 +394,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0.5em 1em;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
   border-bottom: none;
   border-radius: 12px 12px 0 0;
   margin-top: 1em;
@@ -410,8 +410,8 @@ onUnmounted(() => {
 .code-lang-badge {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.75rem;
-  color: #6b7280;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  background: var(--bg-elevated);
   padding: 0.2em 0.6em;
   border-radius: 4px;
   text-transform: lowercase;
@@ -426,44 +426,48 @@ onUnmounted(() => {
   font-family: 'Noto Sans SC', sans-serif;
   font-size: 0.75rem;
   padding: 0.25em 0.65em;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-light);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #9ca3af;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s;
   line-height: 1.4;
 }
 
 .code-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
 }
 
 .code-btn-copy:hover {
-  border-color: rgba(0, 240, 255, 0.3);
-  color: #00f0ff;
+  border-color: color-mix(in srgb, var(--accent-cyan) 35%, transparent);
+  color: var(--accent-cyan);
 }
 
 .code-btn-run:hover {
-  border-color: rgba(52, 211, 153, 0.35);
-  color: #34d399;
+  border-color: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
+  color: var(--accent-emerald);
 }
 
 .code-btn-explain:hover {
-  border-color: rgba(167, 139, 250, 0.3);
-  color: #a78bfa;
+  border-color: color-mix(in srgb, var(--accent-purple) 35%, transparent);
+  color: var(--accent-purple);
 }
 
 .code-btn-demo:hover {
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
+  border-color: color-mix(in srgb, var(--accent-amber) 35%, transparent);
+  color: var(--accent-amber);
 }
 
 /* 讲解面板 */
 .explain-panel {
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.06), rgba(0, 240, 255, 0.04));
-  border: 1px solid rgba(167, 139, 250, 0.15);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-purple) 8%, transparent),
+    color-mix(in srgb, var(--accent-cyan) 5%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 18%, transparent);
   border-top: none;
   border-radius: 0 0 12px 12px;
   padding: 1em 1.5em;
@@ -477,13 +481,13 @@ onUnmounted(() => {
   font-family: 'JetBrains Mono', 'Noto Sans SC', monospace;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #a78bfa;
+  color: var(--accent-purple);
   margin-bottom: 0.6em;
 }
 
 .explain-desc {
   font-size: 0.88rem;
-  color: #cbd5e1;
+  color: var(--text-muted);
   line-height: 1.7;
   margin-bottom: 0.8em;
 }
@@ -491,7 +495,7 @@ onUnmounted(() => {
 .explain-section-title {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #34d399;
+  color: var(--accent-emerald);
   margin: 0.8em 0 0.4em;
   font-family: 'JetBrains Mono', monospace;
 }
@@ -504,36 +508,36 @@ onUnmounted(() => {
 }
 
 .explain-options-table th {
-  background: rgba(167, 139, 250, 0.08);
-  color: #a78bfa;
+  background: color-mix(in srgb, var(--accent-purple) 10%, transparent);
+  color: var(--accent-purple);
   font-weight: 600;
   padding: 0.4em 0.8em;
   text-align: left;
   font-size: 0.8rem;
-  border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-purple) 18%, transparent);
 }
 
 .explain-options-table td {
   padding: 0.35em 0.8em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  color: #cbd5e1;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
 }
 
 .explain-opt-name {
   font-family: 'JetBrains Mono', monospace;
-  color: #fbbf24;
+  color: var(--accent-amber);
   white-space: nowrap;
   width: 1%;
 }
 
 .explain-example-code {
-  background: rgba(0, 0, 0, 0.3) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--bg-code) !important;
+  border: 1px solid var(--border-light) !important;
   border-radius: 8px !important;
   padding: 0.6em 1em !important;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.8rem !important;
-  color: #e2e8f0 !important;
+  color: var(--text-secondary) !important;
   margin: 0.3em 0 0.5em !important;
   overflow-x: auto;
 }

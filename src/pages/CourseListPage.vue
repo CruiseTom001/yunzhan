@@ -308,9 +308,9 @@ onUnmounted(() => {
 
 <style scoped>
 .learning-order {
-  border: 1px solid rgb(255 255 255 / 0.06);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
-  background: rgb(255 255 255 / 0.018);
+  background: var(--bg-elevated);
   padding: 18px;
 }
 
@@ -327,14 +327,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  color: #22d3ee;
+  color: var(--accent-cyan);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
 }
 
 .learning-order-header h2,
 .course-library-header h2 {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 700;
 }
@@ -343,7 +343,7 @@ onUnmounted(() => {
 .course-library-header p,
 .learning-order-step p,
 .learning-order-hint {
-  color: #64748b;
+  color: var(--text-dim);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -361,15 +361,15 @@ onUnmounted(() => {
 
 .learning-order-step {
   min-width: 0;
-  border: 1px solid rgb(255 255 255 / 0.05);
+  border: 1px solid var(--border-card);
   border-radius: 10px;
-  background: rgb(15 23 42 / 0.35);
+  background: var(--bg-tertiary);
   padding: 12px;
 }
 
 .learning-order-step h3 {
   margin-bottom: 6px;
-  color: #e2e8f0;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -387,17 +387,17 @@ onUnmounted(() => {
   gap: 6px;
   min-height: 38px;
   padding: 8px 9px;
-  border: 1px solid rgb(34 211 238 / 0.12);
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 20%, transparent);
   border-radius: 8px;
-  color: #cffafe;
-  background: rgb(34 211 238 / 0.04);
+  color: var(--accent-cyan);
+  background: color-mix(in srgb, var(--accent-cyan) 6%, transparent);
   text-align: left;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 .learning-order-course:hover {
-  border-color: rgb(34 211 238 / 0.3);
-  background: rgb(34 211 238 / 0.08);
+  border-color: color-mix(in srgb, var(--accent-cyan) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-cyan) 12%, transparent);
   transform: translateY(-1px);
 }
 
@@ -405,7 +405,7 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   font-weight: 700;
-  color: #22d3ee;
+  color: var(--accent-cyan);
   white-space: nowrap;
 }
 
@@ -415,6 +415,7 @@ onUnmounted(() => {
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .learning-order-hint {
