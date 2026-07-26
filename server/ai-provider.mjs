@@ -8,10 +8,24 @@ const AI_PROVIDERS_JSON_MAX_LENGTH = 200_000
 const AI_PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
 const AI_CONTENT_MAX_LENGTH = 20_000
 const AI_POLISHED_MAX_LENGTH = 30_000
+const AI_EXPORT_INPUT_MAX_LENGTH = 120_000
 const AI_EXPORT_MAX_LENGTH = 120_000
 const AI_TEST_MAX_LENGTH = 1000
 const AI_RESPONSE_MAX_BYTES = 100_000
+const AI_STREAM_MAX_BYTES = 100_000
+const AI_STREAM_MAX_CHARS = 30_000
 const AI_REQUEST_TIMEOUT_MS = 60_000
+const AI_STREAM_TIMEOUT_MS = 60_000
+
+export {
+  AI_CONTENT_MAX_LENGTH,
+  AI_EXPORT_INPUT_MAX_LENGTH,
+  AI_EXPORT_MAX_LENGTH,
+  AI_POLISHED_MAX_LENGTH,
+  AI_STREAM_MAX_BYTES,
+  AI_STREAM_MAX_CHARS,
+  AI_STREAM_TIMEOUT_MS,
+}
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -64,7 +78,11 @@ function normalizeProvider(raw, index) {
   const model = validateBoundedString(raw.model, AI_MODEL_MAX_LENGTH, `${label} model`)
   const format = typeof raw.format === 'string' ? raw.format.trim() : 'chat_completions'
   if (!AI_ALLOWED_FORMATS.has(format)) throw new Error(`${label} format 无效。`)
-  return { id, name, baseUrl, apiKey, format, model }
+  const provider = { id, name, baseUrl, apiKey, format, model }
+  if (typeof raw.exportModel === 'string' && raw.exportModel.trim()) {
+    provider.exportModel = validateBoundedString(raw.exportModel, AI_MODEL_MAX_LENGTH, `${label} exportModel`)
+  }
+  return provider
 }
 
 function loadLegacyProvider(environment) {
@@ -195,6 +213,13 @@ function buildAiEndpoint(provider) {
   return `${provider.baseUrl}${endpointByFormat[provider.format]}`
 }
 
+function resolveEffectiveModel(provider, purpose) {
+  if (purpose === 'export' && typeof provider.exportModel === 'string' && provider.exportModel.trim()) {
+    return provider.exportModel
+  }
+  return provider.model
+}
+
 function buildAiRequest(provider, content, purpose) {
   const systemPrompt = purpose === 'test'
     ? '请用中文简短回复”连接成功”。'
@@ -202,8 +227,7 @@ function buildAiRequest(provider, content, purpose) {
       ? buildStudyNoteExportPrompt(content.split('\n').filter(l => l.startsWith('日期：')).length || 1)
       : buildStudyNotePolishPrompt()
   const maxTokens = purpose === 'test' ? 64 : purpose === 'export' ? 4000 : 2000
-  // export 排版长文档更适合用 deepseek-flash（更快、成本更低、上下文更大）
-  const effectiveModel = purpose === 'export' ? 'deepseek-flash' : provider.model
+  const effectiveModel = resolveEffectiveModel(provider, purpose)
   if (provider.format === 'anthropic_messages') {
     return {
       headers: {
@@ -336,8 +360,13 @@ export async function requestStudyNoteAi({
   }
   const normalizedContent = purpose === 'test'
     ? '请测试当前模型连接。'
-    : validateBoundedString(content, AI_CONTENT_MAX_LENGTH, 'content')
+    : validateBoundedString(
+      content,
+      purpose === 'export' ? AI_EXPORT_INPUT_MAX_LENGTH : AI_CONTENT_MAX_LENGTH,
+      purpose === 'export' ? 'exportContent' : 'content',
+    )
   const requestPayload = buildAiRequest(provider, normalizedContent, purpose)
+  const requestedModel = resolveEffectiveModel(provider, purpose)
 
   let response
   try {
@@ -385,14 +414,13 @@ export async function requestStudyNoteAi({
   return {
     content: parsedContent,
     providerName: provider.name,
-    model: provider.model,
+    model: requestedModel,
   }
 }
 
 /**
  * 流式 AI 润色接口：通过回调逐段转发 AI 生成的内容。
- * 当前优先支持 chat_completions 格式（OpenAI 兼容 SSE），
- * 其他格式暂不支持流式，会直接返回错误。
+ * 当前优先支持 chat_completions 格式（OpenAI 兼容 SSE）。
  */
 export async function requestStudyNoteAiStream({
   content,
@@ -402,6 +430,8 @@ export async function requestStudyNoteAiStream({
   onDone,
   onError,
   providerId,
+  abortSignal,
+  timeoutMs = AI_STREAM_TIMEOUT_MS,
 }) {
   let provider
   try {
@@ -426,6 +456,65 @@ export async function requestStudyNoteAiStream({
   const normalizedContent = validateBoundedString(content, AI_CONTENT_MAX_LENGTH, 'content')
   const requestPayload = buildAiRequest(provider, normalizedContent, 'polish')
   const streamBody = { ...requestPayload.body, stream: true }
+  const requestedModel = resolveEffectiveModel(provider, 'polish')
+
+  const controller = new AbortController()
+  let timeoutId = null
+  let clientAbortHandler = null
+  let finished = false
+  let errorSent = false
+  let doneSent = false
+  let reader = null
+  let totalBytes = 0
+  let totalChars = 0
+
+  function cleanup() {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    if (clientAbortHandler && abortSignal) {
+      abortSignal.removeEventListener('abort', clientAbortHandler)
+      clientAbortHandler = null
+    }
+    if (reader) {
+      try { reader.cancel() } catch { /* ignore */ }
+      reader = null
+    }
+  }
+
+  function finish() {
+    if (finished) return
+    finished = true
+    cleanup()
+  }
+
+  function sendError(message) {
+    if (errorSent || doneSent) return
+    errorSent = true
+    finish()
+    onError(message)
+  }
+
+  function sendDone() {
+    if (errorSent || doneSent) return
+    doneSent = true
+    finish()
+    onDone({ providerName: provider.name, model: requestedModel })
+  }
+
+  timeoutId = setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+
+  if (abortSignal) {
+    clientAbortHandler = () => controller.abort()
+    if (abortSignal.aborted) {
+      controller.abort()
+    } else {
+      abortSignal.addEventListener('abort', clientAbortHandler, { once: true })
+    }
+  }
 
   let response
   try {
@@ -433,42 +522,41 @@ export async function requestStudyNoteAiStream({
       method: 'POST',
       headers: requestPayload.headers,
       body: JSON.stringify(streamBody),
+      signal: controller.signal,
     })
   } catch (error) {
-    const message = error instanceof Error && error.name === 'TimeoutError'
-      ? 'AI 供应商响应超时。'
-      : '服务端无法连接 AI 供应商。'
-    onError(message)
+    cleanup()
+    if (error instanceof Error && error.name === 'AbortError') {
+      if (abortSignal?.aborted) {
+        onError('客户端已取消请求。')
+        return
+      }
+      onError('AI 供应商响应超时。')
+      return
+    }
+    onError('服务端无法连接 AI 供应商。')
     return
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
   }
 
   if (!response.ok) {
+    cleanup()
     onError(`AI 供应商返回错误：HTTP ${response.status}。`)
     return
   }
 
-  const reader = response.body?.getReader()
+  reader = response.body?.getReader()
   if (!reader) {
+    cleanup()
     onError('AI 供应商未返回可读的流式响应。')
     return
   }
 
   let buffer = ''
-  let errorSent = false
-  let finished = false
-
-  function finish() {
-    if (finished) return
-    finished = true
-    try { reader.cancel() } catch { /* ignore */ }
-  }
-
-  function sendError(message) {
-    if (errorSent) return
-    errorSent = true
-    finish()
-    onError(message)
-  }
 
   try {
     let reading = true
@@ -478,9 +566,15 @@ export async function requestStudyNoteAiStream({
         reading = false
         continue
       }
+
+      totalBytes += value.byteLength
+      if (totalBytes > AI_STREAM_MAX_BYTES) {
+        sendError('AI 流式响应超过大小限制。')
+        return
+      }
+
       buffer += new TextDecoder().decode(value, { stream: true })
 
-      // 按 \n\n（SSE 事件分隔符）分割
       const parts = buffer.split('\n\n')
       buffer = parts.pop() ?? ''
 
@@ -497,8 +591,7 @@ export async function requestStudyNoteAiStream({
         if (!dataLine) continue
 
         if (dataLine === '[DONE]') {
-          finish()
-          onDone({ providerName: provider.name, model: provider.model })
+          sendDone()
           return
         }
 
@@ -506,6 +599,11 @@ export async function requestStudyNoteAiStream({
           const parsed = JSON.parse(dataLine)
           const deltaContent = parsed?.choices?.[0]?.delta?.content
           if (typeof deltaContent === 'string' && deltaContent.length > 0) {
+            totalChars += deltaContent.length
+            if (totalChars > AI_STREAM_MAX_CHARS) {
+              sendError('AI 流式响应超过长度限制。')
+              return
+            }
             onDelta(deltaContent)
           }
         } catch {
@@ -514,10 +612,33 @@ export async function requestStudyNoteAiStream({
       }
     }
 
-    // 流自然结束（无 [DONE] 标记的情况）
-    finish()
-    onDone({ providerName: provider.name, model: provider.model })
+    if (buffer.trim()) {
+      const lines = buffer.split('\n')
+      let dataLine = ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) dataLine += line.slice(6)
+        else if (line.startsWith('data:')) dataLine += line.slice(5).trimStart()
+      }
+      if (dataLine && dataLine !== '[DONE]') {
+        try {
+          const parsed = JSON.parse(dataLine)
+          const deltaContent = parsed?.choices?.[0]?.delta?.content
+          if (typeof deltaContent === 'string' && deltaContent.length > 0) {
+            totalChars += deltaContent.length
+            if (totalChars <= AI_STREAM_MAX_CHARS) onDelta(deltaContent)
+          }
+        } catch { /* ignore trailing buffer */ }
+      }
+    }
+
+    sendDone()
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      sendError(abortSignal?.aborted ? '客户端已取消请求。' : 'AI 供应商响应超时。')
+      return
+    }
     sendError('AI 供应商流式响应中断。')
+  } finally {
+    cleanup()
   }
 }

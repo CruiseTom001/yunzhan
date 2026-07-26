@@ -205,6 +205,66 @@ describe('studyNotesApi streaming', () => {
     expect(JSON.parse(requestBody)).toEqual({ content: '学了 Docker', providerId: 'glm' })
   })
 
+  it('accepts done event without content when deltas were received', async () => {
+    const deltas: string[] = []
+    let doneResult: { content: string; providerName: string; model: string } | null = null
+
+    const sseLines = [
+      'event: delta\ndata: {"content":"今天"}\n\n',
+      'event: delta\ndata: {"content":"学了Docker"}\n\n',
+      'event: done\ndata: {"providerName":"DeepSeek","model":"deepseek-chat"}\n\n',
+    ]
+
+    const originalFetch = globalThis.fetch
+    let fetchCount = 0
+    vi.stubGlobal('fetch', async () => {
+      fetchCount += 1
+      return createSseResponse(sseLines)
+    })
+
+    try {
+      await polishStudyNoteViaServerStream(
+        '学了 Docker',
+        'glm',
+        (delta) => { deltas.push(delta) },
+        (result) => { doneResult = result },
+      )
+    } finally {
+      vi.stubGlobal('fetch', originalFetch)
+    }
+
+    expect(fetchCount).toBe(1)
+    expect(deltas).toEqual(['今天', '学了Docker'])
+    expect(doneResult).toEqual({
+      content: '今天学了Docker',
+      providerName: 'DeepSeek',
+      model: 'deepseek-chat',
+    })
+  })
+
+  it('throws StreamPolishError with partial content when stream ends early after deltas', async () => {
+    const sseLines = [
+      'event: delta\ndata: {"content":"部分内容"}\n\n',
+    ]
+
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async () => createSseResponse(sseLines))
+
+    await expect(polishStudyNoteViaServerStream(
+      '内容',
+      null,
+      () => {},
+      () => {},
+    )).rejects.toMatchObject({
+      message: '流式响应中断，可重新润色。',
+      partialContent: '部分内容',
+      receivedDelta: true,
+      allowFallback: false,
+    })
+
+    vi.stubGlobal('fetch', originalFetch)
+  })
+
   it('throws on error event from server', async () => {
     const sseLines = [
       'event: error\ndata: {"error":"服务端 AI 尚未配置。"}\n\n',
@@ -293,6 +353,28 @@ describe('studyNotesApi export word', () => {
     expect(parsed.mode).toBe('ai-layout')
     expect(parsed.dates).toEqual(['2026-07-24'])
     vi.stubGlobal('fetch', globalThis.fetch)
+  })
+
+  it('does not send local provider id to server export route', async () => {
+    const originalFetch = globalThis.fetch
+    let requestBody = ''
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      requestBody = typeof init.body === 'string' ? init.body : ''
+      return new Response(new Blob(['docx']), {
+        status: 200,
+        headers: { 'Content-Disposition': 'attachment; filename="notes.docx"' },
+      })
+    })
+    try {
+      await exportStudyNotesAsWord(['2026-07-24'], 'raw', { providerId: 'local-provider-id' })
+      const parsed = JSON.parse(requestBody) as Record<string, unknown>
+      expect(parsed.providerId).toBeUndefined()
+      expect(requestBody).not.toContain('local-provider-id')
+      expect(requestBody).not.toContain('apiKey')
+      expect(requestBody).not.toContain('sk-')
+    } finally {
+      vi.stubGlobal('fetch', originalFetch)
+    }
   })
 
   it('omits providerId for raw mode', async () => {

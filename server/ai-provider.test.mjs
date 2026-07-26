@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AI_EXPORT_INPUT_MAX_LENGTH,
   listServerAiProviderSummaries,
   loadServerAiProvider,
   loadServerAiProviders,
@@ -173,7 +174,93 @@ describe('server AI provider request', () => {
     expect(requests[0].options.headers.Authorization).toBe('Bearer fake-key-glm')
   })
 
-  it('throws stable error when providerId is missing during request', async () => {
+  it('uses provider configured model for export purpose', async () => {
+    const requests = []
+    const fetchImplementation = async (url, options) => {
+      requests.push({ url, options })
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '# 标题\n## 章节\n正文' } }],
+      }))
+    }
+
+    const result = await requestStudyNoteAi({
+      content: '日期：2026-07-01\n笔记内容',
+      environment: JSON_ENVIRONMENT,
+      fetchImplementation,
+      purpose: 'export',
+      providerId: 'glm',
+    })
+
+    expect(result.model).toBe('glm-4-flash')
+    const body = JSON.parse(requests[0].options.body)
+    expect(body.model).toBe('glm-4-flash')
+  })
+
+  it('uses deepseek model for deepseek export', async () => {
+    const requests = []
+    const fetchImplementation = async (url, options) => {
+      requests.push({ url, options })
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '# 标题\n## 章节\n正文' } }],
+      }))
+    }
+
+    const result = await requestStudyNoteAi({
+      content: '日期：2026-07-01\n笔记内容',
+      environment: JSON_ENVIRONMENT,
+      fetchImplementation,
+      purpose: 'export',
+      providerId: 'deepseek',
+    })
+
+    expect(result.model).toBe('deepseek-chat')
+    expect(JSON.parse(requests[0].options.body).model).toBe('deepseek-chat')
+  })
+
+  it('uses exportModel when configured', async () => {
+    const env = {
+      AI_PROVIDERS_JSON: JSON.stringify([
+        {
+          id: 'glm',
+          name: '智谱 GLM',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          apiKey: 'fake-key-glm',
+          format: 'chat_completions',
+          model: 'glm-4-flash',
+          exportModel: 'glm-4-air',
+        },
+      ]),
+    }
+    const requests = []
+    const fetchImplementation = async (url, options) => {
+      requests.push({ url, options })
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '# 标题\n## 章节\n正文' } }],
+      }))
+    }
+
+    const result = await requestStudyNoteAi({
+      content: '日期：2026-07-01\n笔记内容',
+      environment: env,
+      fetchImplementation,
+      purpose: 'export',
+      providerId: 'glm',
+    })
+
+    expect(result.model).toBe('glm-4-air')
+    expect(JSON.parse(requests[0].options.body).model).toBe('glm-4-air')
+  })
+
+  it('rejects export input exceeding AI_EXPORT_INPUT_MAX_LENGTH', async () => {
+    await expect(requestStudyNoteAi({
+      content: 'x'.repeat(AI_EXPORT_INPUT_MAX_LENGTH + 1),
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: async () => new Response('{}'),
+      purpose: 'export',
+    })).rejects.toThrow('exportContent invalid')
+  })
+
+  it('throws stable error when providerId does not exist', async () => {
     const fetchImplementation = async () => new Response('{}')
     await expect(requestStudyNoteAi({
       content: '内容',
@@ -184,6 +271,110 @@ describe('server AI provider request', () => {
       message: '选择的 AI 供应商不存在。',
       statusCode: 404,
     })
+  })
+})
+
+describe('server AI provider streaming limits', () => {
+  function createDelayedSseStream(lines, delayMs = 0) {
+    const encoder = new TextEncoder()
+    const chunks = lines.map(line => encoder.encode(line))
+    let index = 0
+    return new ReadableStream({
+      async pull(controller) {
+        if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs))
+        if (index < chunks.length) {
+          controller.enqueue(chunks[index])
+          index += 1
+        } else {
+          controller.close()
+        }
+      },
+    })
+  }
+
+  it('times out when upstream fetch is slow to respond', async () => {
+    let errorMessage = null
+    const fetchImpl = async (_url, options) => {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 200)
+        options.signal?.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(new DOMException('Aborted', 'AbortError'))
+        }, { once: true })
+      })
+      return new Response('{}', { status: 200 })
+    }
+
+    await requestStudyNoteAiStream({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: fetchImpl,
+      timeoutMs: 30,
+      onDelta() {},
+      onDone() {},
+      onError(msg) { errorMessage = msg },
+    })
+
+    expect(errorMessage).toBe('AI 供应商响应超时。')
+  })
+
+  it('aborts when client signal is cancelled', async () => {
+    let errorMessage = null
+    const controller = new AbortController()
+    const fetchImpl = async (_url, options) => {
+      await new Promise(resolve => setTimeout(resolve, 20))
+      if (options.signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError')
+      }
+      return new Response(createDelayedSseStream([
+        'data: {"choices":[{"delta":{"content":"x"}}]}\n\n',
+      ]), { status: 200 })
+    }
+
+    controller.abort()
+    await requestStudyNoteAiStream({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: fetchImpl,
+      abortSignal: controller.signal,
+      onDelta() {},
+      onDone() {},
+      onError(msg) { errorMessage = msg },
+    })
+
+    expect(errorMessage).toBe('客户端已取消请求。')
+  })
+
+  it('rejects stream exceeding character limit', async () => {
+    let errorMessage = null
+    const huge = 'a'.repeat(50)
+    const sseLines = Array.from({ length: 700 }, () => `data: {"choices":[{"delta":{"content":"${huge}"}}]}\n\n`)
+    sseLines.push('data: [DONE]\n\n')
+    const fetchImpl = async () => new Response(createDelayedSseStream(sseLines), { status: 200 })
+
+    await requestStudyNoteAiStream({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: fetchImpl,
+      onDelta() {},
+      onDone() {},
+      onError(msg) { errorMessage = msg },
+    })
+
+    expect(errorMessage).toBe('AI 流式响应超过长度限制。')
+  })
+
+  it('calls onError on upstream HTTP 500', async () => {
+    let errorMessage = null
+    await requestStudyNoteAiStream({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: async () => new Response('{}', { status: 500 }),
+      onDelta() {},
+      onDone() {},
+      onError(msg) { errorMessage = msg },
+    })
+    expect(errorMessage).toBe('AI 供应商返回错误：HTTP 500。')
   })
 })
 

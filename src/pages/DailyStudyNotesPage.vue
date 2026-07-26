@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FileDown,
   FileText,
   Loader2,
@@ -28,8 +30,17 @@ import {
   polishStudyNoteViaServer,
   polishStudyNoteViaServerStream,
   saveStudyNote,
+  StreamPolishError,
   testServerAiProvider,
 } from '@/utils/studyNotesApi'
+import {
+  buildCalendarCells,
+  buildCalendarMonthLabel,
+  formatLocalDate,
+  parseLocalDate,
+  shiftLocalDate,
+  shiftMonthKey,
+} from '@/utils/studyNoteDates'
 import {
   type LocalAiProviderEntry,
   deleteLocalAiProvider,
@@ -42,6 +53,11 @@ import {
 
 const notes = ref<StudyNote[]>([])
 const selectedDate = ref(formatLocalDate(new Date()))
+const showDatePicker = ref(false)
+const datePickerRoot = ref<HTMLElement | null>(null)
+const datePickerButton = ref<HTMLButtonElement | null>(null)
+/** 日历面板当前展示的年月，格式 YYYY-MM */
+const calendarMonthKey = ref(selectedDate.value.slice(0, 7))
 const content = ref('')
 const polishedContent = ref('')
 const currentAiProviderName = ref<string | null>(null)
@@ -174,25 +190,67 @@ function formatDateRangeCn(start: string, end: string, same: boolean): string {
 // 导出按钮可用条件
 const canExport = computed(() => selectedExportDates.value.length > 0 && !exporting.value)
 const exportCanUseAi = computed(() => {
-  if (desktopLocalAi.value) return Boolean(selectedPolishProvider.value)
+  if (desktopLocalAi.value) return false
   return !loadingServerProviders.value && serverAiProviders.value.length > 0
 })
 
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function formatDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) return date
+  const parsed = parseLocalDate(date)
+  if (!parsed) return date
   return parsed.toLocaleDateString('zh-CN', {
     month: 'long',
     day: 'numeric',
     weekday: 'short',
   })
+}
+
+const calendarMonthLabel = computed(() => buildCalendarMonthLabel(calendarMonthKey.value))
+const calendarWeekdayLabels = ['一', '二', '三', '四', '五', '六', '日'] as const
+const calendarCells = computed(() => buildCalendarCells(calendarMonthKey.value, selectedDate.value))
+
+function shiftSelectedDate(deltaDays: number) {
+  selectDate(shiftLocalDate(selectedDate.value, deltaDays))
+}
+
+function closeDatePicker(returnFocus = true) {
+  showDatePicker.value = false
+  if (returnFocus) {
+    void nextTick(() => datePickerButton.value?.focus())
+  }
+}
+
+function openDatePicker() {
+  showDatePicker.value = true
+  calendarMonthKey.value = selectedDate.value.slice(0, 7)
+  void nextTick(() => {
+    const selectedButton = datePickerRoot.value?.querySelector('[aria-current="date"]')
+    if (selectedButton instanceof HTMLButtonElement) selectedButton.focus()
+  })
+}
+
+function toggleDatePicker() {
+  if (showDatePicker.value) closeDatePicker(false)
+  else openDatePicker()
+}
+
+function pickCalendarDate(date: string) {
+  selectDate(date)
+  closeDatePicker(true)
+}
+
+function handleDatePickerDocumentClick(event: MouseEvent) {
+  if (!showDatePicker.value) return
+  const root = datePickerRoot.value
+  const target = event.target
+  if (!(target instanceof Node) || !root || root.contains(target)) return
+  closeDatePicker(true)
+}
+
+function handleDatePickerKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && showDatePicker.value) {
+    event.preventDefault()
+    closeDatePicker(true)
+  }
 }
 
 function formatUpdatedAt(timestamp: number) {
@@ -535,13 +593,25 @@ async function polishCurrentNote() {
             setTransientMessage('AI 润色已生成，确认后可保存。')
           },
         )
-      } catch {
-        // 流式失败：回退到非流式 API
-        const result = await polishStudyNoteViaServer(text, serverProviderId ?? undefined)
-        polishedContent.value = result.content
-        currentAiProviderName.value = result.providerName
-        currentAiModel.value = result.model
-        setTransientMessage('AI 润色已生成（非流式），确认后可保存。')
+      } catch (streamError) {
+        if (streamError instanceof StreamPolishError) {
+          if (streamError.receivedDelta) {
+            polishedContent.value = streamError.partialContent
+            errorMessage.value = streamError.message
+            return
+          }
+          if (streamError.allowFallback) {
+            const result = await polishStudyNoteViaServer(text, serverProviderId ?? undefined)
+            polishedContent.value = result.content
+            currentAiProviderName.value = result.providerName
+            currentAiModel.value = result.model
+            setTransientMessage('AI 润色已生成（非流式），确认后可保存。')
+            return
+          }
+          errorMessage.value = streamError.message
+          return
+        }
+        throw streamError
       }
     }
   } catch (error) {
@@ -559,8 +629,11 @@ function applyPolishedContent() {
 
 function openExportConfirm() {
   if (!canExport.value) return
-  // 若用户选 AI 模式但当前没有可用 AI provider，自动切换到 raw
-  if (!exportCanUseAi.value) exportMode.value = 'raw'
+  if (desktopLocalAi.value) {
+    exportMode.value = 'raw'
+  } else if (!exportCanUseAi.value) {
+    exportMode.value = 'raw'
+  }
   exportError.value = ''
   showExportConfirm.value = true
 }
@@ -586,13 +659,13 @@ async function executeExport() {
   exporting.value = true
   exportError.value = ''
   try {
-    const providerId: string | undefined = exportMode.value === 'ai-layout'
-      ? (selectedPolishProvider.value?.id ?? selectedServerProvider.value?.id ?? undefined)
+    const providerId: string | undefined = !desktopLocalAi.value && exportMode.value === 'ai-layout'
+      ? (selectedServerProvider.value?.id ?? undefined)
       : undefined
     const { blob, filename } = await exportStudyNotesAsWord(
       [...selectedExportDates.value].sort(),
       exportMode.value,
-      { providerId },
+      { providerId, onExportError: (message) => { exportError.value = message } },
     )
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -613,8 +686,15 @@ async function executeExport() {
 }
 
 onMounted(() => {
+  document.addEventListener('click', handleDatePickerDocumentClick)
+  document.addEventListener('keydown', handleDatePickerKeydown)
   void loadNotes()
   void loadAiProvider()
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDatePickerDocumentClick)
+  document.removeEventListener('keydown', handleDatePickerKeydown)
 })
 </script>
 
@@ -669,15 +749,102 @@ onMounted(() => {
             </div>
             <Loader2 v-if="loading" class="h-4 w-4 animate-spin text-cyan-400" />
           </div>
-          <div class="border-b border-theme-subtle p-4">
+          <div ref="datePickerRoot" class="relative border-b border-theme-subtle p-4">
             <label class="mb-2 block text-xs text-theme-muted" for="study-note-date">选择日期</label>
-            <input
-              id="study-note-date"
-              v-model="selectedDate"
-              type="date"
-              class="w-full rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm text-theme outline-none focus:border-cyan-400/40"
-              @change="loadEditor(selectedNote)"
-            />
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-white/[0.08] text-theme-muted transition hover:bg-white/[0.04] hover:text-theme"
+                title="前一天"
+                aria-label="前一天"
+                @click="shiftSelectedDate(-1)"
+              >
+                <ChevronLeft class="h-4 w-4" />
+              </button>
+              <button
+                id="study-note-date"
+                ref="datePickerButton"
+                type="button"
+                class="flex h-10 min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-white/[0.08] bg-white/[0.02] px-3 text-sm text-theme outline-none transition hover:border-cyan-400/30 focus:border-cyan-400/40"
+                :aria-expanded="showDatePicker"
+                aria-haspopup="dialog"
+                aria-label="选择日期，打开日历"
+                title="选择日期"
+                @click.stop="toggleDatePicker"
+              >
+                <span class="truncate font-mono">{{ selectedDate }}</span>
+                <CalendarDays class="h-4 w-4 shrink-0 text-theme-muted" />
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-white/[0.08] text-theme-muted transition hover:bg-white/[0.04] hover:text-theme"
+                title="后一天"
+                aria-label="后一天"
+                @click="shiftSelectedDate(1)"
+              >
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </div>
+            <div
+              v-if="showDatePicker"
+              class="absolute left-4 right-4 z-30 mt-2 max-h-[min(320px,calc(100dvh-12rem))] overflow-y-auto rounded-md border border-theme-card bg-surface-tertiary p-3 shadow-xl"
+              role="dialog"
+              aria-label="选择日期"
+              @click.stop
+            >
+              <div class="mb-3 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-theme-muted transition hover:bg-white/[0.06] hover:text-theme"
+                  title="上个月"
+                  aria-label="上个月"
+                  @click="calendarMonthKey = shiftMonthKey(calendarMonthKey, -1)"
+                >
+                  <ChevronLeft class="h-4 w-4" />
+                </button>
+                <div class="text-sm font-semibold text-theme">{{ calendarMonthLabel }}</div>
+                <button
+                  type="button"
+                  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-theme-muted transition hover:bg-white/[0.06] hover:text-theme"
+                  title="下个月"
+                  aria-label="下个月"
+                  @click="calendarMonthKey = shiftMonthKey(calendarMonthKey, 1)"
+                >
+                  <ChevronRight class="h-4 w-4" />
+                </button>
+              </div>
+              <div class="mb-1 grid grid-cols-7 gap-1">
+                <span
+                  v-for="label in calendarWeekdayLabels"
+                  :key="label"
+                  class="py-1 text-center text-[11px] text-theme-dim"
+                >
+                  {{ label }}
+                </span>
+              </div>
+              <div class="grid grid-cols-7 gap-1">
+                <button
+                  v-for="cell in calendarCells"
+                  :key="cell.date"
+                  type="button"
+                  class="h-8 rounded-md text-xs transition"
+                  :class="[
+                    cell.isSelected
+                      ? 'bg-cyan-400/20 font-semibold text-cyan-300'
+                      : cell.isToday
+                        ? 'border border-cyan-400/30 text-cyan-300'
+                        : cell.inMonth
+                          ? 'text-theme hover:bg-white/[0.06]'
+                          : 'text-theme-dim/50 hover:bg-white/[0.03]',
+                  ]"
+                  :aria-label="cell.date"
+                  :aria-current="cell.isSelected ? 'date' : undefined"
+                  @click="pickCalendarDate(cell.date)"
+                >
+                  {{ cell.day }}
+                </button>
+              </div>
+            </div>
           </div>
           <div class="max-h-[520px] overflow-y-auto p-2">
             <div
@@ -925,20 +1092,23 @@ onMounted(() => {
 
         <div class="mb-4">
           <p class="mb-2 text-xs text-theme-muted">导出方式</p>
+          <p v-if="desktopLocalAi" class="mb-2 text-xs text-amber-300">
+            桌面端 AI 排版导出正在完善，当前仅支持原文导出。
+          </p>
           <label class="mb-2 flex cursor-pointer items-start gap-3 rounded-md border border-white/[0.08] px-3 py-2.5 transition hover:bg-white/[0.03]" :class="exportMode === 'ai-layout' ? 'border-cyan-400/30 bg-cyan-400/5' : ''">
             <input
               type="radio"
               value="ai-layout"
               v-model="exportMode"
-              :disabled="!exportCanUseAi || exporting"
+              :disabled="!exportCanUseAi || exporting || desktopLocalAi"
               class="mt-0.5 h-4 w-4 accent-cyan-500"
             />
             <div class="min-w-0">
               <p class="text-sm font-medium text-theme">AI 自动排版（推荐）</p>
               <p class="mt-0.5 text-xs text-theme-muted">
-                AI 将整合所选笔记，提炼主题并生成结构化文档。
+                AI 将整合所选笔记，提炼主题并生成结构化文档（仅网页端）。
               </p>
-              <p v-if="!exportCanUseAi" class="mt-1 text-xs text-amber-300">
+              <p v-if="!exportCanUseAi && !desktopLocalAi" class="mt-1 text-xs text-amber-300">
                 当前未配置可用 AI，将自动按原样导出。
               </p>
             </div>

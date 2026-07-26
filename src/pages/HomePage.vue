@@ -7,6 +7,10 @@ import { getCourseIconChar } from '@/data/courseIcons'
 import type { Difficulty, CourseIcon } from '@/types'
 import ParticleBg from '@/components/common/ParticleBg.vue'
 import { useProgressStore } from '@/stores/progress'
+import {
+  isBeginnerPathComplete,
+  resolveContinueTarget,
+} from '@/utils/continueLearning'
 
 const router = useRouter()
 const progressStore = useProgressStore()
@@ -149,7 +153,8 @@ function getPhaseProgress(step: typeof roadmapSteps[0]) {
 }
 
 function isCurrentCourse(courseId: string) {
-  return progressStore.progress.lastVisited === courseId
+  const target = continueTarget.value
+  return target?.courseId === courseId
 }
 
 function isRoadmapConnectionActive(courseIds: string[], coursePosition: number) {
@@ -167,29 +172,6 @@ interface CourseMeta {
   chapterCount: number
 }
 
-const BEGINNER_PATH_IDS = [
-  'computer-basics',
-  'linux-basics',
-  'networking',
-  'web-server',
-  'database',
-  'cache-queue',
-  'git',
-  'docker',
-  'cicd',
-  'monitoring',
-  'logging',
-  'security',
-  'automation',
-  'python-ops',
-  'virtualization',
-  'high-availability',
-  'kubernetes',
-  'cloud-ops',
-  'devops-sre',
-  'devops-project',
-] as const
-
 function toCourseMeta(id: string): CourseMeta | null {
   const meta = courseIndex.find((c) => c.id === id)
   if (!meta) return null
@@ -201,52 +183,24 @@ function toCourseMeta(id: string): CourseMeta | null {
   }
 }
 
-function parseCourseIdFromRoute(route: string): string | null {
-  const match = route.match(/^\/course\/([^/?#]+)/)
-  return match?.[1] ?? null
-}
+const continueTarget = computed(() => resolveContinueTarget({
+  chapterCounts,
+  completedChapters: progressStore.progress.completedChapters,
+  lastVisited: progressStore.progress.lastVisited,
+  lastRoute: progressStore.progress.lastRoute,
+}))
 
-function nextIncompleteChapter(courseId: string, chapterCount: number): number {
-  const completed = progressStore.progress.completedChapters[courseId] ?? []
-  for (let i = 0; i < chapterCount; i++) {
-    if (!completed.includes(i)) return i
-  }
-  return Math.max(0, chapterCount - 1)
-}
-
-function isCourseComplete(courseId: string): boolean {
-  const total = chapterCounts[courseId] ?? 0
-  if (total <= 0) return false
-  const completed = progressStore.progress.completedChapters[courseId]?.length ?? 0
-  return completed >= total
-}
+const beginnerPathComplete = computed(() => isBeginnerPathComplete(
+  chapterCounts,
+  progressStore.progress.completedChapters,
+))
 
 const continueCourse = computed<CourseMeta | null>(() => {
-  const visitedId = progressStore.progress.lastVisited
-  if (visitedId) {
-    const visited = toCourseMeta(visitedId)
-    if (visited) return visited
-  }
-
-  const routeCourseId = parseCourseIdFromRoute(progressStore.progress.lastRoute || '')
-  if (routeCourseId) {
-    const fromRoute = toCourseMeta(routeCourseId)
-    if (fromRoute) return fromRoute
-  }
-
-  for (const id of BEGINNER_PATH_IDS) {
-    if (!isCourseComplete(id)) {
-      return toCourseMeta(id)
-    }
-  }
-
-  return toCourseMeta(BEGINNER_PATH_IDS[0])
+  if (!continueTarget.value) return null
+  return toCourseMeta(continueTarget.value.courseId)
 })
 
-const continueChapter = computed(() => {
-  if (!continueCourse.value) return 0
-  return nextIncompleteChapter(continueCourse.value.id, continueCourse.value.chapterCount)
-})
+const continueChapter = computed(() => continueTarget.value?.chapterIndex ?? 0)
 
 const continueProgress = computed(() => {
   if (!continueCourse.value) return 0
@@ -266,11 +220,12 @@ const hasLearningProgress = computed(() => {
 })
 
 function goContinueLearning() {
-  if (!continueCourse.value) {
+  if (beginnerPathComplete.value) return
+  if (!continueTarget.value) {
     router.push('/courses')
     return
   }
-  router.push(`/course/${continueCourse.value.id}/chapter/${continueChapter.value}`)
+  router.push(`/course/${continueTarget.value.courseId}/chapter/${continueTarget.value.chapterIndex}`)
 }
 
 const colorMap: Record<string, { border: string; bg: string; text: string; dot: string; ring: string; fill: string }> = {
@@ -401,7 +356,7 @@ const termLines = computed(() => [
           </button>
         </div>
         <button
-          v-if="continueCourse"
+          v-if="continueCourse && !beginnerPathComplete"
           @click="goContinueLearning"
           class="group flex items-center gap-4 w-full text-left"
         >
@@ -427,6 +382,13 @@ const termLines = computed(() => [
           </div>
           <ChevronRight class="w-4 h-4 text-gray-700 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
         </button>
+        <div v-else-if="beginnerPathComplete" class="flex items-center gap-3 text-sm text-emerald-300">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-400">✓</span>
+          <div>
+            <div class="font-semibold text-theme">主线已完成</div>
+            <div class="text-xs text-theme-muted mt-0.5">推荐路线全部课程已学完，可复习或探索进阶内容。</div>
+          </div>
+        </div>
         <p v-else class="text-xs text-gray-500 font-mono">
           先打开课程列表，从推荐路线第 1 阶段开始。
         </p>

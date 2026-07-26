@@ -4,7 +4,7 @@ const AI_API_TIMEOUT_MS = 65_000
 const EXPORT_API_TIMEOUT_MS = 120_000
 
 export type AiProviderFormat = 'anthropic_messages' | 'chat_completions' | 'responses'
-export type ExportMode = 'ai-layout' | 'raw'
+export type ExportMode = 'ai-layout' | 'raw' | 'prepared-layout'
 
 export interface StudyNote {
   id: string
@@ -41,6 +41,23 @@ export interface PolishResult {
   content: string
   providerName: string
   model: string
+}
+
+export class StreamPolishError extends Error {
+  readonly partialContent: string
+  readonly receivedDelta: boolean
+  readonly allowFallback: boolean
+
+  constructor(
+    message: string,
+    options: { partialContent: string; receivedDelta: boolean; allowFallback: boolean },
+  ) {
+    super(message)
+    this.name = 'StreamPolishError'
+    this.partialContent = options.partialContent
+    this.receivedDelta = options.receivedDelta
+    this.allowFallback = options.allowFallback
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -118,6 +135,20 @@ function readPolishPayload(value: unknown): PolishResult | null {
   ) return null
   return {
     content: value.content,
+    providerName: value.providerName,
+    model: value.model,
+  }
+}
+
+function readStreamDonePayload(value: unknown, accumulatedContent: string): PolishResult | null {
+  if (!isRecord(value)) return null
+  if (typeof value.providerName !== 'string' || typeof value.model !== 'string') return null
+  const content = typeof value.content === 'string' && value.content.trim().length > 0
+    ? value.content
+    : accumulatedContent.trim()
+  if (!content) return null
+  return {
+    content,
     providerName: value.providerName,
     model: value.model,
   }
@@ -254,6 +285,8 @@ export async function polishStudyNoteViaServerStream(
   const decoder = new TextDecoder()
   let buffer = ''
   let errorSent = false
+  let doneSent = false
+  let accumulatedContent = ''
 
   try {
     let reading = true
@@ -284,40 +317,86 @@ export async function polishStudyNoteViaServerStream(
         if (!eventType || !dataLine) continue
 
         if (eventType === 'error') {
-          if (errorSent) continue
+          if (errorSent || doneSent) continue
           errorSent = true
           try { reader.cancel() } catch { /* ignore */ }
           const parsed = JSON.parse(dataLine)
-          throw new Error(typeof parsed?.error === 'string' ? parsed.error : 'AI 润色服务异常。')
+          const message = typeof parsed?.error === 'string' ? parsed.error : 'AI 润色服务异常。'
+          if (accumulatedContent.length > 0) {
+            throw new StreamPolishError('流式响应中断，可重新润色。', {
+              partialContent: accumulatedContent,
+              receivedDelta: true,
+              allowFallback: false,
+            })
+          }
+          throw new Error(message)
         }
 
         if (eventType === 'delta') {
           const parsed = JSON.parse(dataLine)
           if (typeof parsed?.content === 'string') {
+            accumulatedContent += parsed.content
             onDelta(parsed.content)
           }
           continue
         }
 
         if (eventType === 'done') {
+          if (doneSent) continue
           const parsed = JSON.parse(dataLine)
-          const result = readPolishPayload(parsed)
+          const result = readStreamDonePayload(parsed, accumulatedContent)
           if (result) {
+            doneSent = true
             onDone(result)
             return
           }
-          throw new Error('AI 润色服务返回了无效结果。')
+          if (accumulatedContent.length > 0) {
+            throw new StreamPolishError('流式响应中断，可重新润色。', {
+              partialContent: accumulatedContent,
+              receivedDelta: true,
+              allowFallback: false,
+            })
+          }
+          throw new StreamPolishError('AI 润色服务返回了无效结果。', {
+            partialContent: '',
+            receivedDelta: false,
+            allowFallback: true,
+          })
         }
       }
     }
 
-    throw new Error('AI 润色流式响应提前结束。')
+    if (accumulatedContent.length > 0) {
+      throw new StreamPolishError('流式响应中断，可重新润色。', {
+        partialContent: accumulatedContent,
+        receivedDelta: true,
+        allowFallback: false,
+      })
+    }
+    throw new StreamPolishError('AI 润色流式响应提前结束。', {
+      partialContent: '',
+      receivedDelta: false,
+      allowFallback: true,
+    })
   } catch (error) {
     if (errorSent) throw error
-    // reader 异常（网络中断等）
     try { reader.cancel() } catch { /* ignore */ }
-    if (error instanceof Error) throw error
-    throw new Error('AI 润色流式响应中断。')
+    if (error instanceof StreamPolishError) throw error
+    if (error instanceof Error) {
+      if (accumulatedContent.length > 0) {
+        throw new StreamPolishError('流式响应中断，可重新润色。', {
+          partialContent: accumulatedContent,
+          receivedDelta: true,
+          allowFallback: false,
+        })
+      }
+      throw error
+    }
+    throw new StreamPolishError('AI 润色流式响应中断。', {
+      partialContent: accumulatedContent,
+      receivedDelta: accumulatedContent.length > 0,
+      allowFallback: accumulatedContent.length === 0,
+    })
   }
 }
 
@@ -329,7 +408,11 @@ export async function polishStudyNoteViaServerStream(
 export async function exportStudyNotesAsWord(
   dates: string[],
   mode: ExportMode,
-  options: { providerId?: string; onExportError?: (message: string) => void } = {},
+  options: {
+    providerId?: string
+    preparedMarkdown?: string
+    onExportError?: (message: string) => void
+  } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   if (!Array.isArray(dates) || dates.length === 0) {
     throw new Error('请至少选择一篇学习记录。')
@@ -348,6 +431,12 @@ export async function exportStudyNotesAsWord(
   const body: Record<string, unknown> = { dates, mode }
   if (mode === 'ai-layout' && typeof options.providerId === 'string' && options.providerId.trim()) {
     body.providerId = options.providerId.trim()
+  }
+  if (mode === 'prepared-layout') {
+    if (typeof options.preparedMarkdown !== 'string' || !options.preparedMarkdown.trim()) {
+      throw new Error('排版内容无效，请重试。')
+    }
+    body.preparedMarkdown = options.preparedMarkdown.trim()
   }
 
   let response: Response

@@ -10,7 +10,7 @@ import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
-import { listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
+import { AI_EXPORT_INPUT_MAX_LENGTH, listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import {
   buildDateRangeLabel,
   buildDocxFromSections,
@@ -1335,6 +1335,8 @@ app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (req
   })
 
   let finished = false
+  const abortController = new AbortController()
+
   function sendEvent(event, data) {
     if (finished) return
     response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -1345,10 +1347,15 @@ app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (req
     response.end()
   }
 
+  request.on('close', () => {
+    if (!finished) abortController.abort()
+  })
+
   try {
     await requestStudyNoteAiStream({
       content,
       providerId,
+      abortSignal: abortController.signal,
       onDelta(text) {
         sendEvent('delta', { content: text })
       },
@@ -1372,7 +1379,7 @@ app.post('/api/study-notes/ai/polish-stream', requireAuth, asyncRoute(async (req
 // POST /api/study-notes/export-word — 导出笔记为 Word 文档
 // ═══════════════════════════════════════════════════
 app.post('/api/study-notes/export-word', requireAuth, asyncRoute(async (request, response) => {
-  const allowedKeys = new Set(['dates', 'mode', 'providerId'])
+  const allowedKeys = new Set(['dates', 'mode', 'providerId', 'preparedMarkdown'])
   if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
     response.status(400).json({ error: '导出参数无效。' })
     return
@@ -1398,7 +1405,7 @@ app.post('/api/study-notes/export-word', requireAuth, asyncRoute(async (request,
   const mode = typeof request.body?.mode === 'string'
     ? request.body.mode.trim()
     : 'ai-layout'
-  if (mode !== 'ai-layout' && mode !== 'raw') {
+  if (mode !== 'ai-layout' && mode !== 'raw' && mode !== 'prepared-layout') {
     response.status(400).json({ error: '导出模式无效。' })
     return
   }
@@ -1455,6 +1462,33 @@ app.post('/api/study-notes/export-word', requireAuth, asyncRoute(async (request,
     return
   }
 
+  if (mode === 'prepared-layout') {
+    const preparedMarkdown = validateStudyNoteContent(
+      request.body?.preparedMarkdown,
+      AI_EXPORT_INPUT_MAX_LENGTH,
+    )
+    if (!preparedMarkdown) {
+      response.status(400).json({ error: '排版内容无效或超过长度限制。' })
+      return
+    }
+    const sections = parseAiLayout(preparedMarkdown)
+    if (sections.length === 0) {
+      response.status(400).json({ error: '排版内容无法解析，请检查格式后重试。' })
+      return
+    }
+    const titleSection = sections.find(s => s.level === 'title')
+    const docTitle = titleSection ? titleSection.text : `${dateRangeLabel} 学习笔记`
+    const doc = buildDocxFromSections(sections, {
+      title: docTitle,
+      dateRangeLabel,
+      mode: 'ai-layout',
+      generatedAt,
+    })
+    const buffer = await toDocxBuffer(doc)
+    setDocxResponse(response, buffer, dateRangeLabel)
+    return
+  }
+
   // ---- AI 排版模式 ----------
   const assembledContent = buildExportUserPrompt(
     rows.map(row => ({
@@ -1464,6 +1498,13 @@ app.post('/api/study-notes/export-word', requireAuth, asyncRoute(async (request,
       raw: row.content,
     })),
   )
+
+  if (assembledContent.length > AI_EXPORT_INPUT_MAX_LENGTH) {
+    response.status(413).json({
+      error: `所选笔记总长度超过 ${AI_EXPORT_INPUT_MAX_LENGTH} 字符，请减少笔记数量后重试。`,
+    })
+    return
+  }
 
   try {
     const aiResult = await requestStudyNoteAi({

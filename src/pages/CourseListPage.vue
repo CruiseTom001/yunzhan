@@ -3,6 +3,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Filter, Route, ArrowRight } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
+import { beginnerPathSteps } from '@/data/beginner-path'
 import type { Difficulty } from '@/types'
 import CourseCard from '@/components/common/CourseCard.vue'
 import { useProgressStore } from '@/stores/progress'
@@ -40,58 +41,11 @@ interface RecommendedStepWithIndex {
   totalCourses: number
 }
 
-const recommendedSteps: RecommendedStep[] = [
-  {
-    title: '第 1 阶段：先打底',
-    description: '计算机基础、Linux 与网络，打好后面所有方向的地基。',
-    courses: [
-      { id: 'computer-basics' },
-      { id: 'linux-basics' },
-      { id: 'networking' },
-    ],
-  },
-  {
-    title: '第 2 阶段：会部署服务',
-    description: '先把 Web 服务、数据库与缓存消息队列跑起来。',
-    courses: [
-      { id: 'web-server' },
-      { id: 'database' },
-      { id: 'cache-queue' },
-    ],
-  },
-  {
-    title: '第 3 阶段：进入交付流程',
-    description: '掌握版本控制、容器化与 CI/CD，形成从修改到上线的闭环。',
-    courses: [
-      { id: 'git' },
-      { id: 'docker' },
-      { id: 'cicd' },
-    ],
-  },
-  {
-    title: '第 4 阶段：补齐运维能力',
-    description: '监控、日志、安全、自动化与脚本编程，形成日常运维能力。',
-    courses: [
-      { id: 'monitoring' },
-      { id: 'logging' },
-      { id: 'security' },
-      { id: 'automation' },
-      { id: 'python-ops' },
-    ],
-  },
-  {
-    title: '第 5 阶段：进阶与架构',
-    description: '虚拟化与高可用打底，再深入 Kubernetes、云原生与综合实战。',
-    courses: [
-      { id: 'virtualization' },
-      { id: 'high-availability' },
-      { id: 'kubernetes' },
-      { id: 'cloud-ops' },
-      { id: 'devops-sre' },
-      { id: 'devops-project' },
-    ],
-  },
-]
+const recommendedSteps: RecommendedStep[] = beginnerPathSteps.map(step => ({
+  title: step.title,
+  description: step.description,
+  courses: step.courses.map(id => ({ id })),
+}))
 
 const recommendedStepsWithIndex = computed<RecommendedStepWithIndex[]>(() => {
   let counter = 0

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/utils/apiClient', () => ({
   apiRequest: vi.fn(),
@@ -47,6 +47,68 @@ describe('localAiProvider validation', () => {
       format: 'chat_completions',
       model: 'deepseek-chat',
     })).toThrow('API Key')
+  })
+})
+
+describe('localAiProvider desktop mode', () => {
+  const mockInvoke = vi.fn()
+
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    vi.stubGlobal('window', { electronAPI: { invoke: mockInvoke } })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('polishes through Electron IPC on desktop', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      content: '今天系统学习了 Docker 网络。',
+      providerName: 'DeepSeek',
+      model: 'deepseek-chat',
+    })
+    const provider = {
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      apiKey: 'sk-local-secret',
+      format: 'chat_completions' as const,
+      model: 'deepseek-chat',
+    }
+    const result = await polishStudyNoteLocally({ content: '学了 Docker 网络', provider })
+    expect(result.content).toContain('Docker')
+    expect(mockInvoke).toHaveBeenCalledWith('ai:polishStudyNote', {
+      content: '学了 Docker 网络',
+      provider,
+    })
+    expect(mockedApiRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not send desktop api key through server fetch', async () => {
+    const originalFetch = globalThis.fetch
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    mockInvoke.mockResolvedValueOnce({
+      content: '润色完成',
+      providerName: 'DeepSeek',
+      model: 'deepseek-chat',
+    })
+    try {
+      await polishStudyNoteLocally({
+        content: '原始内容',
+        provider: {
+          name: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKey: 'sk-local-secret',
+          format: 'chat_completions',
+          model: 'deepseek-chat',
+        },
+      })
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(mockedApiRequest).not.toHaveBeenCalled()
+    } finally {
+      vi.stubGlobal('fetch', originalFetch)
+    }
   })
 })
 
