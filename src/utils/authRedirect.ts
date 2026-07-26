@@ -53,6 +53,20 @@ export function buildLoginCompatRedirect(query: Record<string, unknown>) {
   }
 }
 
+export function buildUnauthenticatedGuardRedirect(fullPath: string): {
+  name: 'landing'
+  query?: Record<string, string>
+} {
+  const normalized = fullPath.trim() || '/'
+  if (normalized === '/') {
+    return { name: 'landing' }
+  }
+  return {
+    name: 'landing',
+    query: buildLandingAuthQuery({ auth: 'login', redirect: normalized }),
+  }
+}
+
 export function stripAuthQuery(query: Record<string, unknown>): Record<string, string> {
   const next: Record<string, string> = {}
   for (const [key, value] of Object.entries(query)) {

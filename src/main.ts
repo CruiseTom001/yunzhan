@@ -5,6 +5,7 @@ import App from './App.vue'
 import './style.css'
 import { useProgressStore } from './stores/progress'
 import { useAuthStore } from './stores/auth'
+import { buildUnauthenticatedGuardRedirect } from './utils/authRedirect'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -25,8 +26,8 @@ async function bootstrap() {
       return true
     }
     if (!authStore.isAuthenticated) {
-      // 未登录用户访问受保护路由：跳落地页并打开登录弹窗
-      return { name: 'landing', query: { auth: 'login', redirect: to.fullPath } }
+      // 未登录用户只能访问落地页；访问学习页时引导登录
+      return buildUnauthenticatedGuardRedirect(to.fullPath)
     }
     if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
       return { name: 'home' }

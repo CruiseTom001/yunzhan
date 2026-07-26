@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLandingAuthQuery,
   buildLoginCompatRedirect,
+  buildUnauthenticatedGuardRedirect,
   parseAuthMode,
   readSafeRedirect,
   stripAuthQuery,
@@ -84,6 +85,21 @@ describe('authRedirect', () => {
     expect(stripAuthQuery({ auth: 'login', redirect: '/study-notes', foo: 'bar' })).toEqual({
       redirect: '/study-notes',
       foo: 'bar',
+    })
+  })
+
+  it('sends unauthenticated home visits to landing without login dialog', () => {
+    expect(buildUnauthenticatedGuardRedirect('/')).toEqual({ name: 'landing' })
+  })
+
+  it('sends unauthenticated learning route visits to landing login dialog', () => {
+    expect(buildUnauthenticatedGuardRedirect('/courses')).toEqual({
+      name: 'landing',
+      query: { auth: 'login', redirect: '/courses' },
+    })
+    expect(buildUnauthenticatedGuardRedirect('/course/linux-basics')).toEqual({
+      name: 'landing',
+      query: { auth: 'login', redirect: '/course/linux-basics' },
     })
   })
 })

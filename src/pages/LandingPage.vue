@@ -107,7 +107,11 @@ function goToRegister() {
 }
 
 function goToHome() {
-  void router.push({ name: 'home' })
+  if (authStore.isAuthenticated) {
+    void router.push({ name: 'home' })
+    return
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 let typeTimer: ReturnType<typeof setInterval> | null = null
