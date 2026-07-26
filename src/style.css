@@ -656,6 +656,9 @@ body {
   color: #d1d5db;
   line-height: 1.85;
   font-size: 1.05rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .prose-content h1,
@@ -746,11 +749,29 @@ body {
   color: var(--accent-purple);
 }
 
-.prose-content table {
-  width: 100%;
-  border-collapse: collapse;
+.prose-content .table-scroll-wrap {
+  overflow-x: auto;
+  max-width: 100%;
   margin-bottom: 1.5em;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prose-content .table-scroll-wrap table,
+.prose-content table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0;
   font-size: 0.9rem;
+}
+
+.prose-content > table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 1.5em;
+  -webkit-overflow-scrolling: touch;
 }
 
 .prose-content th {

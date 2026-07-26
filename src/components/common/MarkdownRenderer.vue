@@ -129,6 +129,20 @@ function annotateKnowledgeTerms() {
   }
 }
 
+function enhanceTables() {
+  if (!proseRef.value) return
+
+  proseRef.value.querySelectorAll('table').forEach((table) => {
+    const parent = table.parentElement
+    if (parent?.classList.contains('table-scroll-wrap')) return
+
+    const wrap = document.createElement('div')
+    wrap.className = 'table-scroll-wrap'
+    table.parentNode?.insertBefore(wrap, table)
+    wrap.appendChild(table)
+  })
+}
+
 function enhanceCodeBlocks() {
   if (!proseRef.value) return
 
@@ -344,6 +358,7 @@ function handleClickOutside(e: MouseEvent) {
 
 onMounted(() => {
   enhanceCodeBlocks()
+  enhanceTables()
   annotateKnowledgeTerms()
   document.addEventListener('click', handleClickOutside)
 })
@@ -361,6 +376,7 @@ watch(() => props.content, (newVal) => {
   delete proseRef.value.dataset.annotated
   nextTick(() => {
     enhanceCodeBlocks()
+    enhanceTables()
     annotateKnowledgeTerms()
   })
 })
@@ -374,6 +390,7 @@ watch(highlightTick, () => {
       delete (el as HTMLElement).dataset.enhanced
     })
     enhanceCodeBlocks()
+    enhanceTables()
     annotateKnowledgeTerms()
   })
 })
@@ -385,7 +402,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="proseRef" class="prose-content" :key="highlightTick" v-html="renderMarkdown(content)"></div>
+  <div ref="proseRef" class="prose-content min-w-0 max-w-full overflow-x-hidden" :key="highlightTick" v-html="renderMarkdown(content)"></div>
 </template>
 
 <style scoped>

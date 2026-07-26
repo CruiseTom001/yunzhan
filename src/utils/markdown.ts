@@ -1,65 +1,101 @@
 import MarkdownIt from 'markdown-it'
-import { createHighlighter, type Highlighter, type BundledTheme } from 'shiki'
+import type { HighlighterCore } from 'shiki/types'
+import { createCssVariablesTheme, createHighlighterCore } from 'shiki/core'
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import langBash from 'shiki/langs/bash.mjs'
 import langNginx from 'shiki/langs/nginx.mjs'
 import langYaml from 'shiki/langs/yaml.mjs'
 import DOMPurify from 'dompurify'
 
 /**
- * 代码块语法高亮：使用 shiki 的 css-variables 主题（内联 <span style="color:var(--shiki-*)">），
+ * 代码块语法高亮：使用 css-variables 主题（内联 var(--shiki-*)），
  * 深浅模式切换不重新生成 HTML，CSS 变量随 [data-theme] 自动转色。
  *
- * 支持的 lang：bash / sh / shell、nginx、yaml / yml。
- * 只按需加载 3 个语法包，避免 bundle-full 引入 200+ 语言。
+ * 只按需加载 bash / nginx / yaml，避免引入完整语言包。
  */
 const SUPPORTED_LANGS = new Set(['bash', 'sh', 'shell', 'nginx', 'yaml', 'yml'])
-// css-variables 是 shiki 内置的特殊主题，不属于 BundledTheme 联合类型
-const THEME = 'css-variables' as BundledTheme
 
-let highlighterPromise: Promise<Highlighter> | null = null
-let highlighter: Highlighter | null = null
+const CSS_VARIABLES_THEME = createCssVariablesTheme({
+  name: 'css-variables',
+  variablePrefix: '--shiki-',
+})
+const THEME_NAME = 'css-variables'
 
-function initHighlighter(): Promise<Highlighter> {
+let highlighterPromise: Promise<HighlighterCore> | null = null
+let highlighter: HighlighterCore | null = null
+let highlighterInitFailed = false
+
+function initHighlighter(): Promise<HighlighterCore> {
+  if (highlighterInitFailed) {
+    return Promise.reject(new Error('shiki unavailable'))
+  }
   if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: [THEME],
+    highlighterPromise = createHighlighterCore({
+      themes: [CSS_VARIABLES_THEME],
       langs: [langBash, langNginx, langYaml],
+      engine: createJavaScriptRegexEngine(),
     }).then((hl) => {
       highlighter = hl
       return hl
+    }).catch((error) => {
+      highlighterInitFailed = true
+      highlighterPromise = null
+      console.warn('[markdown] shiki init failed:', error)
+      throw error
     })
   }
   return highlighterPromise
 }
 
-// 模块加载即启动异步初始化
-void initHighlighter().catch((err) => {
-  console.warn('[markdown] shiki init failed:', err)
+void initHighlighter().catch(() => {
+  // 已在 initHighlighter 内记录；避免未处理的 rejection
 })
 
 function escapeHtml(s: string): string {
   return md.utils.escapeHtml(s)
 }
 
-function highlightSync(code: string, lang: string): string {
+function normalizeLang(lang: string): string {
   const normalized = lang?.toLowerCase().trim() || ''
-  if (!SUPPORTED_LANGS.has(normalized)) {
-    const langClass = lang ? ` language-${escapeHtml(lang)}` : ''
-    return `<pre class="hljs${langClass}"><code>${escapeHtml(code)}</code></pre>`
+  if (normalized === 'yml') return 'yaml'
+  if (normalized === 'shell' || normalized === 'sh') return 'bash'
+  return normalized
+}
+
+function fallbackPre(code: string, lang: string, pending = false): string {
+  const normalized = normalizeLang(lang)
+  const langClass = normalized ? ` language-${escapeHtml(normalized)}` : ''
+  const pendingAttr = pending ? ' data-shiki-pending="1"' : ''
+  return `<pre class="hljs${langClass}"${pendingAttr}><code>${escapeHtml(code)}</code></pre>`
+}
+
+function injectLanguageClass(html: string, lang: string): string {
+  const normalized = normalizeLang(lang)
+  if (!normalized) return html
+  const className = `language-${escapeHtml(normalized)}`
+  if (html.includes('class="')) {
+    return html.replace(/<pre class="/, `<pre class="${className} `)
+  }
+  return html.replace('<pre', `<pre class="${className}"`)
+}
+
+function highlightSync(code: string, lang: string): string {
+  const normalized = normalizeLang(lang)
+  if (!SUPPORTED_LANGS.has(lang?.toLowerCase().trim() || '') && !SUPPORTED_LANGS.has(normalized)) {
+    return fallbackPre(code, lang)
   }
   if (!highlighter) {
-    const langClass = ` language-${escapeHtml(normalized)}`
-    return `<pre class="hljs${langClass}" data-shiki-pending="1"><code>${escapeHtml(code)}</code></pre>`
+    return fallbackPre(code, lang, true)
   }
   try {
-    const targetLang = normalized === 'yml' ? 'yaml' : (normalized === 'shell' ? 'bash' : normalized)
-    return highlighter.codeToHtml(code, {
+    const targetLang = normalized === 'yaml' ? 'yaml' : normalized === 'nginx' ? 'nginx' : 'bash'
+    const html = highlighter.codeToHtml(code, {
       lang: targetLang,
-      theme: THEME,
+      theme: THEME_NAME,
     })
+    return injectLanguageClass(html, targetLang)
   } catch {
-    const langClass = ` language-${escapeHtml(normalized)}`
-    return `<pre class="hljs${langClass}"><code>${escapeHtml(code)}</code></pre>`
+    return fallbackPre(code, lang)
   }
 }
 
@@ -92,10 +128,21 @@ export function onHighlighterReady(cb: () => void): () => void {
   }
   if (highlighter) {
     Promise.resolve().then(wrapped)
-  } else {
-    initHighlighter().then(wrapped)
+  } else if (!highlighterInitFailed) {
+    initHighlighter().then(wrapped).catch(() => {
+      // 初始化失败时保持 pending 块的纯文本回退
+    })
   }
   return () => {
     cancelled = true
   }
 }
+
+/** 测试专用：重置 Shiki 单例状态 */
+export function __resetMarkdownHighlighterForTests() {
+  highlighterPromise = null
+  highlighter = null
+  highlighterInitFailed = false
+}
+
+export { SUPPORTED_LANGS, normalizeLang, initHighlighter }

@@ -113,7 +113,41 @@ watch([() => course.value?.id, chapterIndex], () => {
 }, { immediate: true })
 const hasPrev = computed(() => chapterIndex.value > 0)
 const hasNext = computed(() => chapterIndex.value < totalChapters.value - 1)
-const sidebarOpen = ref(true)
+const MOBILE_MAX_WIDTH = 767
+
+function isMobileViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`).matches
+}
+
+const sidebarOpen = ref(false)
+const isDesktopViewport = ref(false)
+
+function syncViewportMode() {
+  isDesktopViewport.value = !isMobileViewport()
+}
+
+onMounted(() => {
+  syncViewportMode()
+  sidebarOpen.value = isDesktopViewport.value
+  window.addEventListener('resize', syncViewportMode)
+})
+
+function closeMobileSidebarIfNeeded() {
+  if (!isDesktopViewport.value) sidebarOpen.value = false
+}
+
+const mainMarginClass = computed(() => (
+  sidebarOpen.value && isDesktopViewport.value ? 'ml-64' : 'ml-0'
+))
+
+const sidebarTransformClass = computed(() => (
+  sidebarOpen.value ? 'translate-x-0' : '-translate-x-full'
+))
+
+const sidebarToggleLeftClass = computed(() => (
+  sidebarOpen.value && isDesktopViewport.value ? 'left-64' : 'left-0'
+))
 const scrollProgress = ref(0)
 const showBackToTop = ref(false)
 const showCelebration = ref(false)
@@ -169,6 +203,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', syncViewportMode)
   window.removeEventListener('scroll', updateScrollProgress)
   if (celebrationTimer) {
     clearTimeout(celebrationTimer)
@@ -203,6 +238,7 @@ function goToChapter(index: number) {
   if (index !== chapterIndex.value) {
     triggerChapterMotion(index > chapterIndex.value ? 'next' : 'previous')
   }
+  closeMobileSidebarIfNeeded()
   router.push(`/course/${route.params.id}/chapter/${index}`)
 }
 
@@ -542,7 +578,7 @@ function saveWorkbenchDraft() {
     </div>
   </div>
 
-  <div v-else class="min-h-screen bg-theme pt-16">
+  <div v-else class="min-h-screen bg-theme pt-16 overflow-x-hidden">
     <!-- 阅读进度条 -->
     <div class="fixed top-16 left-0 right-0 z-50 h-px bg-white/[0.02]">
       <div
@@ -551,11 +587,20 @@ function saveWorkbenchDraft() {
       ></div>
     </div>
 
-    <!-- 侧边栏 -->
+    <!-- 移动端侧栏遮罩 -->
     <div
+      v-if="sidebarOpen && !isDesktopViewport"
+      class="fixed inset-0 top-16 z-30 bg-black/60 backdrop-blur-sm"
+      aria-hidden="true"
+      @click="sidebarOpen = false"
+    />
+
+    <!-- 侧边栏 -->
+    <aside
+      id="course-sidebar"
       :class="[
-        'fixed top-16 left-0 bottom-0 z-40 w-64 bg-theme/95 backdrop-blur-xl border-r border-white/[0.03] transition-transform duration-300 overflow-y-auto',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-64',
+        'fixed top-16 left-0 bottom-0 z-40 w-64 max-w-[calc(100vw-1rem)] bg-theme/95 backdrop-blur-xl border-r border-white/[0.03] transition-transform duration-300 overflow-y-auto',
+        sidebarTransformClass,
       ]"
     >
       <div class="p-3 border-b border-white/[0.03]">
@@ -607,13 +652,18 @@ function saveWorkbenchDraft() {
           <span class="leading-relaxed">{{ ch.title }}</span>
         </button>
       </nav>
-    </div>
+    </aside>
 
     <!-- 侧边栏切换 -->
     <button
-      @click="sidebarOpen = !sidebarOpen"
+      type="button"
+      :aria-expanded="sidebarOpen"
+      aria-controls="course-sidebar"
+      :aria-label="sidebarOpen ? '关闭课程目录' : '打开课程目录'"
+      :title="sidebarOpen ? '关闭课程目录' : '打开课程目录'"
       class="fixed top-20 z-50 p-1 bg-surface-tertiary border border-edge-card border-l-0 rounded-r-md text-gray-500 hover:text-white transition-all duration-300"
-      :class="sidebarOpen ? 'left-64' : 'left-0'"
+      :class="sidebarToggleLeftClass"
+      @click="sidebarOpen = !sidebarOpen"
     >
       <ChevronRight v-if="!sidebarOpen" class="w-3.5 h-3.5" />
       <ChevronLeft v-else class="w-3.5 h-3.5" />
@@ -622,13 +672,13 @@ function saveWorkbenchDraft() {
     <!-- 主内容区 -->
     <main
       :class="[
-        'transition-all duration-300 pt-6 pb-16',
-        sidebarOpen ? 'ml-64' : 'ml-0',
+        'min-w-0 transition-all duration-300 pt-6 pb-16',
+        mainMarginClass,
         chapterMotion === 'next' ? 'chapter-motion-next' : '',
         chapterMotion === 'previous' ? 'chapter-motion-previous' : '',
       ]"
     >
-      <div class="max-w-3xl mx-auto px-6 md:px-8">
+      <div class="max-w-3xl mx-auto min-w-0 px-6 md:px-8">
         <div v-if="currentChapter" class="mb-8">
           <div class="mb-6">
             <div class="flex items-center gap-1.5 text-[10px] text-gray-600 font-mono mb-1.5">
