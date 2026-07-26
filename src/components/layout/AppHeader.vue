@@ -90,7 +90,7 @@ async function logout() {
     loggingOut.value = false
     accountMenuOpen.value = false
     mobileMenuOpen.value = false
-    await router.replace('/login')
+    await router.replace({ name: 'landing' })
   }
 }
 

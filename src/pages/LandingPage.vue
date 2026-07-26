@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
   BookOpen,
@@ -15,16 +15,30 @@ import {
 } from 'lucide-vue-next'
 import { courseIndex } from '@/data/courses/index'
 import ParticleBg from '@/components/common/ParticleBg.vue'
+import AuthDialog from '@/components/auth/AuthDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getDesktopLatestVersion } from '@/utils/desktopVersionApi'
+import {
+  buildLandingAuthQuery,
+  isAuthMode,
+  parseAuthMode,
+  readSafeRedirect,
+  stripAuthQuery,
+  type AuthMode,
+} from '@/utils/authRedirect'
 
 const appVersion = __APP_VERSION__
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
 const desktopDownloadUrl = ref<string | null>(null)
+
+const authDialogOpen = computed(() => isAuthMode(route.query.auth))
+const authMode = computed(() => parseAuthMode(route.query.auth))
+const redirectPath = computed(() => readSafeRedirect(route.query.redirect))
 
 async function loadDesktopDownloadUrl() {
   try {
@@ -43,20 +57,49 @@ function openDesktopDownload() {
   }
 }
 
-let typeTimer: ReturnType<typeof setInterval> | null = null
-let revealObserver: IntersectionObserver | null = null
+function openAuth(mode: AuthMode, redirect = '/') {
+  void router.push({
+    name: 'landing',
+    query: buildLandingAuthQuery({ auth: mode, redirect }),
+  })
+}
+
+function closeAuthDialog() {
+  void router.replace({
+    name: 'landing',
+    query: stripAuthQuery(route.query as Record<string, unknown>),
+  })
+}
+
+function handleAuthModeChange(mode: AuthMode) {
+  void router.replace({
+    name: 'landing',
+    query: {
+      ...stripAuthQuery(route.query as Record<string, unknown>),
+      ...buildLandingAuthQuery({ auth: mode, redirect: route.query.redirect }),
+    },
+  })
+}
+
+async function handleAuthenticated() {
+  const target = readSafeRedirect(route.query.redirect)
+  await router.replace(target)
+}
 
 function goToLogin() {
-  void router.push({ name: 'login', query: { redirect: '/' } })
+  openAuth('login', '/')
 }
 
 function goToRegister() {
-  void router.push({ name: 'login', query: { mode: 'register', redirect: '/' } })
+  openAuth('register', '/')
 }
 
 function goToHome() {
   void router.push({ name: 'home' })
 }
+
+let typeTimer: ReturnType<typeof setInterval> | null = null
+let revealObserver: IntersectionObserver | null = null
 
 function startTyping() {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -316,6 +359,15 @@ const stats = [
         </div>
       </div>
     </footer>
+
+    <AuthDialog
+      :open="authDialogOpen"
+      :mode="authMode"
+      :redirect-path="redirectPath"
+      @close="closeAuthDialog"
+      @mode-change="handleAuthModeChange"
+      @authenticated="handleAuthenticated"
+    />
   </div>
 </template>
 

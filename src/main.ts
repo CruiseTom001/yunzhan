@@ -18,15 +18,15 @@ async function bootstrap() {
   router.beforeEach(async (to) => {
     await authReady
     if (to.meta.public) {
-      // 已登录用户访问登录页或落地页：跳回首页
-      if (authStore.isAuthenticated && (to.name === 'login' || to.name === 'landing')) {
+      // 已登录用户访问落地页：跳回首页
+      if (authStore.isAuthenticated && to.name === 'landing') {
         return { name: 'home' }
       }
       return true
     }
     if (!authStore.isAuthenticated) {
-      // 未登录用户访问受保护路由：跳落地页（带 redirect 回跳）
-      return { name: 'landing', query: { redirect: to.fullPath } }
+      // 未登录用户访问受保护路由：跳落地页并打开登录弹窗
+      return { name: 'landing', query: { auth: 'login', redirect: to.fullPath } }
     }
     if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
       return { name: 'home' }
@@ -45,12 +45,12 @@ async function bootstrap() {
   await router.isReady()
   const savedRoute = progressStore.progress.lastRoute
   const isDefaultEntry = router.currentRoute.value.fullPath === '/'
-  if (authStore.user && isDefaultEntry && savedRoute && savedRoute !== '/' && savedRoute !== '/login') {
+  if (authStore.user && isDefaultEntry && savedRoute && savedRoute !== '/' && !savedRoute.startsWith('/login')) {
     await router.replace(savedRoute)
   }
 
   router.afterEach((to) => {
-    if (authStore.isAuthenticated && to.name !== 'login') {
+    if (authStore.isAuthenticated && to.name !== 'landing') {
       progressStore.updateLastRoute(to.fullPath)
     }
   })

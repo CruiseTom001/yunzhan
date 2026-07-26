@@ -1,13 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { buildLoginCompatRedirect } from '@/utils/authRedirect'
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
       path: '/login',
-      name: 'login',
-      component: () => import('@/pages/LoginPage.vue'),
-      meta: { public: true, hideChrome: true },
+      redirect: (to) => buildLoginCompatRedirect(to.query as Record<string, unknown>),
     },
     {
       path: '/landing',

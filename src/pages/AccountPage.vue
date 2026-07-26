@@ -266,7 +266,7 @@ async function revokeSession(session: AccountSession) {
       // 撤销当前会话等同于退出登录
       await progressStore.unbindAccount()
       authStore.clearLocalSession()
-      await router.replace('/login')
+      await router.replace({ name: 'landing', query: { auth: 'login' } })
       return
     }
     sessionsSuccess.value = '已撤销该会话。'
@@ -412,7 +412,7 @@ async function confirmDeleteAccount() {
     // 复刻 AppHeader logout 顺序
     await progressStore.unbindAccount()
     authStore.clearLocalSession()
-    await router.replace('/login')
+    await router.replace({ name: 'landing', query: { auth: 'login' } })
   } catch (error: unknown) {
     deleteError.value = errorMessage(error, '账号注销失败。')
   } finally {
