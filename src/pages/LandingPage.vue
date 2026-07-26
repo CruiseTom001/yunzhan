@@ -8,8 +8,10 @@ import {
   Cloud,
   Download,
   Lock,
+  Moon,
   PenTool,
   ShieldCheck,
+  Sun,
   Terminal,
   Zap,
 } from 'lucide-vue-next'
@@ -17,6 +19,7 @@ import { courseIndex } from '@/data/courses/index'
 import ParticleBg from '@/components/common/ParticleBg.vue'
 import AuthDialog from '@/components/auth/AuthDialog.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useTheme } from '@/stores/theme'
 import { getDesktopLatestVersion } from '@/utils/desktopVersionApi'
 import {
   buildLandingAuthQuery,
@@ -31,6 +34,7 @@ const appVersion = __APP_VERSION__
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { theme, setThemePreference } = useTheme()
 const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
@@ -39,6 +43,14 @@ const desktopDownloadUrl = ref<string | null>(null)
 const authDialogOpen = computed(() => isAuthMode(route.query.auth))
 const authMode = computed(() => parseAuthMode(route.query.auth))
 const redirectPath = computed(() => readSafeRedirect(route.query.redirect))
+
+const themeToggleTitle = computed(() => (
+  theme.value === 'dark' ? '切换到浅色模式' : '切换到深色模式'
+))
+
+function toggleLandingTheme() {
+  setThemePreference(theme.value === 'dark' ? 'light' : 'dark')
+}
 
 async function loadDesktopDownloadUrl() {
   try {
@@ -182,7 +194,17 @@ const stats = [
           <span class="text-ink-primary font-semibold tracking-wide text-sm">云栈<span class="text-cyan-400 font-mono">.dev</span></span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            class="landing-theme-toggle flex shrink-0 items-center justify-center w-9 h-9 rounded-md text-ink-muted hover:text-ink-primary hover:bg-surface-elevated transition-all"
+            :title="themeToggleTitle"
+            :aria-label="themeToggleTitle"
+            @click="toggleLandingTheme"
+          >
+            <Sun v-if="theme === 'dark'" class="w-4 h-4" />
+            <Moon v-else class="w-4 h-4" />
+          </button>
           <button
             v-if="desktopDownloadUrl"
             type="button"
