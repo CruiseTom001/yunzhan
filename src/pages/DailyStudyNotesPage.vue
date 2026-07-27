@@ -341,7 +341,7 @@ async function loadNotes() {
     notes.value = result.notes
     loadEditor(selectedNote.value)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '学习记录加载失败。'
+    errorMessage.value = error instanceof Error ? error.message : '学习笔记加载失败。'
   } finally {
     loading.value = false
   }
@@ -418,9 +418,9 @@ async function saveCurrentNote() {
     if (index >= 0) notes.value.splice(index, 1, note)
     else notes.value.unshift(note)
     loadEditor(note)
-    setTransientMessage('学习记录已保存。')
+    setTransientMessage('学习笔记已保存。')
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '学习记录保存失败。'
+    errorMessage.value = error instanceof Error ? error.message : '学习笔记保存失败。'
   } finally {
     saving.value = false
   }
@@ -428,7 +428,7 @@ async function saveCurrentNote() {
 
 async function deleteCurrentNote() {
   if (!selectedNote.value || deleting.value) return
-  const confirmed = window.confirm(`确认删除 ${selectedDate.value} 的学习记录？`)
+  const confirmed = window.confirm(`确认删除 ${selectedDate.value} 的学习笔记？`)
   if (!confirmed) return
   deleting.value = true
   errorMessage.value = ''
@@ -436,9 +436,9 @@ async function deleteCurrentNote() {
     await deleteStudyNote(selectedDate.value)
     notes.value = notes.value.filter(note => note.date !== selectedDate.value)
     loadEditor(null)
-    setTransientMessage('学习记录已删除。')
+    setTransientMessage('学习笔记已删除。')
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '学习记录删除失败。'
+    errorMessage.value = error instanceof Error ? error.message : '学习笔记删除失败。'
   } finally {
     deleting.value = false
   }
@@ -550,7 +550,7 @@ async function testAiConfig() {
 async function polishCurrentNote() {
   const text = content.value.trim()
   if (!text) {
-    errorMessage.value = '请先写下需要润色的学习记录。'
+    errorMessage.value = '请先写下需要润色的学习笔记。'
     return
   }
   if (!aiReady.value) {
@@ -707,9 +707,9 @@ onUnmounted(() => {
             <CalendarDays class="h-3.5 w-3.5" />
             Daily Notes
           </div>
-          <h1 class="text-3xl font-bold text-theme">每日学习记录</h1>
+          <h1 class="text-3xl font-bold text-theme">每日学习笔记</h1>
           <p class="mt-2 max-w-2xl text-sm leading-6 text-theme-muted">
-            记录每天学到的内容，用自己的话留下复盘材料；需要时可以用 AI 润色表达。
+            写下每天学到的内容，用自己的话留下复盘材料；需要时可以用 AI 润色表达。
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -745,7 +745,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between border-b border-theme-subtle px-4 py-3">
             <div class="flex items-center gap-2 text-sm font-semibold text-theme">
               <FileText class="h-4 w-4 text-cyan-400" />
-              记录列表
+              笔记列表
             </div>
             <Loader2 v-if="loading" class="h-4 w-4 animate-spin text-cyan-400" />
           </div>
@@ -882,7 +882,7 @@ onUnmounted(() => {
               </button>
             </div>
             <div v-if="!loading && notes.length === 0" class="px-3 py-10 text-center text-sm text-theme-muted">
-              暂无学习记录。
+              暂无学习笔记。
             </div>
           </div>
           <div v-if="selectedExportDates.length > 0" class="border-t border-theme-subtle p-3">
@@ -914,9 +914,9 @@ onUnmounted(() => {
         <main class="min-w-0 rounded-md border border-theme-card bg-theme-card">
           <div class="flex flex-col gap-3 border-b border-theme-subtle px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-theme">{{ selectedDate }} 学习记录</h2>
+              <h2 class="text-lg font-semibold text-theme">{{ selectedDate }} 学习笔记</h2>
               <p class="mt-1 text-xs text-theme-muted">
-                {{ selectedNote ? `上次更新 ${formatUpdatedAt(selectedNote.updatedAt)}` : '这一天还没有保存记录。' }}
+                {{ selectedNote ? `上次更新 ${formatUpdatedAt(selectedNote.updatedAt)}` : '这一天还没有保存笔记。' }}
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
@@ -964,7 +964,7 @@ onUnmounted(() => {
               <button
                 v-if="selectedNote"
                 type="button"
-                title="删除当前日期记录"
+                title="删除当前日期笔记"
                 class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-400/20 text-red-300 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="deleting"
                 @click="deleteCurrentNote"
@@ -986,7 +986,7 @@ onUnmounted(() => {
                 placeholder="例如：今天学习了 Docker 网络模式，理解了 bridge、host 和容器端口映射的区别..."
               ></textarea>
               <div class="mt-2 flex justify-between text-xs text-theme-dim">
-                <span>建议用自己的话写，不要求正式，先把事实记录下来。</span>
+                <span>建议用自己的话写，不要求正式，先把事实写下来。</span>
                 <span>{{ content.length }}/20000</span>
               </div>
             </section>
@@ -1026,10 +1026,10 @@ onUnmounted(() => {
           <div v-if="showModelPicker" class="fixed inset-0 z-[75] flex items-center justify-center bg-black/60 px-4 py-6" @click.self="showModelPicker = false">
             <div class="w-full max-w-sm rounded-lg border border-edge-light bg-surface-tertiary p-5 shadow-2xl">
               <div class="mb-4 flex items-center justify-between">
-                <h3 class="text-base font-bold text-white">选择 AI 模型</h3>
+                <h3 class="text-base font-bold text-theme">选择 AI 模型</h3>
                 <button
                   type="button"
-                  class="rounded-md p-1 text-gray-400 hover:bg-white/10 hover:text-white"
+                  class="rounded-md p-1 text-theme-muted hover:bg-white/10 hover:text-theme"
                   @click="showModelPicker = false"
                 >
                   <X class="h-4 w-4" />
@@ -1047,23 +1047,23 @@ onUnmounted(() => {
                   @click="selectModel(entry.model, entry.providerId)"
                 >
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-white">{{ entry.model }}</span>
-                    <span v-if="entry.model.includes('flash')" class="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">推荐使用</span>
-                    <span v-if="selectedModelDisplay === entry.model" class="rounded bg-purple-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">当前</span>
+                    <span class="text-sm font-medium text-theme">{{ entry.model }}</span>
+                    <span v-if="entry.model.includes('flash')" class="rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400">推荐使用</span>
+                    <span v-if="selectedModelDisplay === entry.model" class="rounded border border-purple-400/20 bg-purple-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-500">当前</span>
                   </div>
                   <div class="mt-1 flex items-center gap-2">
-                    <span class="text-xs text-gray-500">{{ entry.providerName }}</span>
+                    <span class="text-xs text-theme-muted">{{ entry.providerName }}</span>
                     <template v-for="(traitsText, traitsColor) in getModelTraits(entry.model)" :key="traitsColor">
                       <span
                         v-if="traitsText"
-                        class="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                        :class="traitsColor === 'green' ? 'bg-emerald-950/40 text-emerald-300' : 'bg-red-950/40 text-red-300'"
+                        class="rounded border px-1.5 py-0.5 text-[10px] font-medium"
+                        :class="traitsColor === 'green' ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400' : 'border-red-400/20 bg-red-400/10 text-red-400'"
                       >{{ traitsText }}</span>
                     </template>
                   </div>
                 </button>
               </div>
-              <p class="mt-3 text-[11px] text-gray-500">切换模型后点击「AI 润色」即可使用新模型。</p>
+              <p class="mt-3 text-[11px] text-theme-muted">切换模型后点击「AI 润色」即可使用新模型。</p>
             </div>
           </div>
         </main>
