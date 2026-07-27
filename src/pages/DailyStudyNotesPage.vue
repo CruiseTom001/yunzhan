@@ -714,6 +714,7 @@ onUnmounted(() => {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button
+            v-if="desktopLocalAi"
             type="button"
             class="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-3 py-2 text-sm text-gray-400 hover:bg-white/[0.03] hover:text-white"
             @click="showAiConfig = true"
