@@ -153,7 +153,7 @@ onUnmounted(() => {
       <span class="text-gray-600 text-xs font-mono">实验终端 - 云栈</span>
       <div></div>
     </div>
-    <div ref="terminalEl" class="terminal-body"></div>
+    <div ref="terminalEl" class="terminal-body" data-tour-id="terminal-console"></div>
   </div>
 </template>
 

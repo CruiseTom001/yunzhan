@@ -71,7 +71,7 @@ function openSource(card: ReviewCard) {
         </div>
       </header>
 
-      <div class="flex items-center gap-1 mb-6 border-b border-edge-card overflow-x-auto">
+      <div class="flex items-center gap-1 mb-6 border-b border-edge-card overflow-x-auto" data-tour-id="review-filters">
         <button
           v-for="filter in filters"
           :key="filter.id"
@@ -105,6 +105,7 @@ function openSource(card: ReviewCard) {
 
           <button
             v-if="!revealed[card.id]"
+            :data-tour-id="card.id === cards[0]?.id ? 'review-practice' : undefined"
             @click="revealed[card.id] = true"
             class="w-full h-10 rounded-md border border-cyan-400/15 bg-cyan-400/5 text-cyan-400 text-xs font-mono hover:bg-cyan-400/10 transition-colors"
           >

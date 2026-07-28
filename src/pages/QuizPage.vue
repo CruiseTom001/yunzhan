@@ -200,7 +200,7 @@ onUnmounted(() => {
         <p class="text-gray-600 text-sm font-mono">运维知识实战练习</p>
       </div>
 
-      <div class="flex gap-1.5 flex-wrap mb-6">
+      <div class="flex gap-1.5 flex-wrap mb-6" data-tour-id="quiz-categories">
         <button
           v-for="cat in allCategories"
           :key="cat.value"
@@ -245,6 +245,7 @@ onUnmounted(() => {
 
         <div
           v-if="currentQuestion"
+          data-tour-id="quiz-question-panel"
           class="quiz-question-panel bg-white/[0.01] border border-white/[0.04] rounded-xl p-6 mb-4"
           :class="{
             'quiz-feedback-correct': answerFeedback === 'correct',

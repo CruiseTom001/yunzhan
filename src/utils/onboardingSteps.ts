@@ -3,6 +3,7 @@ import { beginnerPathCourseIds } from '@/data/beginner-path'
 export const CURRENT_TOUR_VERSION = 1
 
 export type OnboardingStatus = 'pending' | 'skipped' | 'completed'
+export type OnboardingStepScope = 'main' | 'page-detail'
 
 export interface OnboardingStepDefinition {
   id: string
@@ -11,8 +12,9 @@ export interface OnboardingStepDefinition {
   fallbackAnchorId?: string
   title: string
   description: string
-  isCore: boolean
+  scope: OnboardingStepScope
   autoNavigate: boolean
+  navigationMessage?: string
 }
 
 const firstBeginnerCourseId = beginnerPathCourseIds[0] ?? 'computer-basics'
@@ -22,88 +24,198 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
     id: 'welcome',
     route: '/',
     anchorId: 'home-hero',
-    title: '欢迎进入云栈',
-    description: '云栈把课程学习、模拟终端、测验复习、每日笔记和学习进度串成一条运维学习闭环。接下来带你快速熟悉主入口。',
-    isCore: true,
+    title: '欢迎来到云栈',
+    description: '云栈帮你把「学课程 → 做实验 → 练命令 → 测验复习 → 记笔记」串成一条学习路径。接下来按推荐路线，从第一门课开始即可。',
+    scope: 'main',
     autoNavigate: true,
   },
   {
-    id: 'courses',
+    id: 'courses-path',
     route: '/courses',
     anchorId: 'courses-beginner-path',
     fallbackAnchorId: 'nav-courses',
-    title: '从推荐路线开始',
-    description: '不知道先学什么时，优先按「初学者推荐路线」推进。路线按阶段组织，避免盲目跳课。',
-    isCore: true,
+    title: '按推荐路线学习',
+    description: '新手先看这里的「初学者推荐路线」，按阶段从左到右学，不要跳着选课。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在打开课程页…',
   },
   {
-    id: 'course-detail',
+    id: 'courses-first',
+    route: '/courses',
+    anchorId: 'courses-first-course',
+    fallbackAnchorId: 'courses-beginner-path',
+    title: '从第一门课开始',
+    description: '点这里进入第一课。建议从「计算机基础」或路线中的第一门课开始，不要跳过基础阶段。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'course-chapters',
     route: `/course/${firstBeginnerCourseId}/chapter/0`,
     anchorId: 'course-chapter-nav',
     fallbackAnchorId: 'nav-courses',
-    title: '在课程里完成学习',
-    description: '课程详情页集中完成章节阅读、交互实验和章节测验。实验按真实命令判定，不支持的能力会明确提示为模拟。',
-    isCore: true,
+    title: '用目录切换章节',
+    description: '左侧是章节目录。按顺序点章节阅读，完成一章再进入下一章。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在打开课程详情…',
   },
   {
-    id: 'terminal',
+    id: 'course-content',
+    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    anchorId: 'course-chapter-content',
+    fallbackAnchorId: 'course-chapter-nav',
+    title: '先读懂知识点',
+    description: '中间正文是本章知识点。先通读理解，再去做实验和测验，效率更高。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'course-lab',
+    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    anchorId: 'course-lab-section',
+    fallbackAnchorId: 'course-chapter-content',
+    title: '动手做实验',
+    description: '有实验时在这里按步骤操作。终端里执行的命令会参与判题，请真实完成每一步。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'course-complete',
+    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    anchorId: 'course-mark-complete',
+    fallbackAnchorId: 'course-chapter-content',
+    title: '标记本章已学完',
+    description: '读完并做完练习后，点「标记已学完」，进度会同步到学习面板。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'terminal-console',
     route: '/terminal',
-    anchorId: 'terminal-panel',
+    anchorId: 'terminal-console',
     fallbackAnchorId: 'nav-terminal',
-    title: '模拟终端随时练命令',
-    description: '不必自备 Linux 环境。终端是训练沙箱，语义贴近真实命令，适合边学边练。',
-    isCore: true,
+    title: '在这里练 Linux 命令',
+    description: '在下方终端输入命令并回车执行。不用自备 Linux 环境，边学边敲，熟悉命令行手感。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在打开终端…',
   },
   {
-    id: 'quiz',
+    id: 'quiz-categories',
     route: '/quiz',
-    anchorId: 'nav-quiz',
-    title: '用问答检查掌握',
-    description: '学完一节后做测验，及时发现盲点，比只看文档更扎实。',
-    isCore: false,
+    anchorId: 'quiz-categories',
+    fallbackAnchorId: 'nav-quiz',
+    title: '选分类开始答题',
+    description: '学完一节后，来这里选对应分类做题。先选题目分类，再开始答题自检。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在打开问答页…',
   },
   {
-    id: 'review',
+    id: 'quiz-question',
+    route: '/quiz',
+    anchorId: 'quiz-question-panel',
+    fallbackAnchorId: 'quiz-categories',
+    title: '答题并看解析',
+    description: '点击选项提交答案，系统会立刻显示对错和解析。错题会自动进入复习中心。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'review-filters',
     route: '/review',
-    anchorId: 'nav-review',
-    title: '错题与薄弱点回收',
-    description: '复习页回收错题和薄弱知识，形成「学—测—复」闭环。',
-    isCore: false,
+    anchorId: 'review-filters',
+    fallbackAnchorId: 'nav-review',
+    title: '回收错题和薄弱点',
+    description: '这里是复习中心，不是新课程入口。用「今日到期」「历史错题」筛选需要巩固的内容。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在打开复习页…',
   },
   {
-    id: 'study-notes',
+    id: 'review-practice',
+    route: '/review',
+    anchorId: 'review-practice',
+    fallbackAnchorId: 'review-filters',
+    title: '重新练习错题',
+    description: '先点「显示答案」核对，再选「还不熟」或「已掌握」，系统会安排下次复习时间。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'study-notes-editor',
     route: '/study-notes',
     anchorId: 'study-notes-editor',
     fallbackAnchorId: 'nav-notes',
-    title: '每日学习笔记',
-    description: '记录每天学了什么，可用 AI 润色整理。网页端走服务端 AI，桌面端可配置本地供应商。',
-    isCore: true,
+    title: '记录今天学了什么',
+    description: '学完一节后，把你今天理解的内容用自己的话写在这里。不必追求文采，先把要点记下来。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在打开学习笔记…',
   },
   {
-    id: 'progress',
+    id: 'study-notes-model',
+    route: '/study-notes',
+    anchorId: 'study-notes-model',
+    fallbackAnchorId: 'study-notes-editor',
+    title: '选择润色模型',
+    description: '润色前可以在这里选择 AI 模型。网页端由云栈统一配置，无需自行填写 API Key。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'study-notes-polish',
+    route: '/study-notes',
+    anchorId: 'study-notes-polish',
+    fallbackAnchorId: 'study-notes-editor',
+    title: '用 AI 整理笔记',
+    description: '写好要点后点「AI 润色」，把零散记录整理成更适合复习的表述。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'study-notes-save',
+    route: '/study-notes',
+    anchorId: 'study-notes-save',
+    fallbackAnchorId: 'study-notes-editor',
+    title: '保存当天笔记',
+    description: '满意后点「保存」，笔记会按日期存档。以后可以导出或继续润色修改。',
+    scope: 'page-detail',
+    autoNavigate: false,
+  },
+  {
+    id: 'progress-stats',
+    route: '/progress',
+    anchorId: 'progress-stats',
+    fallbackAnchorId: 'nav-progress',
+    title: '查看学习完成度',
+    description: '这里汇总课程、章节、测验和实验进度。定期查看，知道自己学到哪一步了。',
+    scope: 'main',
+    autoNavigate: true,
+    navigationMessage: '正在打开进度页…',
+  },
+  {
+    id: 'progress-sync',
     route: '/progress',
     anchorId: 'progress-sync-panel',
-    fallbackAnchorId: 'nav-progress',
-    title: '进度与云同步',
-    description: '在这里查看完成度与学习路径。登录后进度可云同步，换设备不丢。',
-    isCore: true,
-    autoNavigate: true,
+    fallbackAnchorId: 'progress-stats',
+    title: '进度可云同步',
+    description: '登录后学习进度会同步到云端，换设备登录也不会丢。也可以导出备份到本地。',
+    scope: 'page-detail',
+    autoNavigate: false,
   },
   {
     id: 'finish',
     route: '/',
-    anchorId: 'home-continue-learning',
-    fallbackAnchorId: 'home-hero',
-    title: '开始你的第一门课',
-    description: '建议从推荐路线第一门课开始。以后可在账号设置或首页重新打开本导览。',
-    isCore: true,
+    anchorId: 'home-start-learning',
+    fallbackAnchorId: 'home-tutorial-button',
+    title: '去开始第一门课',
+    description: '新手教程就到这里。点「开始学习」进入推荐路线第一课；以后可在首页或账号设置重新打开本教程。',
+    scope: 'main',
     autoNavigate: true,
+    navigationMessage: '正在返回首页…',
   },
 ] as const
 
@@ -115,6 +227,15 @@ export function getOnboardingStepIndex(stepId: string | null | undefined): numbe
 
 export function getOnboardingStep(stepId: string | null | undefined): OnboardingStepDefinition {
   return onboardingSteps[getOnboardingStepIndex(stepId)]
+}
+
+export function matchesOnboardingRoute(stepRoute: string, currentFullPath: string): boolean {
+  const target = stepRoute.split('?')[0].replace(/\/$/, '') || '/'
+  const current = currentFullPath.split('?')[0].replace(/\/$/, '') || '/'
+  if (current === target) return true
+  const coursePrefix = /^\/course\/[^/]+/.exec(target)
+  if (coursePrefix && current.startsWith(coursePrefix[0])) return true
+  return false
 }
 
 export function shouldAutoStartOnboarding(input: {

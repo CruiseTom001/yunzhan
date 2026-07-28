@@ -3,20 +3,30 @@ import {
   CURRENT_TOUR_VERSION,
   getOnboardingStepIndex,
   isOnboardingBlockingAnnouncements,
+  matchesOnboardingRoute,
   onboardingSteps,
   shouldAutoStartOnboarding,
 } from '@/utils/onboardingSteps'
 
 describe('onboardingSteps', () => {
-  it('defines nine guided steps', () => {
-    expect(onboardingSteps).toHaveLength(9)
+  it('defines the guided tutorial flow with main and page-detail steps', () => {
+    expect(onboardingSteps.length).toBeGreaterThanOrEqual(18)
     expect(onboardingSteps[0]?.id).toBe('welcome')
     expect(onboardingSteps.at(-1)?.id).toBe('finish')
+    expect(onboardingSteps.some(step => step.scope === 'main')).toBe(true)
+    expect(onboardingSteps.some(step => step.scope === 'page-detail')).toBe(true)
   })
 
   it('resolves unknown step ids to the first step', () => {
     expect(getOnboardingStepIndex('missing-step')).toBe(0)
-    expect(getOnboardingStepIndex('terminal')).toBe(3)
+    expect(getOnboardingStepIndex('terminal-console')).toBeGreaterThan(0)
+  })
+
+  it('matches course detail routes for chapter steps', () => {
+    const chapterStep = onboardingSteps.find(step => step.id === 'course-chapters')
+    expect(chapterStep).toBeTruthy()
+    expect(matchesOnboardingRoute(chapterStep!.route, '/course/computer-basics/chapter/1')).toBe(true)
+    expect(matchesOnboardingRoute('/courses', '/course/computer-basics/chapter/0')).toBe(false)
   })
 
   it('auto-starts only for pending new users on normal routes', () => {

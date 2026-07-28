@@ -690,6 +690,7 @@ function saveWorkbenchDraft() {
               <h1 class="text-2xl font-bold text-white">{{ currentChapter.title }}</h1>
               <div class="flex items-center gap-2 flex-shrink-0 ml-4">
                 <button
+                  data-tour-id="course-mark-complete"
                   @click="showConfirmModal(isCurrentChapterComplete ? 'uncomplete' : 'complete')"
                   class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all"
                   :class="isCurrentChapterComplete
@@ -726,10 +727,13 @@ function saveWorkbenchDraft() {
             </div>
           </div>
 
-          <MarkdownRenderer :content="chapterContent" />
+          <div data-tour-id="course-chapter-content">
+            <MarkdownRenderer :content="chapterContent" />
+          </div>
 
           <section
             v-if="currentLabs.length > 0"
+            data-tour-id="course-lab-section"
             class="mt-8 border border-emerald-400/15 bg-emerald-400/[0.025] rounded-xl overflow-hidden"
           >
             <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-emerald-400/10">

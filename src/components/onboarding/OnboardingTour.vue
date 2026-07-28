@@ -3,6 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, X } from 'lucide-vue-next'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { matchesOnboardingRoute } from '@/utils/onboardingSteps'
+
+const MIN_HIGHLIGHT_SIZE = 48
 
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
@@ -15,29 +18,37 @@ const anchorMissing = ref(false)
 const navigating = ref(false)
 
 const step = computed(() => onboardingStore.currentStep)
-const progressLabel = computed(() => `${onboardingStore.currentStepIndex + 1} / ${onboardingStore.totalSteps}`)
-const primaryLabel = computed(() => (
-  onboardingStore.isLastStep ? '开始学习' : '下一步'
-))
+const progressLabel = computed(() => `新手教程 ${onboardingStore.currentStepIndex + 1} / ${onboardingStore.totalSteps}`)
+const primaryLabel = computed(() => {
+  if (navigating.value) {
+    return step.value.navigationMessage ?? '正在加载…'
+  }
+  return onboardingStore.isLastStep ? '开始学习' : '下一步'
+})
 
 let resizeObserver: ResizeObserver | null = null
 let repositionTimer: ReturnType<typeof setTimeout> | null = null
-let anchorWaitTimer: ReturnType<typeof setTimeout> | null = null
+let prepareToken = 0
 
 function queryAnchor(id: string | undefined): HTMLElement | null {
   if (!id) return null
   return document.querySelector(`[data-tour-id="${id}"]`)
 }
 
-function resolveAnchorElement() {
+function resolveAnchorElement(): HTMLElement | null {
   const primary = queryAnchor(step.value.anchorId)
   if (primary) return primary
-  const fallback = queryAnchor(step.value.fallbackAnchorId)
-  return fallback
+  return queryAnchor(step.value.fallbackAnchorId)
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
+}
+
+function focusPanel() {
+  void nextTick(() => {
+    panelRef.value?.focus({ preventScroll: true })
+  })
 }
 
 function updateLayout() {
@@ -47,17 +58,27 @@ function updateLayout() {
   anchorMissing.value = !anchor
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
-  const panelWidth = Math.min(420, viewportWidth - 24)
+  const isMobile = viewportWidth <= 640
+  const panelWidth = isMobile ? viewportWidth - 24 : Math.min(420, viewportWidth - 24)
   const panelHeight = panelRef.value?.offsetHeight ?? 220
 
   if (!anchor) {
     spotlightStyle.value = { display: 'none' }
-    panelStyle.value = {
-      top: '50%',
-      left: '50%',
-      width: `${panelWidth}px`,
-      transform: 'translate(-50%, -50%)',
-    }
+    panelStyle.value = isMobile
+      ? {
+        left: '12px',
+        right: '12px',
+        width: 'auto',
+        transform: 'none',
+        top: 'auto',
+        bottom: '12px',
+      }
+      : {
+        top: '50%',
+        left: '50%',
+        width: `${panelWidth}px`,
+        transform: 'translate(-50%, -50%)',
+      }
     return
   }
 
@@ -65,8 +86,10 @@ function updateLayout() {
   const padding = 8
   const highlightTop = clamp(rect.top - padding, 8, viewportHeight - 8)
   const highlightLeft = clamp(rect.left - padding, 8, viewportWidth - 8)
-  const highlightWidth = clamp(rect.width + padding * 2, 24, viewportWidth - highlightLeft - 8)
-  const highlightHeight = clamp(rect.height + padding * 2, 24, viewportHeight - highlightTop - 8)
+  const maxWidth = Math.max(MIN_HIGHLIGHT_SIZE, viewportWidth - highlightLeft - 8)
+  const maxHeight = Math.max(MIN_HIGHLIGHT_SIZE, viewportHeight - highlightTop - 8)
+  const highlightWidth = clamp(rect.width + padding * 2, MIN_HIGHLIGHT_SIZE, maxWidth)
+  const highlightHeight = clamp(rect.height + padding * 2, MIN_HIGHLIGHT_SIZE, maxHeight)
 
   spotlightStyle.value = {
     display: 'block',
@@ -74,6 +97,18 @@ function updateLayout() {
     left: `${highlightLeft}px`,
     width: `${highlightWidth}px`,
     height: `${highlightHeight}px`,
+  }
+
+  if (isMobile) {
+    panelStyle.value = {
+      left: '12px',
+      right: '12px',
+      width: 'auto',
+      transform: 'none',
+      top: 'auto',
+      bottom: '12px',
+    }
+    return
   }
 
   const belowTop = rect.bottom + 16
@@ -99,55 +134,85 @@ function scheduleLayout() {
   }, 60)
 }
 
-async function waitForAnchor(maxMs = 2000): Promise<boolean> {
+async function waitForPrimaryAnchor(maxMs = 2500): Promise<boolean> {
   const started = Date.now()
   while (Date.now() - started < maxMs) {
-    if (resolveAnchorElement()) return true
+    if (queryAnchor(step.value.anchorId)) return true
     await new Promise(resolve => setTimeout(resolve, 80))
   }
-  return Boolean(resolveAnchorElement())
+  return Boolean(queryAnchor(step.value.anchorId))
 }
 
-async function ensureStepRoute() {
-  if (!onboardingStore.isRunning || !step.value.autoNavigate) {
-    scheduleLayout()
-    return
-  }
-  if (route.fullPath === step.value.route || route.path === step.value.route) {
-    await waitForAnchor()
-    scheduleLayout()
-    return
-  }
+async function prepareCurrentStep() {
+  if (!onboardingStore.isRunning) return
 
+  const token = ++prepareToken
   navigating.value = true
+  anchorMissing.value = false
+
   try {
-    await router.push(step.value.route)
-    await waitForAnchor()
+    const currentStep = step.value
+    if (currentStep.autoNavigate && !matchesOnboardingRoute(currentStep.route, route.fullPath)) {
+      await router.push(currentStep.route)
+      if (token !== prepareToken) return
+    }
+
+    const primaryFound = await waitForPrimaryAnchor()
+    if (token !== prepareToken) return
+
+    const anchor = resolveAnchorElement()
+    anchorMissing.value = !anchor
+    if (!primaryFound && anchor && anchor.dataset.tourId !== currentStep.anchorId) {
+      anchorMissing.value = true
+    }
+
+    if (anchor) {
+      anchor.scrollIntoView({ block: 'center', behavior: 'auto' })
+      await nextTick()
+      await new Promise(resolve => setTimeout(resolve, 80))
+      if (token !== prepareToken) return
+    }
+
+    updateLayout()
+    focusPanel()
   } catch {
+    if (token !== prepareToken) return
     anchorMissing.value = true
+    updateLayout()
   } finally {
-    navigating.value = false
-    scheduleLayout()
+    if (token === prepareToken) {
+      navigating.value = false
+    }
   }
 }
 
 function handlePrevious() {
+  if (navigating.value) return
   onboardingStore.previousStep()
 }
 
 function handleNext() {
+  if (navigating.value) return
+  if (onboardingStore.isLastStep) {
+    void onboardingStore.completeTour()
+    return
+  }
   onboardingStore.nextStep()
 }
 
-async function handleSkip() {
-  await onboardingStore.skipTour()
+function handleClose() {
+  onboardingStore.closeTour()
+}
+
+function handleSkip() {
+  void onboardingStore.skipTour()
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (!onboardingStore.isRunning) return
+  if (!onboardingStore.isRunning || navigating.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
-    void handleSkip()
+    handleClose()
     return
   }
   if (event.key === 'ArrowRight' && !event.shiftKey) {
@@ -165,7 +230,7 @@ watch(
   () => [onboardingStore.isRunning, onboardingStore.currentStepIndex, route.fullPath] as const,
   () => {
     if (!onboardingStore.isRunning) return
-    void ensureStepRoute()
+    void prepareCurrentStep()
   },
   { immediate: true },
 )
@@ -176,7 +241,6 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
   resizeObserver = new ResizeObserver(() => scheduleLayout())
   if (panelRef.value) resizeObserver.observe(panelRef.value)
-  scheduleLayout()
 })
 
 onUnmounted(() => {
@@ -185,7 +249,6 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   resizeObserver?.disconnect()
   if (repositionTimer) clearTimeout(repositionTimer)
-  if (anchorWaitTimer) clearTimeout(anchorWaitTimer)
 })
 </script>
 
@@ -204,19 +267,21 @@ onUnmounted(() => {
         :style="panelStyle"
         role="dialog"
         aria-modal="true"
+        tabindex="-1"
         :aria-labelledby="`onboarding-title-${step.id}`"
       >
         <div class="onboarding-panel-header">
           <div>
-            <div class="onboarding-kicker">TOUR // {{ String(onboardingStore.currentStepIndex + 1).padStart(2, '0') }}</div>
+            <div class="onboarding-kicker">{{ progressLabel }}</div>
             <h2 :id="`onboarding-title-${step.id}`" class="onboarding-title">{{ step.title }}</h2>
           </div>
           <button
             type="button"
             class="onboarding-icon-button"
-            title="跳过导览"
-            aria-label="跳过导览"
-            @click="handleSkip"
+            title="关闭新手教程"
+            aria-label="关闭新手教程"
+            :disabled="navigating"
+            @click="handleClose"
           >
             <X class="w-4 h-4" />
           </button>
@@ -224,15 +289,11 @@ onUnmounted(() => {
 
         <p class="onboarding-description">{{ step.description }}</p>
         <p v-if="anchorMissing" class="onboarding-fallback-note">
-          当前页面入口暂时不可用，你可以继续下一步，或稍后在账号设置重新打开导览。
+          当前讲解区域暂时不可用，你可以继续下一步，或稍后在账号设置重新打开新手教程。
         </p>
         <p v-if="onboardingStore.syncWarning" class="onboarding-sync-warning">{{ onboardingStore.syncWarning }}</p>
 
         <div class="onboarding-footer">
-          <div class="onboarding-progress" aria-live="polite">
-            <span class="onboarding-progress-label">进度</span>
-            <span class="onboarding-progress-value">{{ progressLabel }}</span>
-          </div>
           <div class="onboarding-actions">
             <button
               type="button"
@@ -249,12 +310,18 @@ onUnmounted(() => {
               :disabled="navigating"
               @click="handleNext"
             >
+              <span v-if="navigating" class="onboarding-loading-dot" aria-hidden="true" />
               {{ primaryLabel }}
-              <ChevronRight v-if="!onboardingStore.isLastStep" class="w-4 h-4" />
+              <ChevronRight v-if="!onboardingStore.isLastStep && !navigating" class="w-4 h-4" />
             </button>
           </div>
-          <button type="button" class="onboarding-skip-link" @click="handleSkip">
-            跳过导览
+          <button
+            type="button"
+            class="onboarding-skip-link"
+            :disabled="navigating"
+            @click="handleSkip"
+          >
+            跳过新手教程
           </button>
         </div>
       </section>
@@ -302,6 +369,7 @@ onUnmounted(() => {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
   padding: 18px;
   max-width: calc(100vw - 24px);
+  outline: none;
 }
 
 [data-theme="light"] .onboarding-panel {
@@ -318,9 +386,7 @@ onUnmounted(() => {
 }
 
 .onboarding-kicker {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
   color: var(--accent-cyan);
 }
 
@@ -356,19 +422,6 @@ onUnmounted(() => {
   margin-top: 16px;
   display: grid;
   gap: 10px;
-}
-
-.onboarding-progress {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.onboarding-progress-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: var(--accent-cyan);
 }
 
 .onboarding-actions {
@@ -417,7 +470,8 @@ onUnmounted(() => {
 }
 
 .onboarding-primary-button:disabled,
-.onboarding-secondary-button:disabled {
+.onboarding-secondary-button:disabled,
+.onboarding-skip-link:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -433,7 +487,7 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
-.onboarding-icon-button:hover {
+.onboarding-icon-button:hover:not(:disabled) {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
 }
@@ -447,8 +501,21 @@ onUnmounted(() => {
   padding: 4px 8px;
 }
 
-.onboarding-skip-link:hover {
+.onboarding-skip-link:hover:not(:disabled) {
   color: var(--text-secondary);
+}
+
+.onboarding-loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: onboarding-pulse 1s ease-in-out infinite;
+}
+
+@keyframes onboarding-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 @media (max-width: 640px) {
@@ -459,6 +526,8 @@ onUnmounted(() => {
     transform: none !important;
     top: auto !important;
     bottom: 12px;
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
   }
 
   .onboarding-actions {
@@ -469,6 +538,11 @@ onUnmounted(() => {
 @media (prefers-reduced-motion: reduce) {
   .onboarding-spotlight {
     transition: none;
+  }
+
+  .onboarding-loading-dot {
+    animation: none;
+    opacity: 0.8;
   }
 }
 </style>

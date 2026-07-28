@@ -934,6 +934,7 @@ onUnmounted(() => {
               <button
                 v-else-if="aiReady"
                 type="button"
+                data-tour-id="study-notes-model"
                 class="inline-flex items-center gap-1.5 max-w-[220px] rounded-lg border border-purple-400/25 bg-purple-400/5 px-3 py-2 text-sm text-white outline-none transition hover:border-purple-400/40 hover:bg-purple-400/10 focus:border-purple-400/40"
                 title="选择 AI 模型"
                 @click="showModelPicker = true"
@@ -944,6 +945,7 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
+                data-tour-id="study-notes-polish"
                 class="inline-flex items-center gap-2 rounded-md border border-purple-400/20 bg-purple-400/10 px-3 py-2 text-sm text-purple-300 hover:bg-purple-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="!canPolish"
                 @click="polishCurrentNote"
@@ -954,6 +956,7 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
+                data-tour-id="study-notes-save"
                 class="inline-flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="saving || !content.trim()"
                 @click="saveCurrentNote"

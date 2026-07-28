@@ -208,6 +208,11 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     goToStep(currentStepIndex.value - 1)
   }
 
+  function closeTour() {
+    isRunning.value = false
+    isManualReplay.value = false
+  }
+
   async function skipTour() {
     const next: OnboardingState = {
       status: 'skipped',
@@ -267,6 +272,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     startManualTour,
     nextStep,
     previousStep,
+    closeTour,
     skipTour,
     completeTour,
     goToStep,

@@ -195,6 +195,7 @@ onUnmounted(() => {
                 :key="entry.id"
                 type="button"
                 class="learning-order-course"
+                :data-tour-id="entry.index === 1 ? 'courses-first-course' : undefined"
                 @click="goToCourse(entry.id)"
               >
                 <span class="learning-order-course-index">{{ String(entry.index).padStart(2, '0') }}</span>

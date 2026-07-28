@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, BookOpen, PenTool, BarChart3, Terminal, Zap, Shield, Cloud, ChevronRight, Play, Lock, Unlock } from 'lucide-vue-next'
+import { ArrowRight, BookOpen, PenTool, BarChart3, Terminal, Zap, Shield, Cloud, ChevronRight, Play, Lock, Unlock, Compass } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
 import { getCourseIconChar } from '@/data/courseIcons'
 import type { Difficulty, CourseIcon } from '@/types'
@@ -305,6 +305,7 @@ const termLines = computed(() => [
         <!-- CTA 按钮 -->
         <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14 animate-fade-in">
           <button
+            data-tour-id="home-start-learning"
             @click="hasLearningProgress ? goContinueLearning() : router.push('/courses')"
             class="action-button group flex items-center gap-2.5 px-8 py-4 rounded-xl bg-cyan-500 text-[#06060b] font-bold text-base shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 hover:bg-cyan-400 transition-all duration-300"
           >
@@ -320,10 +321,15 @@ const termLines = computed(() => [
           </button>
           <button
             type="button"
-            class="action-button text-sm font-mono text-gray-600 hover:text-cyan-400 transition-colors"
+            data-tour-id="home-tutorial-button"
+            class="action-button group flex items-center gap-2.5 px-7 py-4 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] text-cyan-300 font-semibold text-base hover:bg-cyan-400/10 hover:border-cyan-400/35 transition-all duration-300"
             @click="onboardingStore.startManualTour()"
           >
-            功能导览
+            <Compass class="w-4 h-4" />
+            <span class="flex flex-col items-start leading-tight text-left">
+              <span>新手教程</span>
+              <span class="text-[11px] font-normal text-cyan-400/70">3 分钟了解云栈</span>
+            </span>
           </button>
         </div>
 

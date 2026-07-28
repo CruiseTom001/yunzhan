@@ -263,7 +263,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10" data-tour-id="progress-stats">
         <div class="progress-stat-card bg-white/[0.01] border border-white/[0.04] rounded-xl p-4" style="--stat-index: 0">
           <div class="flex items-center gap-2 mb-2">
             <BookOpen class="w-3.5 h-3.5 text-cyan-400" />
