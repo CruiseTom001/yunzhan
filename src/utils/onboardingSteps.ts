@@ -193,7 +193,7 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
     anchorId: 'study-notes-polish',
     fallbackAnchorId: 'study-notes-editor',
     title: '用 AI 整理笔记',
-    description: '写好要点后点「AI 润色」，把零散记录整理成更适合复习的表述。',
+    description: '先写下今天学到的要点，再点击「AI 润色」，让 AI 帮你整理成更清楚的复习笔记。',
     scope: 'page-detail',
     audience: 'detail',
     autoNavigate: false,
