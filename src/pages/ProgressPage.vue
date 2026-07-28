@@ -435,7 +435,7 @@ onMounted(async () => {
       </div>
 
       <div class="grid lg:grid-cols-2 gap-4 mb-10">
-        <section class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4">
+        <section class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-4" data-tour-id="progress-sync-panel">
           <div class="flex items-center gap-2 mb-3">
             <Cloud class="w-4 h-4 text-cyan-400" />
             <h2 class="text-white text-sm font-bold font-mono">云同步准备</h2>

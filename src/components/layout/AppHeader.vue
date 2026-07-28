@@ -28,6 +28,7 @@ import {
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
+import { useOnboardingStore } from '@/stores/onboarding'
 import { useTheme } from '@/stores/theme'
 
 const router = useRouter()
@@ -39,6 +40,7 @@ const loggingOut = ref(false)
 const { themePreference, toggleTheme } = useTheme()
 const authStore = useAuthStore()
 const progressStore = useProgressStore()
+const onboardingStore = useOnboardingStore()
 
 const themeToggleTitle = computed(() => {
   if (themePreference.value === 'system') return '当前：跟随系统（点击切换）'
@@ -65,13 +67,13 @@ const emit = defineEmits<{
 }>()
 
 const navItems = [
-  { path: '/', label: '首页', icon: Home },
-  { path: '/courses', label: '课程', icon: BookOpen },
-  { path: '/quiz', label: '问答', icon: PenTool },
-  { path: '/review', label: '复习', icon: Brain },
-  { path: '/study-notes', label: '笔记', icon: ScrollText },
-  { path: '/progress', label: '进度', icon: BarChart3 },
-  { path: '/terminal', label: '终端', icon: Terminal },
+  { path: '/', label: '首页', icon: Home, tourId: 'nav-home' },
+  { path: '/courses', label: '课程', icon: BookOpen, tourId: 'nav-courses' },
+  { path: '/quiz', label: '问答', icon: PenTool, tourId: 'nav-quiz' },
+  { path: '/review', label: '复习', icon: Brain, tourId: 'nav-review' },
+  { path: '/study-notes', label: '笔记', icon: ScrollText, tourId: 'nav-notes' },
+  { path: '/progress', label: '进度', icon: BarChart3, tourId: 'nav-progress' },
+  { path: '/terminal', label: '终端', icon: Terminal, tourId: 'nav-terminal' },
 ]
 
 function navigate(path: string) {
@@ -85,6 +87,7 @@ async function logout() {
   loggingOut.value = true
   try {
     await progressStore.unbindAccount()
+    onboardingStore.resetForLogout()
     await authStore.logout()
   } finally {
     loggingOut.value = false
@@ -149,6 +152,7 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
         <button
           v-for="item in navItems"
           :key="item.path"
+          :data-tour-id="item.tourId"
           @click="navigate(item.path)"
           :class="[
             'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 font-mono',
@@ -276,6 +280,7 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
       <button
         v-for="item in navItems"
         :key="item.path"
+        :data-tour-id="item.tourId"
         @click="navigate(item.path)"
         :class="[
           'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-mono transition-all',

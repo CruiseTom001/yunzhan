@@ -11,9 +11,11 @@ import {
   isBeginnerPathComplete,
   resolveContinueTarget,
 } from '@/utils/continueLearning'
+import { useOnboardingStore } from '@/stores/onboarding'
 
 const router = useRouter()
 const progressStore = useProgressStore()
+const onboardingStore = useOnboardingStore()
 const appVersion = __APP_VERSION__
 const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
@@ -251,7 +253,7 @@ const termLines = computed(() => [
 <template>
   <div ref="pageRoot" class="min-h-screen bg-theme">
     <!-- Hero Section - 终端风格 -->
-    <section class="relative min-h-[90vh] flex flex-col items-center justify-center px-6 pt-20 pb-16 overflow-hidden">
+    <section data-tour-id="home-hero" class="relative min-h-[90vh] flex flex-col items-center justify-center px-6 pt-20 pb-16 overflow-hidden">
       <ParticleBg />
       <div class="absolute inset-0 hero-veil pointer-events-none"></div>
 
@@ -316,6 +318,13 @@ const termLines = computed(() => [
           >
             {{ hasLearningProgress ? '浏览课程' : '问答练习' }}
           </button>
+          <button
+            type="button"
+            class="action-button text-sm font-mono text-gray-600 hover:text-cyan-400 transition-colors"
+            @click="onboardingStore.startManualTour()"
+          >
+            功能导览
+          </button>
         </div>
 
         <!-- 难度统计 - 六边形风格 -->
@@ -339,7 +348,7 @@ const termLines = computed(() => [
     </section>
 
     <!-- ===== 继续学习 ===== -->
-    <section class="max-w-6xl mx-auto px-6 pb-8">
+    <section data-tour-id="home-continue-learning" class="max-w-6xl mx-auto px-6 pb-8">
       <div class="rounded-xl border border-cyan-400/10 bg-gradient-to-r from-cyan-400/[0.03] to-transparent p-5 md:p-6">
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">

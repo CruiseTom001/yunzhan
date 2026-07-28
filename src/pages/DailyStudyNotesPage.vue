@@ -977,7 +977,7 @@ onUnmounted(() => {
           </div>
 
           <div class="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <section class="min-w-0 border-b border-theme-subtle p-5 xl:border-b-0 xl:border-r">
+            <section class="min-w-0 border-b border-theme-subtle p-5 xl:border-b-0 xl:border-r" data-tour-id="study-notes-editor">
               <label class="mb-3 block text-sm font-semibold text-theme" for="study-note-content">今天学了什么</label>
               <textarea
                 id="study-note-content"

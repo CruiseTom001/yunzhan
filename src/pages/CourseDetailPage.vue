@@ -624,7 +624,7 @@ function saveWorkbenchDraft() {
         </div>
       </div>
 
-      <nav class="p-2">
+      <nav class="p-2" data-tour-id="course-chapter-nav">
         <button
           v-for="(ch, i) in course.chapters"
           :key="i"

@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AnnouncementModal from '@/components/common/AnnouncementModal.vue'
+import OnboardingTour from '@/components/onboarding/OnboardingTour.vue'
 import UpdateBanner from '@/components/common/UpdateBanner.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import FloatingTerminal from '@/components/ai/FloatingTerminal.vue'
 import { useProgressStore } from '@/stores/progress'
 import { useAuthStore } from '@/stores/auth'
+import { useOnboardingStore } from '@/stores/onboarding'
 
 const globalSearch = ref<InstanceType<typeof GlobalSearch> | null>(null)
 const showTerminal = ref(false)
 const progressStore = useProgressStore()
 const authStore = useAuthStore()
+const onboardingStore = useOnboardingStore()
 const route = useRoute()
 const STUDY_SAMPLE_SECONDS = 30
 const ACTIVE_WINDOW_MS = 2 * 60 * 1000
@@ -60,6 +63,15 @@ onMounted(() => {
   studyTimer = setInterval(sampleActiveStudyTime, STUDY_SAMPLE_SECONDS * 1000)
 })
 
+watch(
+  () => [authStore.isAuthenticated, route.name, onboardingStore.loadStatus] as const,
+  () => {
+    if (!authStore.isAuthenticated || onboardingStore.loadStatus !== 'ready') return
+    onboardingStore.tryAutoStart(route.name)
+  },
+  { immediate: true },
+)
+
 onUnmounted(() => {
   window.removeEventListener('yunzhan:run-command', openTerminalForCommand)
   window.removeEventListener('pointerdown', recordActivity)
@@ -87,7 +99,8 @@ onUnmounted(() => {
       </transition>
     </router-view>
     <template v-if="!route.meta.hideChrome">
-      <AnnouncementModal />
+      <AnnouncementModal v-if="!onboardingStore.blocksAnnouncements" />
+      <OnboardingTour />
       <UpdateBanner />
       <ConceptPopover />
       <GlobalSearch ref="globalSearch" />
