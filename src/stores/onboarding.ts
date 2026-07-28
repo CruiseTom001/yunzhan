@@ -9,9 +9,11 @@ import {
 import {
   getOnboardingStep,
   getOnboardingStepIndex,
+  getOnboardingStepsForMode,
   onboardingSteps,
   shouldAutoStartOnboarding,
   type OnboardingStatus,
+  type OnboardingTourMode,
 } from '@/utils/onboardingSteps'
 import {
   readOnboardingCache,
@@ -41,6 +43,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   const tourVersion = ref(1)
   const isRunning = ref(false)
   const isManualReplay = ref(false)
+  const tourMode = ref<OnboardingTourMode>('quick')
   const currentStepIndex = ref(0)
   const errorMessage = ref('')
   const syncWarning = ref('')
@@ -63,10 +66,11 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     return authStore.isAuthenticated && status.value === 'pending' && version.value < tourVersion.value
   })
 
-  const currentStep = computed(() => onboardingSteps[currentStepIndex.value] ?? onboardingSteps[0])
-  const totalSteps = computed(() => onboardingSteps.length)
+  const activeSteps = computed(() => getOnboardingStepsForMode(tourMode.value))
+  const currentStep = computed(() => activeSteps.value[currentStepIndex.value] ?? activeSteps.value[0])
+  const totalSteps = computed(() => activeSteps.value.length)
   const isFirstStep = computed(() => currentStepIndex.value <= 0)
-  const isLastStep = computed(() => currentStepIndex.value >= onboardingSteps.length - 1)
+  const isLastStep = computed(() => currentStepIndex.value >= activeSteps.value.length - 1)
 
   function applyState(next: OnboardingState) {
     status.value = next.status
@@ -88,6 +92,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     tourVersion.value = 1
     isRunning.value = false
     isManualReplay.value = false
+    tourMode.value = 'quick'
     currentStepIndex.value = 0
     errorMessage.value = ''
     syncWarning.value = ''
@@ -167,9 +172,10 @@ export const useOnboardingStore = defineStore('onboarding', () => {
 
   function beginTour(manual: boolean, resumeStepId: string | null = stepId.value) {
     isManualReplay.value = manual
+    tourMode.value = manual ? 'full' : 'quick'
     isRunning.value = true
-    currentStepIndex.value = getOnboardingStepIndex(resumeStepId)
-    scheduleStepPersist(getOnboardingStep(resumeStepId).id)
+    currentStepIndex.value = getOnboardingStepIndex(resumeStepId, tourMode.value)
+    scheduleStepPersist(getOnboardingStep(resumeStepId, tourMode.value).id)
   }
 
   function tryAutoStart(routeName?: string | symbol | null) {
@@ -191,9 +197,9 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   }
 
   function goToStep(index: number) {
-    const bounded = Math.max(0, Math.min(index, onboardingSteps.length - 1))
+    const bounded = Math.max(0, Math.min(index, activeSteps.value.length - 1))
     currentStepIndex.value = bounded
-    scheduleStepPersist(onboardingSteps[bounded].id)
+    scheduleStepPersist(activeSteps.value[bounded]?.id ?? onboardingSteps[0].id)
   }
 
   function nextStep() {
@@ -256,6 +262,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     tourVersion,
     isRunning,
     isManualReplay,
+    tourMode,
+    activeSteps,
     currentStepIndex,
     currentStep,
     totalSteps,

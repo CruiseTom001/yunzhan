@@ -157,7 +157,7 @@ onUnmounted(() => {
       </div>
 
       <section class="learning-order mb-8" aria-labelledby="learning-order-title" data-tour-id="courses-beginner-path">
-        <div class="learning-order-header">
+        <div class="learning-order-header" data-tour-id="courses-beginner-path-header">
           <div>
             <div class="learning-order-kicker">
               <Route class="w-3.5 h-3.5" aria-hidden="true" />

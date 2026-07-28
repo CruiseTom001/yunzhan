@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, X } from 'lucide-vue-next'
 import { useOnboardingStore } from '@/stores/onboarding'
-import { matchesOnboardingRoute } from '@/utils/onboardingSteps'
+import { matchesOnboardingRoute, type OnboardingStepDefinition } from '@/utils/onboardingSteps'
 
 const MIN_HIGHLIGHT_SIZE = 48
 
@@ -12,17 +12,28 @@ const router = useRouter()
 const route = useRoute()
 
 const panelRef = ref<HTMLElement | null>(null)
-const spotlightStyle = ref<Record<string, string>>({})
+const spotlightStyle = ref<Record<string, string>>({ display: 'none' })
 const panelStyle = ref<Record<string, string>>({})
 const anchorMissing = ref(false)
+const informationalMode = ref(false)
 const navigating = ref(false)
+const stepReady = ref(false)
+const loadingTitle = ref('正在加载…')
 
 const step = computed(() => onboardingStore.currentStep)
 const progressLabel = computed(() => `新手教程 ${onboardingStore.currentStepIndex + 1} / ${onboardingStore.totalSteps}`)
+const displayTitle = computed(() => {
+  if (!stepReady.value) return loadingTitle.value
+  if (informationalMode.value && step.value.missingTitle) return step.value.missingTitle
+  return step.value.title
+})
+const displayDescription = computed(() => {
+  if (!stepReady.value) return '请稍候，正在定位讲解区域…'
+  if (informationalMode.value && step.value.missingDescription) return step.value.missingDescription
+  return step.value.description
+})
 const primaryLabel = computed(() => {
-  if (navigating.value) {
-    return step.value.navigationMessage ?? '正在加载…'
-  }
+  if (!stepReady.value) return '请稍候…'
   return onboardingStore.isLastStep ? '开始学习' : '下一步'
 })
 
@@ -35,10 +46,11 @@ function queryAnchor(id: string | undefined): HTMLElement | null {
   return document.querySelector(`[data-tour-id="${id}"]`)
 }
 
-function resolveAnchorElement(): HTMLElement | null {
-  const primary = queryAnchor(step.value.anchorId)
+function resolveAnchorElement(currentStep: OnboardingStepDefinition): HTMLElement | null {
+  const primary = queryAnchor(currentStep.anchorId)
   if (primary) return primary
-  return queryAnchor(step.value.fallbackAnchorId)
+  if (currentStep.skipIfAnchorMissing) return null
+  return queryAnchor(currentStep.fallbackAnchorId)
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -51,11 +63,43 @@ function focusPanel() {
   })
 }
 
-function updateLayout() {
-  if (!onboardingStore.isRunning) return
+function centerPanel() {
+  const viewportWidth = window.innerWidth
+  const isMobile = viewportWidth <= 640
+  const panelWidth = isMobile ? viewportWidth - 24 : Math.min(420, viewportWidth - 24)
 
-  const anchor = resolveAnchorElement()
-  anchorMissing.value = !anchor
+  panelStyle.value = isMobile
+    ? {
+      left: '12px',
+      right: '12px',
+      width: 'auto',
+      transform: 'none',
+      top: 'auto',
+      bottom: '12px',
+    }
+    : {
+      top: '50%',
+      left: '50%',
+      width: `${panelWidth}px`,
+      transform: 'translate(-50%, -50%)',
+    }
+}
+
+function enterLoadingState(message: string) {
+  stepReady.value = false
+  navigating.value = true
+  informationalMode.value = false
+  anchorMissing.value = false
+  loadingTitle.value = message
+  spotlightStyle.value = { display: 'none' }
+  centerPanel()
+}
+
+function updateLayout() {
+  if (!onboardingStore.isRunning || !stepReady.value) return
+
+  const currentStep = step.value
+  const anchor = informationalMode.value ? null : resolveAnchorElement(currentStep)
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
   const isMobile = viewportWidth <= 640
@@ -64,21 +108,7 @@ function updateLayout() {
 
   if (!anchor) {
     spotlightStyle.value = { display: 'none' }
-    panelStyle.value = isMobile
-      ? {
-        left: '12px',
-        right: '12px',
-        width: 'auto',
-        transform: 'none',
-        top: 'auto',
-        bottom: '12px',
-      }
-      : {
-        top: '50%',
-        left: '50%',
-        width: `${panelWidth}px`,
-        transform: 'translate(-50%, -50%)',
-      }
+    centerPanel()
     return
   }
 
@@ -134,33 +164,46 @@ function scheduleLayout() {
   }, 60)
 }
 
-async function waitForPrimaryAnchor(maxMs = 2500): Promise<boolean> {
+async function waitForPrimaryAnchor(currentStep: OnboardingStepDefinition, maxMs = 2500): Promise<boolean> {
   const started = Date.now()
   while (Date.now() - started < maxMs) {
-    if (queryAnchor(step.value.anchorId)) return true
+    if (queryAnchor(currentStep.anchorId)) return true
     await new Promise(resolve => setTimeout(resolve, 80))
   }
-  return Boolean(queryAnchor(step.value.anchorId))
+  return Boolean(queryAnchor(currentStep.anchorId))
 }
 
 async function prepareCurrentStep() {
   if (!onboardingStore.isRunning) return
 
   const token = ++prepareToken
-  navigating.value = true
-  anchorMissing.value = false
+  const currentStep = step.value
+  const loadingMessage = currentStep.navigationMessage
+    ?? (currentStep.autoNavigate ? '正在打开页面…' : '正在定位讲解区域…')
+
+  enterLoadingState(loadingMessage)
 
   try {
-    const currentStep = step.value
     if (currentStep.autoNavigate && !matchesOnboardingRoute(currentStep.route, route.fullPath)) {
       await router.push(currentStep.route)
       if (token !== prepareToken) return
     }
 
-    const primaryFound = await waitForPrimaryAnchor()
+    const primaryFound = await waitForPrimaryAnchor(currentStep)
     if (token !== prepareToken) return
 
-    const anchor = resolveAnchorElement()
+    if (!primaryFound && currentStep.skipIfAnchorMissing) {
+      informationalMode.value = true
+      anchorMissing.value = false
+      stepReady.value = true
+      spotlightStyle.value = { display: 'none' }
+      centerPanel()
+      focusPanel()
+      return
+    }
+
+    const anchor = resolveAnchorElement(currentStep)
+    informationalMode.value = false
     anchorMissing.value = !anchor
     if (!primaryFound && anchor && anchor.dataset.tourId !== currentStep.anchorId) {
       anchorMissing.value = true
@@ -173,12 +216,17 @@ async function prepareCurrentStep() {
       if (token !== prepareToken) return
     }
 
+    stepReady.value = true
+    await nextTick()
     updateLayout()
     focusPanel()
   } catch {
     if (token !== prepareToken) return
     anchorMissing.value = true
-    updateLayout()
+    informationalMode.value = false
+    stepReady.value = true
+    spotlightStyle.value = { display: 'none' }
+    centerPanel()
   } finally {
     if (token === prepareToken) {
       navigating.value = false
@@ -187,12 +235,12 @@ async function prepareCurrentStep() {
 }
 
 function handlePrevious() {
-  if (navigating.value) return
+  if (navigating.value || !stepReady.value) return
   onboardingStore.previousStep()
 }
 
 function handleNext() {
-  if (navigating.value) return
+  if (navigating.value || !stepReady.value) return
   if (onboardingStore.isLastStep) {
     void onboardingStore.completeTour()
     return
@@ -209,7 +257,7 @@ function handleSkip() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (!onboardingStore.isRunning || navigating.value) return
+  if (!onboardingStore.isRunning || navigating.value || !stepReady.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
     handleClose()
@@ -227,7 +275,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 watch(
-  () => [onboardingStore.isRunning, onboardingStore.currentStepIndex, route.fullPath] as const,
+  () => [onboardingStore.isRunning, onboardingStore.currentStepIndex, onboardingStore.tourMode, route.fullPath] as const,
   () => {
     if (!onboardingStore.isRunning) return
     void prepareCurrentStep()
@@ -235,12 +283,17 @@ watch(
   { immediate: true },
 )
 
+watch(stepReady, (ready) => {
+  if (ready && panelRef.value) {
+    resizeObserver?.observe(panelRef.value)
+  }
+})
+
 onMounted(() => {
   window.addEventListener('resize', scheduleLayout)
   window.addEventListener('scroll', scheduleLayout, true)
   window.addEventListener('keydown', handleKeydown)
   resizeObserver = new ResizeObserver(() => scheduleLayout())
-  if (panelRef.value) resizeObserver.observe(panelRef.value)
 })
 
 onUnmounted(() => {
@@ -260,35 +313,41 @@ onUnmounted(() => {
       role="presentation"
     >
       <div class="onboarding-backdrop" />
-      <div class="onboarding-spotlight" :style="spotlightStyle" />
+      <div
+        class="onboarding-spotlight"
+        :class="{ 'onboarding-spotlight-hidden': !stepReady }"
+        :style="spotlightStyle"
+      />
       <section
         ref="panelRef"
         class="onboarding-panel"
+        :class="{ 'onboarding-panel-loading': !stepReady }"
         :style="panelStyle"
         role="dialog"
         aria-modal="true"
         tabindex="-1"
         :aria-labelledby="`onboarding-title-${step.id}`"
+        :aria-busy="!stepReady"
       >
         <div class="onboarding-panel-header">
           <div>
             <div class="onboarding-kicker">{{ progressLabel }}</div>
-            <h2 :id="`onboarding-title-${step.id}`" class="onboarding-title">{{ step.title }}</h2>
+            <h2 :id="`onboarding-title-${step.id}`" class="onboarding-title">{{ displayTitle }}</h2>
           </div>
           <button
             type="button"
             class="onboarding-icon-button"
             title="关闭新手教程"
             aria-label="关闭新手教程"
-            :disabled="navigating"
+            :disabled="navigating && !stepReady"
             @click="handleClose"
           >
             <X class="w-4 h-4" />
           </button>
         </div>
 
-        <p class="onboarding-description">{{ step.description }}</p>
-        <p v-if="anchorMissing" class="onboarding-fallback-note">
+        <p class="onboarding-description">{{ displayDescription }}</p>
+        <p v-if="stepReady && anchorMissing && !informationalMode" class="onboarding-fallback-note">
           当前讲解区域暂时不可用，你可以继续下一步，或稍后在账号设置重新打开新手教程。
         </p>
         <p v-if="onboardingStore.syncWarning" class="onboarding-sync-warning">{{ onboardingStore.syncWarning }}</p>
@@ -298,7 +357,7 @@ onUnmounted(() => {
             <button
               type="button"
               class="onboarding-secondary-button"
-              :disabled="onboardingStore.isFirstStep || navigating"
+              :disabled="onboardingStore.isFirstStep || navigating || !stepReady"
               @click="handlePrevious"
             >
               <ChevronLeft class="w-4 h-4" />
@@ -307,18 +366,18 @@ onUnmounted(() => {
             <button
               type="button"
               class="onboarding-primary-button"
-              :disabled="navigating"
+              :disabled="navigating || !stepReady"
               @click="handleNext"
             >
-              <span v-if="navigating" class="onboarding-loading-dot" aria-hidden="true" />
+              <span v-if="!stepReady" class="onboarding-loading-dot" aria-hidden="true" />
               {{ primaryLabel }}
-              <ChevronRight v-if="!onboardingStore.isLastStep && !navigating" class="w-4 h-4" />
+              <ChevronRight v-if="stepReady && !onboardingStore.isLastStep" class="w-4 h-4" />
             </button>
           </div>
           <button
             type="button"
             class="onboarding-skip-link"
-            :disabled="navigating"
+            :disabled="navigating && !stepReady"
             @click="handleSkip"
           >
             跳过新手教程
@@ -357,7 +416,11 @@ onUnmounted(() => {
     0 0 24px color-mix(in srgb, var(--accent-cyan) 18%, transparent);
   background: color-mix(in srgb, var(--accent-cyan) 8%, transparent);
   pointer-events: none;
-  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease, opacity 0.15s ease;
+}
+
+.onboarding-spotlight-hidden {
+  opacity: 0;
 }
 
 .onboarding-panel {
@@ -372,6 +435,24 @@ onUnmounted(() => {
   outline: none;
 }
 
+.onboarding-panel-loading {
+  text-align: center;
+}
+
+.onboarding-panel-loading .onboarding-panel-header {
+  justify-content: center;
+}
+
+.onboarding-panel-loading .onboarding-icon-button {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+.onboarding-panel-loading .onboarding-title {
+  text-align: center;
+}
+
 [data-theme="light"] .onboarding-panel {
   background: color-mix(in srgb, var(--bg-primary) 96%, white 4%);
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
@@ -383,6 +464,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+  position: relative;
 }
 
 .onboarding-kicker {

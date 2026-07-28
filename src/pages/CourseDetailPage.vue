@@ -680,7 +680,7 @@ function saveWorkbenchDraft() {
     >
       <div class="max-w-3xl mx-auto min-w-0 px-6 md:px-8">
         <div v-if="currentChapter" class="mb-8">
-          <div class="mb-6">
+          <div class="mb-6" data-tour-id="course-content-intro">
             <div class="flex items-center gap-1.5 text-[10px] text-gray-600 font-mono mb-1.5">
               <span>{{ course.title }}</span>
               <ChevronRight class="w-2.5 h-2.5" />
@@ -727,9 +727,7 @@ function saveWorkbenchDraft() {
             </div>
           </div>
 
-          <div data-tour-id="course-chapter-content">
-            <MarkdownRenderer :content="chapterContent" />
-          </div>
+          <MarkdownRenderer :content="chapterContent" />
 
           <section
             v-if="currentLabs.length > 0"
