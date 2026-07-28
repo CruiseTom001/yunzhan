@@ -259,7 +259,7 @@ const termLines = computed(() => [
 
       <div class="relative z-10 text-center max-w-5xl w-full">
         <!-- 终端窗口装饰 -->
-        <div class="max-w-2xl mx-auto mb-10 animate-fade-in">
+        <div class="max-w-2xl mx-auto mb-10 animate-fade-in" data-tour-id="home-welcome-intro">
           <div
             class="hero-terminal interactive-surface relative rounded-xl border border-edge-card backdrop-blur overflow-hidden shadow-2xl shadow-black/50"
             @pointermove="handleInteractiveMove"

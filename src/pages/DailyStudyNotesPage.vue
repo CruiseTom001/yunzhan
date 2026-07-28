@@ -985,6 +985,7 @@ onUnmounted(() => {
               <textarea
                 id="study-note-content"
                 v-model="content"
+                data-tour-id="study-notes-input"
                 class="min-h-[520px] w-full resize-y rounded-md border border-white/[0.08] bg-black/20 px-4 py-3 text-sm leading-7 text-theme outline-none focus:border-cyan-400/40"
                 maxlength="20000"
                 placeholder="例如：今天学习了 Docker 网络模式，理解了 bridge、host 和容器端口映射的区别..."

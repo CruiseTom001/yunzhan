@@ -48,7 +48,8 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   {
     id: 'welcome',
     route: '/',
-    anchorId: 'home-hero',
+    anchorId: 'home-welcome-intro',
+    fallbackAnchorId: 'home-hero',
     title: '欢迎来到云栈',
     description: '云栈帮你把「学课程 → 做实验 → 练命令 → 测验复习 → 记笔记」串成一条学习路径。接下来按推荐路线，从第一门课开始即可。',
     scope: 'main',
@@ -109,7 +110,7 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
     title: '动手做实验',
     description: '这里是交互式实验区。按步骤执行命令，系统会根据真实命令记录判断是否完成。',
     scope: 'page-detail',
-    audience: 'detail',
+    audience: 'quick',
     autoNavigate: true,
     navigationMessage: '正在打开带实验的章节…',
   },
@@ -121,7 +122,7 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
     title: '标记本章已学完',
     description: '读完并做完练习后，点「标记已学完」，进度会同步到学习面板。',
     scope: 'page-detail',
-    audience: 'quick',
+    audience: 'detail',
     autoNavigate: false,
   },
   {
@@ -185,8 +186,8 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   {
     id: 'study-notes-editor',
     route: '/study-notes',
-    anchorId: 'study-notes-editor',
-    fallbackAnchorId: 'nav-notes',
+    anchorId: 'study-notes-input',
+    fallbackAnchorId: 'study-notes-editor',
     title: '记录今天学了什么',
     description: '学完一节后，把你今天理解的内容用自己的话写在这里。不必追求文采，先把要点记下来。',
     scope: 'main',
@@ -272,6 +273,10 @@ export function resolveOnboardingStepRoute(
     return labChapterRoute
   }
   return step.route
+}
+
+export function resolveOnboardingFinishRoute(): string {
+  return `/course/${firstBeginnerCourseId}/chapter/0`
 }
 
 export function getOnboardingStepsForMode(mode: OnboardingTourMode): OnboardingStepDefinition[] {

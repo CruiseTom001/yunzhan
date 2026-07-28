@@ -7,6 +7,7 @@ import {
   matchesOnboardingRoute,
   onboardingSteps,
   resolveFirstBeginnerPathLab,
+  resolveOnboardingFinishRoute,
   resolveOnboardingStepRoute,
   shouldAutoStartOnboarding,
 } from '@/utils/onboardingSteps'
@@ -24,6 +25,8 @@ describe('onboardingSteps', () => {
     expect(fullSteps).toHaveLength(19)
     expect(quickSteps.every(step => step.audience === 'quick')).toBe(true)
     expect(fullSteps.some(step => step.audience === 'detail')).toBe(true)
+    expect(quickSteps.some(step => step.id === 'course-lab')).toBe(true)
+    expect(quickSteps.some(step => step.id === 'course-complete')).toBe(false)
   })
 
   it('resolves unknown step ids to the first step', () => {
@@ -48,11 +51,26 @@ describe('onboardingSteps', () => {
     expect(labStep?.route).toBe(`/course/${labTarget.courseId}/chapter/${labTarget.chapterIndex}`)
     expect(labStep?.autoNavigate).toBe(true)
     expect(labStep?.navigationMessage).toBe('正在打开带实验的章节…')
+    expect(labStep?.audience).toBe('quick')
     expect(labStep?.skipIfAnchorMissing).toBeUndefined()
     expect(resolveOnboardingStepRoute(completeStep!, 'full'))
       .toBe(`/course/${labTarget.courseId}/chapter/${labTarget.chapterIndex}`)
     expect(resolveOnboardingStepRoute(completeStep!, 'quick'))
       .toBe('/course/computer-basics/chapter/0')
+  })
+
+  it('routes finish action to the first beginner course chapter', () => {
+    expect(resolveOnboardingFinishRoute()).toBe('/course/computer-basics/chapter/0')
+  })
+
+  it('uses focused anchors for welcome and study notes editor steps', () => {
+    const welcomeStep = onboardingSteps.find(step => step.id === 'welcome')
+    const notesStep = onboardingSteps.find(step => step.id === 'study-notes-editor')
+
+    expect(welcomeStep?.anchorId).toBe('home-welcome-intro')
+    expect(welcomeStep?.fallbackAnchorId).toBe('home-hero')
+    expect(notesStep?.anchorId).toBe('study-notes-input')
+    expect(notesStep?.fallbackAnchorId).toBe('study-notes-editor')
   })
 
   it('auto-starts only for pending new users on normal routes', () => {

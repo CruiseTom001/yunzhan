@@ -3,9 +3,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, X } from 'lucide-vue-next'
 import { useOnboardingStore } from '@/stores/onboarding'
-import { matchesOnboardingRoute, resolveOnboardingStepRoute, type OnboardingStepDefinition } from '@/utils/onboardingSteps'
+import { matchesOnboardingRoute, resolveOnboardingFinishRoute, resolveOnboardingStepRoute, type OnboardingStepDefinition } from '@/utils/onboardingSteps'
 
 const MIN_HIGHLIGHT_SIZE = 48
+const LOADING_DELAY_MS = 150
 
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
@@ -40,6 +41,7 @@ const primaryLabel = computed(() => {
 let resizeObserver: ResizeObserver | null = null
 let repositionTimer: ReturnType<typeof setTimeout> | null = null
 let prepareToken = 0
+let elevatedAnchor: HTMLElement | null = null
 
 function queryAnchor(id: string | undefined): HTMLElement | null {
   if (!id) return null
@@ -83,6 +85,19 @@ function centerPanel() {
       width: `${panelWidth}px`,
       transform: 'translate(-50%, -50%)',
     }
+}
+
+function clearElevatedAnchor() {
+  if (!elevatedAnchor) return
+  elevatedAnchor.classList.remove('onboarding-anchor-active')
+  elevatedAnchor = null
+}
+
+function elevateAnchor(anchor: HTMLElement | null) {
+  clearElevatedAnchor()
+  if (!anchor) return
+  anchor.classList.add('onboarding-anchor-active')
+  elevatedAnchor = anchor
 }
 
 function enterLoadingState(message: string) {
@@ -178,20 +193,42 @@ async function prepareCurrentStep() {
 
   const token = ++prepareToken
   const currentStep = step.value
+  const targetRoute = resolveOnboardingStepRoute(currentStep, onboardingStore.tourMode)
+  const needsNavigation = currentStep.autoNavigate && !matchesOnboardingRoute(targetRoute, route.fullPath)
   const loadingMessage = currentStep.navigationMessage
-    ?? (currentStep.autoNavigate ? '正在打开页面…' : '正在打开讲解位置…')
+    ?? (needsNavigation ? '正在打开页面…' : '正在打开讲解位置…')
 
-  enterLoadingState(loadingMessage)
+  clearElevatedAnchor()
+
+  let loadingTimer: ReturnType<typeof setTimeout> | null = null
+  let loadingShown = false
+
+  const showLoading = () => {
+    if (token !== prepareToken || loadingShown) return
+    loadingShown = true
+    enterLoadingState(loadingMessage)
+  }
+
+  if (needsNavigation) {
+    showLoading()
+  } else {
+    navigating.value = true
+    loadingTimer = setTimeout(showLoading, LOADING_DELAY_MS)
+  }
 
   try {
-    const targetRoute = resolveOnboardingStepRoute(currentStep, onboardingStore.tourMode)
-    if (currentStep.autoNavigate && !matchesOnboardingRoute(targetRoute, route.fullPath)) {
+    if (needsNavigation) {
       await router.push(targetRoute)
       if (token !== prepareToken) return
     }
 
-    const primaryFound = await waitForPrimaryAnchor(currentStep)
+    const primaryFound = await waitForPrimaryAnchor(currentStep, needsNavigation ? 2500 : 1200)
     if (token !== prepareToken) return
+
+    if (loadingTimer) {
+      clearTimeout(loadingTimer)
+      loadingTimer = null
+    }
 
     if (!primaryFound && currentStep.skipIfAnchorMissing) {
       informationalMode.value = true
@@ -220,6 +257,7 @@ async function prepareCurrentStep() {
     stepReady.value = true
     await nextTick()
     updateLayout()
+    elevateAnchor(anchor)
     focusPanel()
   } catch {
     if (token !== prepareToken) return
@@ -229,6 +267,7 @@ async function prepareCurrentStep() {
     spotlightStyle.value = { display: 'none' }
     centerPanel()
   } finally {
+    if (loadingTimer) clearTimeout(loadingTimer)
     if (token === prepareToken) {
       navigating.value = false
     }
@@ -243,13 +282,18 @@ function handlePrevious() {
 function handleNext() {
   if (navigating.value || !stepReady.value) return
   if (onboardingStore.isLastStep) {
-    void onboardingStore.completeTour()
+    void (async () => {
+      const targetRoute = resolveOnboardingFinishRoute()
+      await onboardingStore.completeTour()
+      await router.push(targetRoute)
+    })()
     return
   }
   onboardingStore.nextStep()
 }
 
 function handleClose() {
+  clearElevatedAnchor()
   onboardingStore.closeTour()
 }
 
@@ -293,15 +337,16 @@ watch(stepReady, (ready) => {
 onMounted(() => {
   window.addEventListener('resize', scheduleLayout)
   window.addEventListener('scroll', scheduleLayout, true)
-  window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('keydown', handleKeydown, true)
   resizeObserver = new ResizeObserver(() => scheduleLayout())
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', scheduleLayout)
   window.removeEventListener('scroll', scheduleLayout, true)
-  window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('keydown', handleKeydown, true)
   resizeObserver?.disconnect()
+  clearElevatedAnchor()
   if (repositionTimer) clearTimeout(repositionTimer)
 })
 </script>
@@ -627,5 +672,13 @@ onUnmounted(() => {
     animation: none;
     opacity: 0.8;
   }
+}
+</style>
+
+<style>
+.onboarding-anchor-active {
+  position: relative;
+  z-index: 121;
+  pointer-events: auto;
 }
 </style>
