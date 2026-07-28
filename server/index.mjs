@@ -171,6 +171,36 @@ function hasOnlyKeys(value, allowedKeys) {
   return isRecord(value) && Object.keys(value).every(key => allowedKeys.has(key))
 }
 
+async function updateFeedbackStatusRow(client, feedbackId, status) {
+  try {
+    const updated = await client.query(
+      `UPDATE feedback
+          SET status = $2,
+              seen_at = CASE
+                WHEN $2 = 'open' THEN seen_at
+                WHEN seen_at IS NULL THEN NOW()
+                ELSE seen_at
+              END
+        WHERE id = $1
+        RETURNING id, status, seen_at`,
+      [feedbackId, status],
+    )
+    return updated.rows[0] ?? null
+  } catch (error) {
+    if (error?.code !== '42703') throw error
+    const updated = await client.query(
+      `UPDATE feedback
+          SET status = $2
+        WHERE id = $1
+        RETURNING id, status`,
+      [feedbackId, status],
+    )
+    const row = updated.rows[0]
+    if (!row) return null
+    return { ...row, seen_at: null }
+  }
+}
+
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
 /** 解析可选 providerId；返回 string | null | undefined。undefined 表示格式非法。 */
@@ -1965,23 +1995,13 @@ app.patch('/api/admin/feedback/:id', requireAuth, requireSuperAdmin, asyncRoute(
       [feedbackId],
     )
     if (existing.rowCount === 0) return null
-    const updated = await client.query(
-      `UPDATE feedback
-          SET status = $2,
-              seen_at = CASE
-                WHEN $2 = 'open' THEN seen_at
-                WHEN seen_at IS NULL THEN NOW()
-                ELSE seen_at
-              END
-        WHERE id = $1
-        RETURNING id, status, seen_at`,
-      [feedbackId, status],
-    )
-    await writeAudit(client, request.auth.id, 'feedback.update', existing.rows[0].user_id, {
+    const updated = await updateFeedbackStatusRow(client, feedbackId, status)
+    if (!updated) return null
+    await writeAudit(client, request.auth.id, 'feedback.update', request.auth.id, {
       feedbackId: String(feedbackId),
       status,
     })
-    return updated.rows[0]
+    return updated
   })
   if (!result) {
     response.status(404).json({ error: '反馈不存在。' })

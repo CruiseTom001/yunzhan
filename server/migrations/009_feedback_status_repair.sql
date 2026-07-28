@@ -2,6 +2,11 @@
 ALTER TABLE feedback ADD COLUMN IF NOT EXISTS seen_at TIMESTAMPTZ;
 
 ALTER TABLE feedback DROP CONSTRAINT IF EXISTS feedback_status_check;
+
+UPDATE feedback
+   SET status = 'open'
+ WHERE status NOT IN ('open', 'seen', 'resolved');
+
 ALTER TABLE feedback
   ADD CONSTRAINT feedback_status_check
   CHECK (status IN ('open', 'seen', 'resolved'));
