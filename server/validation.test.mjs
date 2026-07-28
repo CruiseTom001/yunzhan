@@ -3,6 +3,9 @@ import {
   parsePagination,
   validateEmail,
   validateFeedbackStatus,
+  validateOnboardingStatus,
+  validateOnboardingStepId,
+  validateOnboardingVersion,
   validatePassword,
   validateProgressPayload,
   validateUsername,
@@ -118,5 +121,20 @@ describe('validateFeedbackStatus', () => {
     expect(validateFeedbackStatus('pending')).toBeNull()
     expect(validateFeedbackStatus('')).toBeNull()
     expect(validateFeedbackStatus(null)).toBeNull()
+  })
+})
+
+describe('validateOnboarding', () => {
+  it('accepts supported onboarding fields', () => {
+    expect(validateOnboardingStatus('pending')).toBe('pending')
+    expect(validateOnboardingStepId('welcome')).toBe('welcome')
+    expect(validateOnboardingStepId(null)).toBeNull()
+    expect(validateOnboardingVersion(1)).toBe(1)
+  })
+
+  it('rejects invalid onboarding fields', () => {
+    expect(validateOnboardingStatus('done')).toBeNull()
+    expect(validateOnboardingStepId('bad step')).toBeUndefined()
+    expect(validateOnboardingVersion(-1)).toBeNull()
   })
 })

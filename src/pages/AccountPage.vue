@@ -17,6 +17,7 @@ import {
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
+import { useOnboardingStore } from '@/stores/onboarding'
 import {
   changeAccountPassword,
   deleteAccount,
@@ -41,6 +42,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const router = useRouter()
 const authStore = useAuthStore()
 const progressStore = useProgressStore()
+const onboardingStore = useOnboardingStore()
 
 // 资料编辑
 const profileEditor = ref({ username: '', displayName: '' })
@@ -439,6 +441,24 @@ onUnmounted(() => {
         </div>
         <h1 class="text-2xl sm:text-3xl font-semibold text-white">账号设置</h1>
         <p class="text-sm text-gray-500 mt-2">管理个人资料、密码、邮箱、登录会话和数据。</p>
+      </div>
+
+      <div class="card p-5 mb-6" data-tour-id="account-onboarding-replay">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 class="text-sm font-medium text-gray-200">新手导览</h2>
+            <p class="text-xs text-gray-500 mt-2 leading-6">
+              重新查看云栈主要功能入口与学习闭环说明。手动重放不会在其他设备上再次自动弹出。
+            </p>
+          </div>
+          <button
+            type="button"
+            class="secondary-button h-10 shrink-0"
+            @click="onboardingStore.startManualTour()"
+          >
+            重新开始新手教程
+          </button>
+        </div>
       </div>
 
       <!-- 资料卡片 -->

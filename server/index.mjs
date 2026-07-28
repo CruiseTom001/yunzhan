@@ -11,6 +11,7 @@ import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { persistFeedbackStatus } from './feedback-status.mjs'
+import { CURRENT_TOUR_VERSION, fetchOnboardingState, toOnboardingResponse } from './onboarding.mjs'
 import { AI_EXPORT_INPUT_MAX_LENGTH, listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import {
   buildDateRangeLabel,
@@ -28,6 +29,9 @@ import {
   validateDisplayName,
   validateEmail,
   validateFeedbackStatus,
+  validateOnboardingStatus,
+  validateOnboardingStepId,
+  validateOnboardingVersion,
   validatePassword,
   validateProgressPayload,
   validateRole,
@@ -544,8 +548,9 @@ app.post('/api/auth/register', asyncRoute(async (request, response) => {
       const passwordHash = await bcrypt.hash(password, 12)
       const userResult = await client.query(
         `INSERT INTO users
-          (id, username, display_name, email, email_verified_at, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, NOW(), $5, 'user', 'active')
+          (id, username, display_name, email, email_verified_at, password_hash, role, status,
+           onboarding_status, onboarding_version)
+         VALUES ($1, $2, $3, $4, NOW(), $5, 'user', 'active', 'pending', 0)
          RETURNING *`,
         [randomUUID(), username, displayName, email, passwordHash],
       )
@@ -1090,6 +1095,98 @@ app.delete('/api/account', requireAuth, asyncRoute(async (request, response) => 
 app.get('/api/auth/me', requireAuth, (request, response) => {
   response.json({ user: request.auth })
 })
+
+app.get('/api/me/onboarding', requireAuth, asyncRoute(async (request, response) => {
+  const row = await fetchOnboardingState(pool, request.auth.id)
+  if (!row) {
+    response.status(404).json({ error: '用户不存在。' })
+    return
+  }
+  response.json(toOnboardingResponse(row))
+}))
+
+app.patch('/api/me/onboarding', requireAuth, asyncRoute(async (request, response) => {
+  if (!isRecord(request.body)) {
+    response.status(400).json({ error: '引导状态参数无效。' })
+    return
+  }
+  const allowedKeys = new Set(['status', 'stepId', 'version'])
+  if (!hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '引导状态参数无效。' })
+    return
+  }
+  if (Object.keys(request.body).length === 0) {
+    response.status(400).json({ error: '请至少提供一个要更新的字段。' })
+    return
+  }
+
+  const nextStatus = request.body.status === undefined
+    ? undefined
+    : validateOnboardingStatus(request.body.status)
+  const nextStepId = request.body.stepId === undefined
+    ? undefined
+    : validateOnboardingStepId(request.body.stepId)
+  const nextVersion = request.body.version === undefined
+    ? undefined
+    : validateOnboardingVersion(request.body.version)
+
+  if (request.body.status !== undefined && !nextStatus) {
+    response.status(400).json({ error: '引导状态无效。' })
+    return
+  }
+  if (request.body.stepId !== undefined && nextStepId === undefined) {
+    response.status(400).json({ error: '引导步骤无效。' })
+    return
+  }
+  if (request.body.version !== undefined && nextVersion === null) {
+    response.status(400).json({ error: '引导版本无效。' })
+    return
+  }
+
+  const fields = []
+  const values = []
+  let index = 1
+
+  function addField(column, value) {
+    fields.push(`${column} = $${index}`)
+    values.push(value)
+    index += 1
+  }
+
+  if (nextStatus) {
+    addField('onboarding_status', nextStatus)
+    if (nextStatus === 'skipped' || nextStatus === 'completed') {
+      addField('onboarding_step', null)
+      addField('onboarding_version', CURRENT_TOUR_VERSION)
+    }
+  }
+  if (nextStepId !== undefined) {
+    if (nextStatus === 'skipped' || nextStatus === 'completed') {
+      // status update above already cleared step
+    } else {
+      addField('onboarding_step', nextStepId)
+    }
+  }
+  if (nextVersion !== undefined && nextVersion !== null && !nextStatus) {
+    addField('onboarding_version', nextVersion)
+  }
+
+  addField('onboarding_updated_at', new Date())
+  values.push(request.auth.id)
+
+  const result = await pool.query(
+    `UPDATE users
+        SET ${fields.join(', ')}
+      WHERE id = $${index}
+      RETURNING onboarding_status, onboarding_version, onboarding_step, onboarding_updated_at`,
+    values,
+  )
+  if (result.rowCount === 0) {
+    response.status(404).json({ error: '用户不存在。' })
+    return
+  }
+  response.json(toOnboardingResponse(result.rows[0]))
+}))
 
 app.get('/api/progress', requireAuth, asyncRoute(async (request, response) => {
   const result = await pool.query(
@@ -1656,10 +1753,12 @@ app.post('/api/admin/users', requireAuth, requireSuperAdmin, asyncRoute(async (r
   try {
     const user = await withTransaction(async (client) => {
       const result = await client.query(
-        `INSERT INTO users (id, username, display_name, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users
+          (id, username, display_name, password_hash, role, status,
+           onboarding_status, onboarding_version, onboarding_updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'completed', $7, NOW())
          RETURNING *`,
-        [randomUUID(), username, displayName, passwordHash, role, status],
+        [randomUUID(), username, displayName, passwordHash, role, status, CURRENT_TOUR_VERSION],
       )
       await writeAudit(client, request.auth.id, 'admin.user.create', result.rows[0].id, { username, role, status })
       return result.rows[0]

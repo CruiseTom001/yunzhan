@@ -156,7 +156,7 @@ onUnmounted(() => {
         <p class="text-gray-600 text-sm font-mono">新手先按推荐顺序学；已有基础再用筛选自由选择，共 {{ courseIndex.length }} 门课程</p>
       </div>
 
-      <section class="learning-order mb-8" aria-labelledby="learning-order-title">
+      <section class="learning-order mb-8" aria-labelledby="learning-order-title" data-tour-id="courses-beginner-path">
         <div class="learning-order-header">
           <div>
             <div class="learning-order-kicker">

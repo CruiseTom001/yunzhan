@@ -224,6 +224,28 @@ export function validateFeedbackStatus(value) {
   return null
 }
 
+const ONBOARDING_STATUS_VALUES = new Set(['pending', 'skipped', 'completed'])
+const ONBOARDING_STEP_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
+
+export function validateOnboardingStatus(value) {
+  if (typeof value !== 'string') return null
+  const status = value.trim()
+  return ONBOARDING_STATUS_VALUES.has(status) ? status : null
+}
+
+export function validateOnboardingStepId(value) {
+  if (value === null) return null
+  if (typeof value !== 'string') return undefined
+  const stepId = value.trim()
+  if (stepId.length === 0) return null
+  return ONBOARDING_STEP_PATTERN.test(stepId) ? stepId : undefined
+}
+
+export function validateOnboardingVersion(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 100) return null
+  return value
+}
+
 export function validateUuid(value) {
   return typeof value === 'string' && UUID_PATTERN.test(value) ? value : null
 }

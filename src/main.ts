@@ -5,6 +5,7 @@ import App from './App.vue'
 import './style.css'
 import { useProgressStore } from './stores/progress'
 import { useAuthStore } from './stores/auth'
+import { useOnboardingStore } from './stores/onboarding'
 import { buildUnauthenticatedGuardRedirect } from './utils/authRedirect'
 
 const app = createApp(App)
@@ -14,6 +15,7 @@ app.use(pinia)
 async function bootstrap() {
   const authStore = useAuthStore()
   const progressStore = useProgressStore()
+  const onboardingStore = useOnboardingStore()
   const authReady = authStore.initialize()
 
   router.beforeEach(async (to) => {
@@ -39,14 +41,23 @@ async function bootstrap() {
   await authReady
   if (authStore.user) {
     await progressStore.bindAccount(authStore.user.id, authStore.user.displayName)
+    await onboardingStore.initialize()
   } else {
     await progressStore.unbindAccount()
+    onboardingStore.resetForLogout()
   }
 
   await router.isReady()
   const savedRoute = progressStore.progress.lastRoute
   const isDefaultEntry = router.currentRoute.value.fullPath === '/'
-  if (authStore.user && isDefaultEntry && savedRoute && savedRoute !== '/' && !savedRoute.startsWith('/login')) {
+  if (
+    authStore.user
+    && !onboardingStore.shouldDeferLastRouteRestore
+    && isDefaultEntry
+    && savedRoute
+    && savedRoute !== '/'
+    && !savedRoute.startsWith('/login')
+  ) {
     await router.replace(savedRoute)
   }
 
