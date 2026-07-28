@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parsePagination,
   validateEmail,
+  validateFeedbackStatus,
   validatePassword,
   validateProgressPayload,
   validateUsername,
@@ -103,5 +104,19 @@ describe('cloud progress validation', () => {
       createdAt: index,
     }))
     expect(validateProgressPayload(progress)).toBe(false)
+  })
+})
+
+describe('validateFeedbackStatus', () => {
+  it('accepts supported feedback statuses', () => {
+    expect(validateFeedbackStatus('open')).toBe('open')
+    expect(validateFeedbackStatus('seen')).toBe('seen')
+    expect(validateFeedbackStatus('resolved')).toBe('resolved')
+  })
+
+  it('rejects invalid feedback statuses', () => {
+    expect(validateFeedbackStatus('pending')).toBeNull()
+    expect(validateFeedbackStatus('')).toBeNull()
+    expect(validateFeedbackStatus(null)).toBeNull()
   })
 })

@@ -123,7 +123,11 @@ async function changeStatus(status: FeedbackStatus) {
   detailError.value = ''
   try {
     await updateFeedbackStatus(detailEntry.value.id, status)
-    detailEntry.value = { ...detailEntry.value, status }
+    detailEntry.value = {
+      ...detailEntry.value,
+      status,
+      seenAt: status === 'open' ? detailEntry.value.seenAt : (detailEntry.value.seenAt ?? Date.now()),
+    }
     await loadFeedbacks()
   } catch (error: unknown) {
     detailError.value = errorMessage(error, '状态更新失败。')

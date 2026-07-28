@@ -26,6 +26,7 @@ import {
   parsePagination,
   validateDisplayName,
   validateEmail,
+  validateFeedbackStatus,
   validatePassword,
   validateProgressPayload,
   validateRole,
@@ -1949,33 +1950,48 @@ app.patch('/api/admin/feedback/:id', requireAuth, requireSuperAdmin, asyncRoute(
     return
   }
   const allowedKeys = new Set(['status'])
-  if (!hasOnlyKeys(request.body, allowedKeys)) {
+  if (!isRecord(request.body) || !hasOnlyKeys(request.body, allowedKeys) || request.body.status === undefined) {
     response.status(400).json({ error: '反馈更新参数无效。' })
     return
   }
-  const status = typeof request.body.status === 'string' ? request.body.status.trim() : ''
-  if (!['open', 'seen', 'resolved'].includes(status)) {
+  const status = validateFeedbackStatus(request.body.status)
+  if (!status) {
     response.status(400).json({ error: '反馈状态无效。' })
     return
   }
   const result = await withTransaction(async (client) => {
+    const existing = await client.query(
+      'SELECT id, user_id FROM feedback WHERE id = $1 FOR UPDATE',
+      [feedbackId],
+    )
+    if (existing.rowCount === 0) return null
     const updated = await client.query(
       `UPDATE feedback
           SET status = $2,
-              seen_at = CASE WHEN $2 <> 'open' AND seen_at IS NULL THEN NOW() ELSE seen_at END
+              seen_at = CASE
+                WHEN $2 = 'open' THEN seen_at
+                WHEN seen_at IS NULL THEN NOW()
+                ELSE seen_at
+              END
         WHERE id = $1
-        RETURNING id, status`,
+        RETURNING id, status, seen_at`,
       [feedbackId, status],
     )
-    if (updated.rowCount === 0) return null
-    await writeAudit(client, request.auth.id, 'feedback.update', request.auth.id, { feedbackId, status })
+    await writeAudit(client, request.auth.id, 'feedback.update', existing.rows[0].user_id, {
+      feedbackId: String(feedbackId),
+      status,
+    })
     return updated.rows[0]
   })
   if (!result) {
     response.status(404).json({ error: '反馈不存在。' })
     return
   }
-  response.json({ ok: true, status: result.status })
+  response.json({
+    ok: true,
+    status: result.status,
+    seenAt: result.seen_at ? new Date(result.seen_at).getTime() : null,
+  })
 }))
 
 app.get('/api/announcements/latest', requireAuth, asyncRoute(async (request, response) => {
@@ -2450,6 +2466,18 @@ function setDocxResponse(response, buffer, dateRangeLabel) {
   response.setHeader('Content-Length', buffer.length)
   response.end(buffer)
 }
+
+app.use((error, _request, response, next) => {
+  if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+    response.status(400).json({ error: '请求体 JSON 无效。' })
+    return
+  }
+  if (error?.code === '23514') {
+    response.status(409).json({ error: '反馈状态不符合数据库约束，请稍后重试。' })
+    return
+  }
+  next(error)
+})
 
 app.use((error, _request, response, _next) => {
   if (error?.message === 'origin_not_allowed') {

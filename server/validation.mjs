@@ -217,6 +217,13 @@ export function validateStatus(value) {
   return value === 'active' || value === 'disabled' ? value : null
 }
 
+export function validateFeedbackStatus(value) {
+  if (typeof value !== 'string') return null
+  const status = value.trim()
+  if (status === 'open' || status === 'seen' || status === 'resolved') return status
+  return null
+}
+
 export function validateUuid(value) {
   return typeof value === 'string' && UUID_PATTERN.test(value) ? value : null
 }
