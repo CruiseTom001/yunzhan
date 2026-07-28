@@ -6,6 +6,8 @@ import {
   isOnboardingBlockingAnnouncements,
   matchesOnboardingRoute,
   onboardingSteps,
+  resolveFirstBeginnerPathLab,
+  resolveOnboardingStepRoute,
   shouldAutoStartOnboarding,
 } from '@/utils/onboardingSteps'
 
@@ -29,18 +31,28 @@ describe('onboardingSteps', () => {
     expect(getOnboardingStepIndex('terminal-console', 'full')).toBeGreaterThan(0)
   })
 
-  it('matches course detail routes for chapter steps', () => {
+  it('matches course detail routes exactly for chapter steps', () => {
     const chapterStep = onboardingSteps.find(step => step.id === 'course-chapters')
     expect(chapterStep).toBeTruthy()
-    expect(matchesOnboardingRoute(chapterStep!.route, '/course/computer-basics/chapter/1')).toBe(true)
+    expect(matchesOnboardingRoute(chapterStep!.route, '/course/computer-basics/chapter/0')).toBe(true)
+    expect(matchesOnboardingRoute(chapterStep!.route, '/course/computer-basics/chapter/1')).toBe(false)
     expect(matchesOnboardingRoute('/courses', '/course/computer-basics/chapter/0')).toBe(false)
   })
 
-  it('keeps lab step informational when anchor is missing', () => {
+  it('routes lab and full-mode complete steps to the first beginner-path lab chapter', () => {
+    const labTarget = resolveFirstBeginnerPathLab()
     const labStep = onboardingSteps.find(step => step.id === 'course-lab')
-    expect(labStep?.skipIfAnchorMissing).toBe(true)
-    expect(labStep?.fallbackAnchorId).toBeUndefined()
-    expect(labStep?.missingDescription).toContain('交互式实验')
+    const completeStep = onboardingSteps.find(step => step.id === 'course-complete')
+
+    expect(labTarget).toEqual({ courseId: 'computer-basics', chapterIndex: 1 })
+    expect(labStep?.route).toBe(`/course/${labTarget.courseId}/chapter/${labTarget.chapterIndex}`)
+    expect(labStep?.autoNavigate).toBe(true)
+    expect(labStep?.navigationMessage).toBe('正在打开带实验的章节…')
+    expect(labStep?.skipIfAnchorMissing).toBeUndefined()
+    expect(resolveOnboardingStepRoute(completeStep!, 'full'))
+      .toBe(`/course/${labTarget.courseId}/chapter/${labTarget.chapterIndex}`)
+    expect(resolveOnboardingStepRoute(completeStep!, 'quick'))
+      .toBe('/course/computer-basics/chapter/0')
   })
 
   it('auto-starts only for pending new users on normal routes', () => {

@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, X } from 'lucide-vue-next'
 import { useOnboardingStore } from '@/stores/onboarding'
-import { matchesOnboardingRoute, type OnboardingStepDefinition } from '@/utils/onboardingSteps'
+import { matchesOnboardingRoute, resolveOnboardingStepRoute, type OnboardingStepDefinition } from '@/utils/onboardingSteps'
 
 const MIN_HIGHLIGHT_SIZE = 48
 
@@ -28,7 +28,7 @@ const displayTitle = computed(() => {
   return step.value.title
 })
 const displayDescription = computed(() => {
-  if (!stepReady.value) return '请稍候，正在定位讲解区域…'
+  if (!stepReady.value) return '请稍候，正在准备教程内容…'
   if (informationalMode.value && step.value.missingDescription) return step.value.missingDescription
   return step.value.description
 })
@@ -179,13 +179,14 @@ async function prepareCurrentStep() {
   const token = ++prepareToken
   const currentStep = step.value
   const loadingMessage = currentStep.navigationMessage
-    ?? (currentStep.autoNavigate ? '正在打开页面…' : '正在定位讲解区域…')
+    ?? (currentStep.autoNavigate ? '正在打开页面…' : '正在打开讲解位置…')
 
   enterLoadingState(loadingMessage)
 
   try {
-    if (currentStep.autoNavigate && !matchesOnboardingRoute(currentStep.route, route.fullPath)) {
-      await router.push(currentStep.route)
+    const targetRoute = resolveOnboardingStepRoute(currentStep, onboardingStore.tourMode)
+    if (currentStep.autoNavigate && !matchesOnboardingRoute(targetRoute, route.fullPath)) {
+      await router.push(targetRoute)
       if (token !== prepareToken) return
     }
 

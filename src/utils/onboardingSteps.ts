@@ -1,4 +1,5 @@
 import { beginnerPathCourseIds } from '@/data/beginner-path'
+import { labTasks } from '@/data/labs'
 
 export const CURRENT_TOUR_VERSION = 1
 
@@ -24,6 +25,24 @@ export interface OnboardingStepDefinition {
 }
 
 const firstBeginnerCourseId = beginnerPathCourseIds[0] ?? 'computer-basics'
+
+export function resolveFirstBeginnerPathLab(): { courseId: string; chapterIndex: number } {
+  for (const courseId of beginnerPathCourseIds) {
+    const firstLab = labTasks
+      .filter(task => task.courseId === courseId)
+      .sort((left, right) => left.chapterIndex - right.chapterIndex)[0]
+    if (firstLab) {
+      return { courseId: firstLab.courseId, chapterIndex: firstLab.chapterIndex }
+    }
+  }
+  return { courseId: 'computer-basics', chapterIndex: 1 }
+}
+
+const firstBeginnerPathLab = resolveFirstBeginnerPathLab()
+const firstLabCourseId = firstBeginnerPathLab.courseId
+const firstLabChapterIndex = firstBeginnerPathLab.chapterIndex
+const introChapterRoute = `/course/${firstBeginnerCourseId}/chapter/0`
+const labChapterRoute = `/course/${firstLabCourseId}/chapter/${firstLabChapterIndex}`
 
 export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   {
@@ -61,7 +80,7 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   },
   {
     id: 'course-chapters',
-    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    route: introChapterRoute,
     anchorId: 'course-chapter-nav',
     fallbackAnchorId: 'nav-courses',
     title: '用目录切换章节',
@@ -73,7 +92,7 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   },
   {
     id: 'course-content',
-    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    route: introChapterRoute,
     anchorId: 'course-content-intro',
     fallbackAnchorId: 'course-chapter-nav',
     title: '先读懂知识点',
@@ -84,20 +103,19 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   },
   {
     id: 'course-lab',
-    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    route: labChapterRoute,
     anchorId: 'course-lab-section',
+    fallbackAnchorId: 'course-content-intro',
     title: '动手做实验',
-    description: '在这里按步骤操作。终端里执行的命令会参与判题，请真实完成每一步。',
+    description: '这里是交互式实验区。按步骤执行命令，系统会根据真实命令记录判断是否完成。',
     scope: 'page-detail',
     audience: 'detail',
-    autoNavigate: false,
-    skipIfAnchorMissing: true,
-    missingTitle: '交互式实验',
-    missingDescription: '本章暂无实验。后续实战章节会出现交互式实验，到时在章节底部按步骤操作即可。',
+    autoNavigate: true,
+    navigationMessage: '正在打开带实验的章节…',
   },
   {
     id: 'course-complete',
-    route: `/course/${firstBeginnerCourseId}/chapter/0`,
+    route: introChapterRoute,
     anchorId: 'course-mark-complete',
     fallbackAnchorId: 'course-content-intro',
     title: '标记本章已学完',
@@ -246,6 +264,16 @@ export const onboardingSteps: readonly OnboardingStepDefinition[] = [
   },
 ] as const
 
+export function resolveOnboardingStepRoute(
+  step: OnboardingStepDefinition,
+  mode: OnboardingTourMode,
+): string {
+  if (step.id === 'course-complete' && mode === 'full') {
+    return labChapterRoute
+  }
+  return step.route
+}
+
 export function getOnboardingStepsForMode(mode: OnboardingTourMode): OnboardingStepDefinition[] {
   if (mode === 'full') return [...onboardingSteps]
   return onboardingSteps.filter(step => step.audience === 'quick')
@@ -273,6 +301,7 @@ export function matchesOnboardingRoute(stepRoute: string, currentFullPath: strin
   const target = stepRoute.split('?')[0].replace(/\/$/, '') || '/'
   const current = currentFullPath.split('?')[0].replace(/\/$/, '') || '/'
   if (current === target) return true
+  if (/\/chapter\/\d+$/.test(target)) return false
   const coursePrefix = /^\/course\/[^/]+/.exec(target)
   if (coursePrefix && current.startsWith(coursePrefix[0])) return true
   return false
