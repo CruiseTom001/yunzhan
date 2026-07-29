@@ -75,3 +75,9 @@
 - 提交前检查变更清单，安装包和 `release/` 产物不进入 Git；可复现的图标与构建脚本可以提交。
 - 最终说明必须包含：行为变化、验证命令、未执行检查、兼容性影响和遗留风险。
 - 若必须偏离本规范，先说明原因、影响和替代保护措施，并取得用户明确同意。
+
+## 9. 发布后自动公告草稿规则
+
+- 桌面端发版必须通过 `npm run release:desktop` 完成；禁止绕过该脚本而仅执行 `gh release create`，以确保每次 GitHub Release 成功后自动生成 `desktop_release` 的 `active=false` 公告草稿。
+- 网站端每次推送至 `main` 触发 Vercel 部署时，构建命令已自动执行 `server/ensure-release-announcement.mjs` 生成 `web_release` 的 `active=false` 公告草稿；不得修改 `vercel:build` 移除该步骤。
+- 任何发布后若发现草稿缺失，须先检查发布脚本与构建日志，而非手动补写，以保证流程幂等可重复。
