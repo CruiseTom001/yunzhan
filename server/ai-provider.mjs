@@ -401,7 +401,7 @@ export async function requestStudyNoteAi({
   const rawText = await readLimitedResponseText(response)
   if (!response.ok) {
     const error = new Error(`AI 供应商返回错误：HTTP ${response.status}。`)
-    error.statusCode = 502
+    error.statusCode = response.status >= 400 && response.status < 600 ? response.status : 502
     throw error
   }
 

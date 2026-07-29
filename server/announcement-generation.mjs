@@ -103,18 +103,48 @@ function sanitizeGenerationError(error) {
     .slice(0, GENERATION_ERROR_MAX_LENGTH)
 }
 
-export function resolveAnnouncementAiProviderId(environment = process.env) {
+const ANNOUNCEMENT_AI_MAX_ATTEMPTS = 3
+const ANNOUNCEMENT_AI_RETRY_DELAY_MS = 1500
+const TRANSIENT_AI_STATUS_CODES = new Set([429, 503, 504])
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isTransientAiError(error) {
+  const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : null
+  if (statusCode !== null && TRANSIENT_AI_STATUS_CODES.has(statusCode)) return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /HTTP (429|503|504)/.test(message)
+}
+
+export function resolveAnnouncementAiProviderCandidates(environment = process.env) {
   const explicit = environment.ANNOUNCEMENT_AI_PROVIDER_ID
-  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim()
+  if (typeof explicit === 'string' && explicit.trim()) return [explicit.trim()]
   const providers = loadServerAiProviders(environment)
+  if (providers.length === 0) return []
   const matches = providers.map((provider) => {
     const haystack = `${provider.id} ${provider.name} ${provider.model}`.toLowerCase()
     return { provider, haystack }
   })
+  const ordered = []
+  const pushUnique = (id) => {
+    if (id && !ordered.includes(id)) ordered.push(id)
+  }
+  const deepseekV4Flash = matches.find(item => item.haystack.includes('deepseek-v4-flash'))
+  if (deepseekV4Flash) pushUnique(deepseekV4Flash.provider.id)
   const deepseekFlash = matches.find(item => item.haystack.includes('deepseek') && item.haystack.includes('flash'))
-  if (deepseekFlash) return deepseekFlash.provider.id
+  if (deepseekFlash) pushUnique(deepseekFlash.provider.id)
+  const deepseekChat = matches.find(item => item.haystack.includes('deepseek-chat'))
+  if (deepseekChat) pushUnique(deepseekChat.provider.id)
   const flash = matches.find(item => item.provider.model.toLowerCase().includes('flash'))
-  return flash?.provider.id
+  if (flash) pushUnique(flash.provider.id)
+  for (const provider of providers) pushUnique(provider.id)
+  return ordered
+}
+
+export function resolveAnnouncementAiProviderId(environment = process.env) {
+  return resolveAnnouncementAiProviderCandidates(environment)[0]
 }
 
 function buildProviderSummary(result) {
@@ -141,28 +171,42 @@ export async function polishReleaseAnnouncement({
   environment = process.env,
   fetchImplementation,
   providerId,
+  maxAttempts = ANNOUNCEMENT_AI_MAX_ATTEMPTS,
+  retryDelayMs = ANNOUNCEMENT_AI_RETRY_DELAY_MS,
 }) {
-  const resolvedProviderId = providerId ?? resolveAnnouncementAiProviderId(environment)
-  try {
-    const result = await requestAnnouncementPolish({
-      content: buildAiInput({ category, version, fallbackContent: fallback.content }),
-      environment,
-      fetchImplementation,
-      providerId: resolvedProviderId,
-    })
-    return {
-      content: assertAnnouncementContent(result.content),
-      generatedByAi: true,
-      generationProvider: buildProviderSummary(result),
-      generationError: null,
+  const providerQueue = providerId ? [providerId] : resolveAnnouncementAiProviderCandidates(environment)
+  const candidates = providerQueue.length > 0 ? providerQueue : [undefined]
+  let lastError = null
+
+  for (const candidateId of candidates) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const result = await requestAnnouncementPolish({
+          content: buildAiInput({ category, version, fallbackContent: fallback.content }),
+          environment,
+          fetchImplementation,
+          providerId: candidateId,
+        })
+        return {
+          content: assertAnnouncementContent(result.content),
+          generatedByAi: true,
+          generationProvider: buildProviderSummary(result),
+          generationError: null,
+        }
+      } catch (error) {
+        lastError = error
+        const canRetry = isTransientAiError(error) && attempt < maxAttempts - 1
+        if (!canRetry) break
+        if (retryDelayMs > 0) await sleep(retryDelayMs * (attempt + 1))
+      }
     }
-  } catch (error) {
-    return {
-      content: fallback.content,
-      generatedByAi: false,
-      generationProvider: null,
-      generationError: sanitizeGenerationError(error) || 'AI 润色失败，已使用降级文本。',
-    }
+  }
+
+  return {
+    content: fallback.content,
+    generatedByAi: false,
+    generationProvider: null,
+    generationError: sanitizeGenerationError(lastError) || 'AI 润色失败，已使用降级文本。',
   }
 }
 

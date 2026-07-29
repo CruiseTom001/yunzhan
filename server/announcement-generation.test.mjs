@@ -5,6 +5,7 @@ import {
   generateReleaseAnnouncementDraft,
   repolishAnnouncementDraft,
   resolveAnnouncementAiProviderId,
+  polishReleaseAnnouncement,
 } from './announcement-generation.mjs'
 
 const NOW = new Date('2026-07-29T06:00:00Z')
@@ -217,5 +218,67 @@ describe('repolishAnnouncementDraft', () => {
     expect(result.generationError).toContain('无法连接 AI 供应商')
     expect(client.query).toHaveBeenCalledTimes(2)
     expect(client.query.mock.calls[1][1][1]).toBe('原始草稿正文')
+  })
+})
+
+describe('polishReleaseAnnouncement resilience', () => {
+  it('retries transient HTTP 503 and succeeds', async () => {
+    let attempts = 0
+    const result = await polishReleaseAnnouncement({
+      fallback: buildReleaseAnnouncementFallback({
+        category: 'web_release',
+        version: '1.2.6',
+        changelogEntry: '### 修复\n- 修复公告',
+      }),
+      category: 'web_release',
+      version: '1.2.6',
+      environment: FLASH_ENVIRONMENT,
+      maxAttempts: 3,
+      retryDelayMs: 0,
+      fetchImplementation: async () => {
+        attempts += 1
+        if (attempts < 2) {
+          return new Response('{}', { status: 503 })
+        }
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: '云栈网站 v1.2.6 已发布，本次修复了公告相关问题。' } }],
+        }))
+      },
+    })
+
+    expect(attempts).toBe(2)
+    expect(result.generatedByAi).toBe(true)
+    expect(result.generationError).toBeNull()
+    expect(result.content).toContain('公告')
+  })
+
+  it('falls back to the next provider when flash keeps returning 503', async () => {
+    const requests = []
+    const result = await polishReleaseAnnouncement({
+      fallback: buildReleaseAnnouncementFallback({
+        category: 'web_release',
+        version: '1.2.6',
+      }),
+      category: 'web_release',
+      version: '1.2.6',
+      environment: FLASH_ENVIRONMENT,
+      maxAttempts: 1,
+      retryDelayMs: 0,
+      fetchImplementation: async (url, options) => {
+        requests.push({ url, options })
+        const body = JSON.parse(options.body)
+        if (body.model === 'deepseek-flash') {
+          return new Response('{}', { status: 503 })
+        }
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: '由 deepseek-chat 生成的公告正文。' } }],
+        }))
+      },
+    })
+
+    expect(result.generatedByAi).toBe(true)
+    expect(result.generationProvider).toBe('DeepSeek/deepseek-chat')
+    expect(JSON.parse(requests[0].options.body).model).toBe('deepseek-flash')
+    expect(JSON.parse(requests[1].options.body).model).toBe('deepseek-chat')
   })
 })
