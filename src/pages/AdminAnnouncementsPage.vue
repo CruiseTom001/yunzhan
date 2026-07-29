@@ -24,6 +24,7 @@ import {
   type AdminAnnouncementInput,
   type AnnouncementCategory,
 } from '@/utils/announcementApi'
+import PageState from '@/components/common/PageState.vue'
 
 const PAGE_SIZE = 50
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
@@ -296,8 +297,8 @@ onMounted(() => {
         <AlertCircle class="w-4 h-4 mt-0.5 shrink-0" />{{ actionError }}
       </div>
 
-      <div class="overflow-x-auto border-y border-white/[0.06]">
-        <table class="w-full min-w-[980px] text-left">
+      <div class="overflow-x-auto border-y border-white/[0.06] -mx-4 sm:mx-0">
+        <table class="w-full min-w-[720px] sm:min-w-[980px] text-left">
           <thead class="text-xs text-gray-600 font-mono uppercase">
             <tr class="border-b border-white/[0.06]">
               <th class="py-3 px-3 font-medium">发布时间</th>
@@ -308,14 +309,20 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="divide-y divide-white/[0.05]">
-            <tr v-if="loading && announcements.length === 0">
-              <td colspan="5" class="py-16 text-center text-sm text-gray-600">
-                <LoaderCircle class="w-5 h-5 animate-spin mx-auto mb-3" />
-                正在加载公告
+            <tr v-if="loading || pageError || announcements.length === 0">
+              <td colspan="5" class="py-10 text-center">
+                <PageState
+                  :loading="loading && announcements.length === 0"
+                  loading-text="正在加载公告"
+                  :error="pageError"
+                  error-text="公告列表加载失败，请稍后重试。"
+                  :empty="!loading && !pageError && announcements.length === 0"
+                  empty-text="还没有公告"
+                  empty-hint="发布后用户会在首页看到未读提醒。"
+                  show-retry
+                  @retry="loadAnnouncements"
+                />
               </td>
-            </tr>
-            <tr v-else-if="announcements.length === 0">
-              <td colspan="5" class="py-16 text-center text-sm text-gray-600">还没有公告</td>
             </tr>
             <tr v-for="entry in announcements" v-else :key="entry.id" class="hover:bg-white/[0.015]">
               <td class="py-3 px-3 text-xs text-gray-500 font-mono whitespace-nowrap">{{ formatDate(entry.publishedAt) }}</td>
@@ -380,7 +387,8 @@ onMounted(() => {
                     :disabled="actionBusyId === entry.id"
                     @click="repolishDraft(entry)"
                   >
-                    <Sparkles class="w-4 h-4" />
+                    <LoaderCircle v-if="actionBusyId === entry.id" class="w-4 h-4 animate-spin" />
+                    <Sparkles v-else class="w-4 h-4" />
                   </button>
                   <button
                     v-if="!entry.active"

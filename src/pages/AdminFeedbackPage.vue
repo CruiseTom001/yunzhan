@@ -16,6 +16,7 @@ import {
   type AdminFeedback,
   type FeedbackStatus,
 } from '@/utils/feedbackApi'
+import PageState from '@/components/common/PageState.vue'
 
 const PAGE_SIZE = 50
 const STATUS_FILTERS: { value: '' | FeedbackStatus; label: string }[] = [
@@ -196,8 +197,8 @@ onMounted(() => {
         <AlertCircle class="w-4 h-4 mt-0.5 shrink-0" />{{ pageError }}
       </div>
 
-      <div class="overflow-x-auto border-y border-white/[0.06]">
-        <table class="w-full min-w-[860px] text-left">
+      <div class="overflow-x-auto border-y border-white/[0.06] -mx-4 sm:mx-0">
+        <table class="w-full min-w-[640px] sm:min-w-[860px] text-left">
           <thead class="text-xs text-gray-600 font-mono uppercase">
             <tr class="border-b border-white/[0.06]">
               <th class="py-3 px-3 font-medium">时间</th>
@@ -209,14 +210,19 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="divide-y divide-white/[0.05]">
-            <tr v-if="loading && feedbacks.length === 0">
-              <td colspan="6" class="py-16 text-center text-sm text-gray-600">
-                <LoaderCircle class="w-5 h-5 animate-spin mx-auto mb-3" />
-                正在加载反馈
+            <tr v-if="loading || pageError || feedbacks.length === 0">
+              <td colspan="6" class="py-10 text-center">
+                <PageState
+                  :loading="loading && feedbacks.length === 0"
+                  loading-text="正在加载反馈"
+                  :error="pageError"
+                  error-text="反馈列表加载失败，请稍后重试。"
+                  :empty="!loading && !pageError && feedbacks.length === 0"
+                  empty-text="没有符合条件的反馈"
+                  show-retry
+                  @retry="loadFeedbacks"
+                />
               </td>
-            </tr>
-            <tr v-else-if="feedbacks.length === 0">
-              <td colspan="6" class="py-16 text-center text-sm text-gray-600">没有符合条件的反馈</td>
             </tr>
             <tr v-for="entry in feedbacks" v-else :key="entry.id" class="hover:bg-white/[0.015]">
               <td class="py-3 px-3 text-xs text-gray-500 font-mono whitespace-nowrap">{{ formatDate(entry.createdAt) }}</td>

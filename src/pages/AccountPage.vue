@@ -36,6 +36,8 @@ import {
   type MyFeedback,
 } from '@/utils/feedbackApi'
 import { registerAppQuitGuard } from '@/utils/appQuitGuard'
+import PageState from '@/components/common/PageState.vue'
+import { usePreferencesStore } from '@/stores/preferences'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const PASSWORD_HAS_LETTER = /[A-Za-z]/
@@ -47,6 +49,7 @@ const authStore = useAuthStore()
 const progressStore = useProgressStore()
 const onboardingStore = useOnboardingStore()
 const desktopUpdateStore = useDesktopUpdateStore()
+const preferencesStore = usePreferencesStore()
 
 // 资料编辑
 const profileEditor = ref({ username: '', displayName: '' })
@@ -487,6 +490,29 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div class="card p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 class="text-sm font-medium text-gray-200">动画与动效</h2>
+            <p class="text-xs text-gray-500 mt-2 leading-6">
+              关闭后粒子背景、打字机等动画将降级为静态展示，适合偏好安静界面或设备性能较低的用户。
+            </p>
+          </div>
+          <label class="inline-flex items-center gap-3 text-sm text-gray-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-white/20 bg-transparent text-cyan-400 focus:ring-cyan-400/50"
+              :checked="preferencesStore.reduceMotionOverride ?? preferencesStore.systemPrefersReduceMotion"
+              @change="(event) => {
+                const target = event.target as HTMLInputElement | null
+                if (target) preferencesStore.setReduceMotion(target.checked)
+              }"
+            />
+            减少动画效果
+          </label>
+        </div>
+      </div>
+
       <div v-if="desktopUpdateStore.isDesktop" class="card p-5 mb-6">
         <div class="flex flex-col gap-4">
           <div class="flex items-center justify-between gap-3">
@@ -747,14 +773,14 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-if="sessionsLoading && sessions.length === 0" class="py-10 text-center text-sm text-gray-600">
-          <LoaderCircle class="w-5 h-5 animate-spin mx-auto mb-3" />正在加载会话
+        <div v-if="sessionsLoading && sessions.length === 0" class="py-4">
+          <PageState loading loading-text="正在加载会话" />
         </div>
-        <div v-else-if="sessionsError" class="form-error" role="alert">
-          <AlertCircle class="w-4 h-4 shrink-0" />{{ sessionsError }}
+        <div v-else-if="sessionsError" class="py-4">
+          <PageState :error="sessionsError" error-text="会话列表加载失败，请稍后重试。" show-retry @retry="loadSessions" />
         </div>
-        <div v-else-if="sessions.length === 0" class="py-8 text-center text-sm text-gray-600">
-          没有活跃会话
+        <div v-else-if="sessions.length === 0" class="py-4">
+          <PageState empty empty-text="没有活跃会话" :show-retry="false" />
         </div>
         <ul v-else class="divide-y divide-white/[0.05]">
           <li v-for="session in sessions" :key="session.id" class="py-3 flex items-center justify-between gap-4">
@@ -844,14 +870,14 @@ onUnmounted(() => {
         </form>
 
         <div v-if="myFeedbacksOpen" class="mt-5 pt-5 border-t border-white/[0.05]">
-          <div v-if="myFeedbacksLoading" class="text-sm text-gray-600 text-center py-6">
-            <LoaderCircle class="w-5 h-5 animate-spin mx-auto mb-3" />正在加载反馈
+          <div v-if="myFeedbacksLoading" class="py-6">
+            <PageState loading loading-text="正在加载反馈" />
           </div>
-          <div v-else-if="myFeedbacksError" class="form-error" role="alert">
-            <AlertCircle class="w-4 h-4 shrink-0" />{{ myFeedbacksError }}
+          <div v-else-if="myFeedbacksError" class="py-6">
+            <PageState :error="myFeedbacksError" error-text="我的反馈加载失败，请稍后重试。" show-retry @retry="loadMyFeedbacks" />
           </div>
-          <div v-else-if="myFeedbacks.length === 0" class="py-6 text-center text-sm text-gray-600">
-            还没有提交过反馈
+          <div v-else-if="myFeedbacks.length === 0" class="py-6">
+            <PageState empty empty-text="还没有提交过反馈" :show-retry="false" />
           </div>
           <ul v-else class="divide-y divide-white/[0.05]">
             <li v-for="item in myFeedbacks" :key="item.id" class="py-3">

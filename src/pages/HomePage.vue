@@ -9,6 +9,7 @@ import ParticleBg from '@/components/common/ParticleBg.vue'
 import { useProgressStore } from '@/stores/progress'
 import { useAuthStore } from '@/stores/auth'
 import { useAnnouncementsStore } from '@/stores/announcements'
+import { usePreferencesStore } from '@/stores/preferences'
 import {
   isBeginnerPathComplete,
   resolveContinueTarget,
@@ -20,6 +21,7 @@ const progressStore = useProgressStore()
 const onboardingStore = useOnboardingStore()
 const authStore = useAuthStore()
 const announcementsStore = useAnnouncementsStore()
+const preferencesStore = usePreferencesStore()
 const announcementButtonRef = ref<HTMLButtonElement | null>(null)
 const appVersion = __APP_VERSION__
 const pageRoot = ref<HTMLElement | null>(null)
@@ -30,7 +32,7 @@ let typeTimer: ReturnType<typeof setInterval> | null = null
 let revealObserver: IntersectionObserver | null = null
 
 onMounted(() => {
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const reduceMotion = preferencesStore.reduceMotion
   if (reduceMotion) {
     typedText.value = fullText
   }
@@ -362,7 +364,7 @@ const termLines = computed(() => [
             <span
               v-if="announcementsStore.hasUnread"
               class="announcement-badge"
-              aria-label="未读公告数量"
+              :aria-label="`未读公告 ${announcementsStore.unreadBadgeText} 条`"
             >
               {{ announcementsStore.unreadBadgeText }}
             </span>
@@ -416,29 +418,35 @@ const termLines = computed(() => [
         <button
           v-if="continueCourse && !beginnerPathComplete"
           @click="goContinueLearning"
-          class="group flex items-center gap-4 w-full text-left"
+          class="group w-full text-left rounded-lg border border-cyan-400/15 bg-cyan-400/[0.02] p-4 transition-all duration-300 hover:border-cyan-400/25 hover:bg-cyan-400/[0.04]"
+          aria-label="继续上次学习"
         >
-          <div class="w-12 h-12 rounded-lg bg-cyan-400/10 border border-cyan-400/15 flex items-center justify-center font-mono text-cyan-400 text-lg flex-shrink-0">
-            {{ getCourseIconChar(continueCourse.icon) }}
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-white font-semibold text-sm group-hover:text-cyan-400 transition-colors truncate">
-              {{ continueCourse.title }}
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg bg-cyan-400/10 border border-cyan-400/15 flex items-center justify-center font-mono text-cyan-400 text-lg flex-shrink-0">
+              {{ getCourseIconChar(continueCourse.icon) }}
             </div>
-            <div class="text-gray-500 text-xs mt-0.5 font-mono">
-              第 {{ continueChapter + 1 }} 章 · 共 {{ continueCourse.chapterCount }} 章
-            </div>
-            <div class="flex items-center gap-2 mt-1.5">
-              <div class="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-cyan-400/60 rounded-full transition-all"
-                  :style="{ width: `${continueProgress}%` }"
-                ></div>
+            <div class="flex-1 min-w-0">
+              <div class="text-white font-semibold text-sm group-hover:text-cyan-400 transition-colors truncate">
+                {{ continueCourse.title }}
               </div>
-              <span class="text-[10px] text-gray-600 font-mono">{{ continueProgress }}%</span>
+              <div class="text-gray-500 text-xs mt-0.5 font-mono">
+                第 {{ continueChapter + 1 }} 章 · 共 {{ continueCourse.chapterCount }} 章
+              </div>
+              <div class="flex items-center gap-2 mt-1.5">
+                <div class="flex-1 h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+                  <div
+                    class="h-full bg-cyan-400/70 rounded-full transition-all"
+                    :style="{ width: `${continueProgress}%` }"
+                  ></div>
+                </div>
+                <span class="text-[10px] text-gray-600 font-mono">{{ continueProgress }}%</span>
+              </div>
             </div>
+            <ChevronRight class="w-4 h-4 text-gray-700 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
           </div>
-          <ChevronRight class="w-4 h-4 text-gray-700 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+          <p class="mt-2 text-[11px] text-gray-600 font-mono">
+            上次学到第 {{ continueChapter + 1 }} 章，点击继续
+          </p>
         </button>
         <div v-else-if="beginnerPathComplete" class="flex items-center gap-3 text-sm text-emerald-300">
           <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-400">✓</span>

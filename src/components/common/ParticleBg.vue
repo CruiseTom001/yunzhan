@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useTheme } from '@/stores/theme'
+import { usePreferencesStore } from '@/stores/preferences'
 import {
   createParticleBackgroundEngine,
   PARTICLE_BG_MAX_DEVICE_PIXEL_RATIO,
@@ -8,6 +9,7 @@ import {
 } from '@/utils/particleBackground'
 
 const { theme } = useTheme()
+const preferencesStore = usePreferencesStore()
 const canvas = ref<HTMLCanvasElement | null>(null)
 
 let engine: ParticleBackgroundEngine | null = null
@@ -17,8 +19,6 @@ let pointerMoveHandler: ((event: PointerEvent) => void) | null = null
 let pointerLeaveHandler: (() => void) | null = null
 let pointerDownHandler: ((event: PointerEvent) => void) | null = null
 let visibilityHandler: (() => void) | null = null
-let reduceMotionMedia: MediaQueryList | null = null
-let reduceMotionHandler: (() => void) | null = null
 let intersectionObserver: IntersectionObserver | null = null
 
 function stopAnimation(): void {
@@ -65,8 +65,8 @@ function detachInteractionListeners(): void {
 }
 
 function syncReduceMotion(): void {
-  if (!engine || !reduceMotionMedia) return
-  const reduceMotion = reduceMotionMedia.matches
+  if (!engine) return
+  const reduceMotion = preferencesStore.reduceMotion
   engine.setReduceMotion(reduceMotion)
   if (reduceMotion) {
     detachInteractionListeners()
@@ -78,14 +78,17 @@ function syncReduceMotion(): void {
   }
 }
 
+watch(() => preferencesStore.reduceMotion, () => {
+  syncReduceMotion()
+})
+
 onMounted(() => {
   const canvasElement = canvas.value
   if (!canvasElement) return
   const ctx = canvasElement.getContext('2d')
   if (!ctx) return
 
-  reduceMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)')
-  const initialReduceMotion = reduceMotionMedia.matches
+  const initialReduceMotion = preferencesStore.reduceMotion
 
   resizeHandler = () => {
     const pixelRatio = Math.min(window.devicePixelRatio || 1, PARTICLE_BG_MAX_DEVICE_PIXEL_RATIO)
@@ -126,14 +129,9 @@ onMounted(() => {
     startAnimation()
   }
 
-  reduceMotionHandler = () => {
-    syncReduceMotion()
-  }
-
   if (!initialReduceMotion) {
     attachInteractionListeners()
     document.addEventListener('visibilitychange', visibilityHandler)
-    reduceMotionMedia.addEventListener('change', reduceMotionHandler)
   }
 
   intersectionObserver = new IntersectionObserver((entries) => {
@@ -143,7 +141,7 @@ onMounted(() => {
       stopAnimation()
       return
     }
-    if (!document.hidden && !reduceMotionMedia?.matches) {
+    if (!document.hidden && !preferencesStore.reduceMotion) {
       startAnimation()
     }
   }, { threshold: 0.05 })
@@ -187,11 +185,6 @@ onUnmounted(() => {
   if (visibilityHandler) {
     document.removeEventListener('visibilitychange', visibilityHandler)
     visibilityHandler = null
-  }
-  if (reduceMotionMedia && reduceMotionHandler) {
-    reduceMotionMedia.removeEventListener('change', reduceMotionHandler)
-    reduceMotionHandler = null
-    reduceMotionMedia = null
   }
 
   engine?.dispose()
