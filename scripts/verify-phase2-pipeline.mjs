@@ -17,7 +17,10 @@ function runStep(label, command, args, extraEnv = {}) {
 }
 
 runStep('质量门禁 npm run quality', 'npm', ['run', 'quality'])
-runStep('Phase 2 迁移与草稿链路验证', 'node', ['scripts/verify-announcement-phase2.mjs'])
+runStep('Phase 2 迁移与草稿链路验证', 'node', ['scripts/verify-announcement-phase2.mjs'], {
+  DATABASE_URL: '',
+  DB_SSL: '',
+})
 runStep('生产依赖审计 npm audit --omit=dev', 'npm', ['audit', '--omit=dev', '--registry=https://registry.npmjs.org'])
 runStep('Git diff 空白检查', 'git', ['diff', '--check'])
 
