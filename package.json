@@ -28,6 +28,8 @@
     "lint": "eslint . --ext .ts,.vue --max-warnings 0",
     "lint:fix": "eslint . --ext .ts,.vue --fix",
     "test": "vitest run",
+    "verify:phase2": "node scripts/verify-phase2-pipeline.mjs",
+    "verify:phase2:real": "node scripts/verify-announcement-phase2.mjs --real --spawn-local",
     "quality": "npm run policy:check && npm run check && npm run lint && npm run server:check && npm test && npm run build",
     "icon:windows": "node scripts/generate-windows-icon.mjs",
     "release:check": "npm run quality",
@@ -41,7 +43,12 @@
   "build": {
     "appId": "com.yunzhan.app",
     "productName": "云栈",
-    "artifactName": "云栈-Setup-${version}.${ext}",
+    "artifactName": "yunzhan-setup-${version}.${ext}",
+    "publish": {
+      "provider": "github",
+      "owner": "CruiseTom001",
+      "repo": "yunzhan"
+    },
     "directories": {
       "output": "release"
     },
@@ -89,8 +96,9 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "docx": "9.7.1",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.12",
     "dotenv": "^17.4.2",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "lucide-vue-next": "^0.511.0",
@@ -105,6 +113,8 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@embedded-postgres/windows-x64": "^18.1.0-beta.15",
     "@types/node": "^22.15.30",
     "@typescript-eslint/eslint-plugin": "^7.0.1",
     "@typescript-eslint/parser": "^7.0.1",
@@ -117,7 +127,7 @@
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.20.1",
     "png-to-ico": "^3.0.2",
-    "postcss": "^8.4.35",
+    "postcss": "8.5.24",
     "sharp": "^0.35.3",
     "tailwindcss": "^3.4.1",
     "typescript": "~5.5.4",
@@ -127,6 +137,8 @@
     "vue-tsc": "^2.2.0"
   },
   "overrides": {
-    "dompurify": "$dompurify"
+    "dompurify": "$dompurify",
+    "js-yaml": "4.3.0",
+    "postcss": "$postcss"
   }
 }

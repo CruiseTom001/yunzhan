@@ -7,7 +7,7 @@ npm ci
 npm run release:windows
 ```
 
-安装包会生成到 `release/云栈-Setup-<version>.exe`。
+安装包会生成到 `release/yunzhan-setup-<version>.exe`（含 `.blockmap` 与 `latest.yml`）。
 Windows 图标由发布命令根据 `public/favicon.svg` 自动生成。
 
 一键发版（构建 + 上传 GitHub Release + 打印 downloadUrl）：
@@ -21,6 +21,19 @@ npm run release:desktop
 ```powershell
 node scripts/release-desktop.mjs --skip-build
 ```
+
+## 更新公告草稿（Phase 2）
+
+前置条件：生产数据库已执行 `server/migrations/012_announcement_release_generation.sql`；服务端 AI 仅通过环境变量配置（推荐 `AI_PROVIDERS_JSON` 中包含 DeepSeek Flash，或用 `ANNOUNCEMENT_AI_PROVIDER_ID` 指定）。
+
+- 桌面端：`npm run release:desktop` 在 GitHub Release 创建成功后会 best-effort 执行 `scripts/generate-release-announcement.mjs`，生成 `active=false` 的 `desktop_release` 草稿；数据库或 AI 失败只输出警告，不阻断 Release。可用 `--skip-announcement` 跳过。
+- 网站端：Vercel 部署成功后执行：
+
+```powershell
+node scripts/generate-release-announcement.mjs --kind web_release --version <x.y.z> --source-commit <sha>
+```
+
+- 草稿不会自动生效。超管需在 `/admin/announcements` 预览/编辑/必要时重新润色后发布；发布后第一阶段公告按钮、公告中心和最新未读弹窗会按真实未读数推送。
 
 ## 更新规则
 
@@ -38,7 +51,7 @@ node scripts/release-desktop.mjs --skip-build
 2. 在 `CHANGELOG.md` 顶部新增条目，标注功能象限（A/B/C/D）。
 3. 运行 `npm run release:windows`。该命令会通过 `prebuild` 自动调用 `scripts/check-version-sync.cjs`，校验 `package.json` / `CHANGELOG.md` / `release/latest.yml` 三处版本号是否一致；不一致构建中止。
 4. 在超管后台“桌面端版本管理”页面（`/admin/desktop-releases`）新建一条记录，填写 `version` / `minSupported` / `downloadUrl` / `releaseNotes`。桌面端用户启动后会自动拉取最新启用版本并分级提示；个人中心「桌面端与更新」可手动检查。
-5. 将新的 `云栈-Setup-<version>.exe` 上传至 GitHub Release（`npm run release:desktop` 可一键构建并上传），`downloadUrl` 须为 `https://github.com/...` 或 GitHub 资产域名，桌面端通过受控 IPC `app:openExternal` 打开。
+5. 将新的 `yunzhan-setup-<version>.exe`、`yunzhan-setup-<version>.exe.blockmap` 与 `latest.yml` 上传至 GitHub Release（`npm run release:desktop` 可一键构建、校验并上传）。网页端落地页仍通过白名单 HTTPS 地址 `window.open` 下载；桌面端使用 electron-updater 应用内自动更新，不再跳转浏览器。
 6. 将安装包分发给用户覆盖安装。
 
 约束：
@@ -46,4 +59,4 @@ node scripts/release-desktop.mjs --skip-build
 - 三处版本号一致性由 `check-version-sync.cjs` 对账，发版前必须通过。
 - `desktop_releases` 记录由超管维护，前端启动时自动读取；该表为空时桌面端不提示。
 - 应用标识 `com.yunzhan.app` 与产品名保持不变，学习进度位于 Electron `userData` 目录，覆盖安装不清空（同上文“更新规则”第 3 条）。
-- 新增依赖时额外运行 `npm audit --omit=dev`。
+- 当前 Windows 安装包**未配置代码签名**，SmartScreen 可能提示“未知发布者”；覆盖安装不会清空 `userData`，但首次从旧版手动安装到带自动更新器版本仍需用户确认 UAC/安装向导。

@@ -7,10 +7,25 @@ export interface Announcement {
   publishedAt: number
 }
 
+export type AnnouncementCategory = 'general' | 'web_release' | 'desktop_release'
+
+export interface AnnouncementListItem extends Announcement {
+  read: boolean
+  category: AnnouncementCategory
+  version: string | null
+}
+
 export interface AdminAnnouncement extends Announcement {
   active: boolean
   createdAt: number
   updatedAt: number
+  category: AnnouncementCategory
+  version: string | null
+  sourceKey: string | null
+  sourceCommit: string | null
+  generatedByAi: boolean
+  generationProvider: string | null
+  generationError: string | null
 }
 
 export interface AdminAnnouncementInput {
@@ -18,6 +33,9 @@ export interface AdminAnnouncementInput {
   content: string
   active?: boolean
   publishedAt?: number
+  category?: AnnouncementCategory
+  version?: string | null
+  sourceKey?: string | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -44,21 +62,82 @@ function readAnnouncement(value: unknown): Announcement | null {
   }
 }
 
+function readNullableString(value: unknown): string | null | undefined {
+  if (value === null) return null
+  if (typeof value === 'string') return value
+  return undefined
+}
+
 function readAdminAnnouncement(value: unknown): AdminAnnouncement | null {
   if (!isRecord(value)) return null
   const base = readAnnouncement(value)
+  const version = readNullableString(value.version)
+  const sourceKey = readNullableString(value.sourceKey)
+  const sourceCommit = readNullableString(value.sourceCommit)
+  const generationProvider = readNullableString(value.generationProvider)
+  const generationError = readNullableString(value.generationError)
   if (
     !base
     || typeof value.active !== 'boolean'
     || !isTimestamp(value.createdAt)
     || !isTimestamp(value.updatedAt)
+    || !isAnnouncementCategory(value.category)
+    || version === undefined
+    || sourceKey === undefined
+    || sourceCommit === undefined
+    || typeof value.generatedByAi !== 'boolean'
+    || generationProvider === undefined
+    || generationError === undefined
   ) return null
   return {
     ...base,
     active: value.active,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
+    category: value.category,
+    version,
+    sourceKey,
+    sourceCommit,
+    generatedByAi: value.generatedByAi,
+    generationProvider,
+    generationError,
   }
+}
+
+const ANNOUNCEMENT_CATEGORIES = new Set<AnnouncementCategory>([
+  'general',
+  'web_release',
+  'desktop_release',
+])
+
+function isAnnouncementCategory(value: unknown): value is AnnouncementCategory {
+  return typeof value === 'string' && ANNOUNCEMENT_CATEGORIES.has(value as AnnouncementCategory)
+}
+
+function readAnnouncementListItem(value: unknown): AnnouncementListItem | null {
+  if (!isRecord(value)) return null
+  const base = readAnnouncement(value)
+  if (
+    !base
+    || typeof value.read !== 'boolean'
+    || !isAnnouncementCategory(value.category)
+  ) return null
+  let version: string | null = null
+  if (value.version !== null) {
+    if (typeof value.version !== 'string') return null
+    version = value.version
+  }
+  return {
+    ...base,
+    read: value.read,
+    category: value.category,
+    version,
+  }
+}
+
+function readNonNegativeInteger(value: unknown): number | null {
+  if (!Number.isInteger(value) || (value as number) < 0) return null
+  return value as number
 }
 
 function readOk(value: unknown) {
@@ -77,6 +156,31 @@ export async function getLatestUnread() {
 export async function markAnnouncementRead(id: string) {
   const payload = await apiRequest(`/announcements/${encodeURIComponent(id)}/read`, { method: 'POST' })
   if (!readOk(payload)) throw new Error('账号服务返回了无效结果。')
+}
+
+export async function listAnnouncements(input: { limit?: number; offset?: number } = {}) {
+  const params = new URLSearchParams({
+    limit: String(input.limit ?? 20),
+    offset: String(input.offset ?? 0),
+  })
+  const payload = await apiRequest(`/announcements?${params.toString()}`)
+  if (!isRecord(payload) || !Array.isArray(payload.announcements)) {
+    throw new Error('账号服务返回了无效公告列表。')
+  }
+  const total = readNonNegativeInteger(payload.total)
+  const unreadTotal = readNonNegativeInteger(payload.unreadTotal)
+  if (total === null || unreadTotal === null) {
+    throw new Error('账号服务返回了无效公告统计。')
+  }
+  const announcements = payload.announcements.map(readAnnouncementListItem)
+  if (announcements.some(item => item === null)) {
+    throw new Error('公告列表包含无效数据。')
+  }
+  return {
+    announcements: announcements.filter((item): item is AnnouncementListItem => item !== null),
+    total,
+    unreadTotal,
+  }
 }
 
 export async function listAdminAnnouncements(input: { limit?: number; offset?: number } = {}) {
@@ -116,4 +220,22 @@ export async function updateAdminAnnouncement(id: string, input: Partial<AdminAn
   const announcement = readAdminAnnouncement(payload.announcement)
   if (!announcement) throw new Error('账号服务返回了无效公告数据。')
   return announcement
+}
+
+export async function repolishAdminAnnouncement(id: string, input: { providerId?: string | null } = {}) {
+  const payload = await apiRequest(`/admin/announcements/${encodeURIComponent(id)}/repolish`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  if (!isRecord(payload)) throw new Error('账号服务返回了无效公告数据。')
+  const announcement = readAdminAnnouncement(payload.announcement)
+  if (!announcement) throw new Error('账号服务返回了无效公告数据。')
+  return announcement
+}
+
+export async function deleteAdminAnnouncement(id: string) {
+  const payload = await apiRequest(`/admin/announcements/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!readOk(payload)) throw new Error('账号服务返回了无效结果。')
 }

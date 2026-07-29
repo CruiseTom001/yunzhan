@@ -5,31 +5,51 @@
  */
 const { contextBridge, ipcRenderer } = require('electron')
 
-// 白名单通道：每项都必须在 main.cjs 的 registerIpc() 中注册了对应 handler，
-// 否则调用会报 "No handler registered"。
-const allowedChannels = [
+const allowedInvokeChannels = [
   'app:getVersion',
   'app:getApiBaseUrl',
   'app:openDataFolder',
-  'app:openExternal',
   'desktop:apiRequest',
   'ai:polishStudyNote',
   'ai:testProvider',
   'progress:load',
   'progress:save',
   'progress:clear',
+  'updater:getState',
+  'updater:check',
+  'updater:download',
+  'updater:install',
 ]
 
+const UPDATER_EVENT_CHANNEL = 'updater:stateChanged'
+
 contextBridge.exposeInMainWorld('electronAPI', {
-  // 应用信息
   platform: process.platform,
   version: process.versions.electron,
 
-  // IPC 通信（白名单）
   invoke: (channel, ...args) => {
-    if (allowedChannels.includes(channel)) {
+    if (allowedInvokeChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
     }
     return Promise.reject(new Error(`不允许的 IPC 通道: ${channel}`))
+  },
+
+  getUpdaterState: () => ipcRenderer.invoke('updater:getState'),
+
+  checkForDesktopUpdate: () => ipcRenderer.invoke('updater:check'),
+
+  downloadDesktopUpdate: () => ipcRenderer.invoke('updater:download'),
+
+  installDesktopUpdate: () => ipcRenderer.invoke('updater:install'),
+
+  onDesktopUpdaterStateChanged: (listener) => {
+    if (typeof listener !== 'function') {
+      return () => {}
+    }
+    const wrapped = (_event, state) => listener(state)
+    ipcRenderer.on(UPDATER_EVENT_CHANNEL, wrapped)
+    return () => {
+      ipcRenderer.removeListener(UPDATER_EVENT_CHANNEL, wrapped)
+    }
   },
 })

@@ -6,6 +6,8 @@ import {
   DESKTOP_UPDATE_CHECK_INTERVAL_MS,
   DESKTOP_UPDATE_STARTUP_DELAY_MS,
 } from '@/utils/desktopUpdateCheck'
+import { VERSION_SYNC_ERROR_MESSAGE } from '@/utils/desktopUpdaterTypes'
+import type { DesktopUpdaterPublicState } from '@/utils/desktopUpdaterTypes'
 
 vi.mock('@/utils/desktopVersionApi', () => ({
   getDesktopLatestVersion: vi.fn(),
@@ -27,18 +29,86 @@ import { useDesktopUpdateStore } from '@/stores/desktopUpdate'
 const mockedGetLatest = vi.mocked(getDesktopLatestVersion)
 
 const documentListeners = new Map<string, Set<EventListener>>()
+
+const VALID_REMOTE = {
+  version: '1.3.0',
+  minSupported: '1.2.0',
+  downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.3.0/yunzhan-setup-1.3.0.exe',
+  releaseNotes: '新功能',
+}
+
+function createUpdaterState(
+  status: DesktopUpdaterPublicState['status'],
+  extras: Partial<DesktopUpdaterPublicState> = {},
+): DesktopUpdaterPublicState {
+  return {
+    status,
+    version: null,
+    percent: null,
+    transferred: null,
+    total: null,
+    bytesPerSecond: null,
+    errorCode: null,
+    errorMessage: null,
+    ...extras,
+  }
+}
+
+let updaterState = createUpdaterState('idle')
+let stateListeners: Array<(state: DesktopUpdaterPublicState) => void> = []
 let electronInvoke: ReturnType<typeof vi.fn>
+let unsubscribeUpdater: ReturnType<typeof vi.fn>
+
+function emitUpdaterState(state: DesktopUpdaterPublicState) {
+  updaterState = state
+  stateListeners.forEach((listener) => listener(state))
+}
 
 function mockDesktopApi(version = '1.2.5') {
+  updaterState = createUpdaterState('idle')
+  stateListeners = []
+
   electronInvoke = vi.fn(async (channel: string) => {
     if (channel === 'app:getVersion') return version
-    if (channel === 'app:openExternal') return { ok: true }
     return null
   })
+
+  unsubscribeUpdater = vi.fn()
+
+  const api = {
+    invoke: electronInvoke,
+    getUpdaterState: vi.fn(async () => updaterState),
+    checkForDesktopUpdate: vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('checking'))
+      emitUpdaterState(createUpdaterState('available', { version: VALID_REMOTE.version }))
+      return updaterState
+    }),
+    downloadDesktopUpdate: vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('downloading', {
+        version: VALID_REMOTE.version,
+        percent: 50,
+        transferred: 500,
+        total: 1000,
+        bytesPerSecond: 100,
+      }))
+      emitUpdaterState(createUpdaterState('downloaded', { version: VALID_REMOTE.version, percent: 100 }))
+      return updaterState
+    }),
+    installDesktopUpdate: vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('installing', { version: VALID_REMOTE.version }))
+      return updaterState
+    }),
+    onDesktopUpdaterStateChanged: vi.fn((listener: (state: DesktopUpdaterPublicState) => void) => {
+      stateListeners.push(listener)
+      return () => {
+        stateListeners = stateListeners.filter((item) => item !== listener)
+        unsubscribeUpdater()
+      }
+    }),
+  }
+
   vi.stubGlobal('window', {
-    electronAPI: {
-      invoke: electronInvoke,
-    },
+    electronAPI: api,
     open: vi.fn(),
   })
   vi.stubGlobal('document', {
@@ -57,13 +127,6 @@ function mockDesktopApi(version = '1.2.5') {
 function clearDesktopApi() {
   vi.stubGlobal('window', {})
   documentListeners.clear()
-}
-
-const VALID_REMOTE = {
-  version: '1.3.0',
-  minSupported: '1.2.0',
-  downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.3.0/setup.exe',
-  releaseNotes: '新功能',
 }
 
 beforeEach(() => {
@@ -104,8 +167,13 @@ describe('desktopUpdate store', () => {
     mockedGetLatest.mockResolvedValue({
       version: '1.2.5',
       minSupported: '1.2.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/setup.exe',
+      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/yunzhan-setup-1.2.5.exe',
       releaseNotes: '',
+    })
+
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('upToDate'))
+      return updaterState
     })
 
     const store = useDesktopUpdateStore()
@@ -125,8 +193,12 @@ describe('desktopUpdate store', () => {
     mockedGetLatest.mockResolvedValue({
       version: '1.2.5',
       minSupported: '1.2.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/setup.exe',
+      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/yunzhan-setup-1.2.5.exe',
       releaseNotes: '',
+    })
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('upToDate'))
+      return updaterState
     })
 
     const store = useDesktopUpdateStore()
@@ -150,15 +222,19 @@ describe('desktopUpdate store', () => {
 
     resolveRemote?.(VALID_REMOTE)
     await Promise.all([first, second])
-    expect(store.status).toBe('updateAvailable')
+    expect(store.status).toBe('available')
   })
 
   it('shows up to date when local equals remote', async () => {
     mockedGetLatest.mockResolvedValue({
       version: '1.2.5',
       minSupported: '1.2.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/setup.exe',
+      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/yunzhan-setup-1.2.5.exe',
       releaseNotes: '',
+    })
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('upToDate'))
+      return updaterState
     })
 
     const store = useDesktopUpdateStore()
@@ -172,8 +248,12 @@ describe('desktopUpdate store', () => {
     mockedGetLatest.mockResolvedValue({
       version: '1.2.0',
       minSupported: '1.1.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.0/setup.exe',
+      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.0/yunzhan-setup-1.2.0.exe',
       releaseNotes: '',
+    })
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('upToDate'))
+      return updaterState
     })
 
     const store = useDesktopUpdateStore()
@@ -187,7 +267,7 @@ describe('desktopUpdate store', () => {
     const store = useDesktopUpdateStore()
     store.localVersion = '1.2.5'
     await store.checkForUpdates({ source: 'manual', force: true })
-    expect(store.status).toBe('updateAvailable')
+    expect(store.status).toBe('available')
     expect(store.shouldRenderDialog).toBe(true)
     expect(store.noticeMode).toBe('optional')
   })
@@ -228,28 +308,97 @@ describe('desktopUpdate store', () => {
     expect(store.errorMessage).not.toContain('网络')
   })
 
+  it('stops when server version and updater version mismatch', async () => {
+    mockedGetLatest.mockResolvedValue(VALID_REMOTE)
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('available', { version: '1.4.0' }))
+      return updaterState
+    })
+
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    expect(store.status).toBe('error')
+    expect(store.updaterState.errorCode).toBe('version_sync')
+    expect(store.errorMessage).toBe(VERSION_SYNC_ERROR_MESSAGE)
+    expect(store.hasUpdate).toBe(false)
+    expect(store.canDownload).toBe(false)
+    expect(store.dialogVisible).toBe(false)
+  })
+
+  it('enters version_sync when server has no update but GitHub reports available', async () => {
+    mockedGetLatest.mockResolvedValue({
+      version: '1.2.5',
+      minSupported: '1.2.0',
+      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/yunzhan-setup-1.2.5.exe',
+      releaseNotes: '',
+    })
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('available', { version: '1.3.0' }))
+      return updaterState
+    })
+
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    expect(store.status).toBe('error')
+    expect(store.updaterState.errorCode).toBe('version_sync')
+    expect(store.hasUpdate).toBe(false)
+    expect(store.remoteVersion).toBeNull()
+  })
+
+  it('enters version_sync when server has update but GitHub reports upToDate', async () => {
+    mockedGetLatest.mockResolvedValue(VALID_REMOTE)
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('upToDate'))
+      return updaterState
+    })
+
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    expect(store.status).toBe('error')
+    expect(store.updaterState.errorCode).toBe('version_sync')
+    expect(store.accountStatusLabel).not.toContain('当前已是最新版本')
+    expect(store.hasUpdate).toBe(false)
+  })
+
+  it('allows available only when server and GitHub versions match', async () => {
+    mockedGetLatest.mockResolvedValue(VALID_REMOTE)
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    expect(store.status).toBe('available')
+    expect(store.remoteVersion).toBe('1.3.0')
+    expect(store.hasUpdate).toBe(true)
+  })
+
   it('cleans up listeners on dispose', () => {
     const store = useDesktopUpdateStore()
     store.initialize()
     expect(documentListeners.get('visibilitychange')?.size).toBe(1)
     store.dispose()
     expect(documentListeners.get('visibilitychange')?.size ?? 0).toBe(0)
+    expect(unsubscribeUpdater).toHaveBeenCalled()
   })
 })
 
 describe('desktopUpdate timers', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-  })
-
-  it('runs startup check after 3 seconds', async () => {
     mockedGetLatest.mockResolvedValue({
       version: '1.2.5',
       minSupported: '1.2.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/setup.exe',
+      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/yunzhan-setup-1.2.5.exe',
       releaseNotes: '',
     })
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('upToDate'))
+      return updaterState
+    })
+  })
 
+  it('runs startup check after 3 seconds', async () => {
     const store = useDesktopUpdateStore()
     store.initialize()
 
@@ -262,13 +411,6 @@ describe('desktopUpdate timers', () => {
   })
 
   it('schedules periodic check about 6 hours after the last check', async () => {
-    mockedGetLatest.mockResolvedValue({
-      version: '1.2.5',
-      minSupported: '1.2.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/setup.exe',
-      releaseNotes: '',
-    })
-
     const store = useDesktopUpdateStore()
     store.initialize()
     await vi.advanceTimersByTimeAsync(DESKTOP_UPDATE_STARTUP_DELAY_MS)
@@ -284,13 +426,6 @@ describe('desktopUpdate timers', () => {
   })
 
   it('clears startup and periodic timers on dispose', async () => {
-    mockedGetLatest.mockResolvedValue({
-      version: '1.2.5',
-      minSupported: '1.2.0',
-      downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/setup.exe',
-      releaseNotes: '',
-    })
-
     const store = useDesktopUpdateStore()
     store.initialize()
     store.dispose()
@@ -310,7 +445,7 @@ describe('desktopUpdate onboarding interaction', () => {
     store.localVersion = '1.2.5'
     await store.checkForUpdates({ source: 'manual', force: true })
 
-    expect(store.status).toBe('updateAvailable')
+    expect(store.status).toBe('available')
     expect(store.dialogPending).toBe(true)
     expect(store.shouldRenderDialog).toBe(false)
 
@@ -320,102 +455,125 @@ describe('desktopUpdate onboarding interaction', () => {
   })
 })
 
-describe('desktopUpdate openDownload', () => {
-  it('does not open downloads on web runtime', async () => {
-    clearDesktopApi()
-    vi.stubGlobal('window', { open: vi.fn() })
-
-    const store = useDesktopUpdateStore()
-    store.downloadUrl = VALID_REMOTE.downloadUrl
-    await store.openDownload()
-
-    expect(window.open).not.toHaveBeenCalled()
-    expect(store.downloadErrorMessage).toBe('')
-  })
-
-  it('surfaces invalid download url without calling ipc', async () => {
-    const store = useDesktopUpdateStore()
-    store.downloadUrl = 'https://example.com/setup.exe'
-    await store.openDownload()
-
-    expect(electronInvoke).not.toHaveBeenCalled()
-    expect(store.downloadErrorMessage).toContain('版本信息')
-    expect(window.open).not.toHaveBeenCalled()
-  })
-
-  it('surfaces ipc failure without falling back to window.open', async () => {
-    electronInvoke.mockImplementation(async (channel: string) => {
-      if (channel === 'app:openExternal') throw new Error('ipc failed')
-      return null
-    })
-
-    const store = useDesktopUpdateStore()
-    store.downloadUrl = VALID_REMOTE.downloadUrl
-    await store.openDownload()
-
-    expect(store.downloadErrorMessage).toContain('无法打开下载链接')
-    expect(window.open).not.toHaveBeenCalled()
-  })
-
-  it('surfaces ipc ok:false without falling back to window.open', async () => {
-    electronInvoke.mockImplementation(async (channel: string) => {
-      if (channel === 'app:openExternal') return { ok: false }
-      return null
-    })
-
-    const store = useDesktopUpdateStore()
-    store.downloadUrl = VALID_REMOTE.downloadUrl
-    await store.openDownload()
-
-    expect(store.downloadErrorMessage).toContain('无法打开下载链接')
-    expect(window.open).not.toHaveBeenCalled()
-  })
-
-  it('clears download error when starting a new check', async () => {
-    electronInvoke.mockImplementation(async (channel: string) => {
-      if (channel === 'app:openExternal') return { ok: false }
-      return null
-    })
-
-    const store = useDesktopUpdateStore()
-    store.localVersion = '1.2.5'
-    store.downloadUrl = VALID_REMOTE.downloadUrl
-    await store.openDownload()
-    expect(store.downloadErrorMessage).toContain('无法打开下载链接')
-
-    mockedGetLatest.mockResolvedValue({
-      version: '1.2.5',
-      minSupported: '1.2.0',
-      downloadUrl: VALID_REMOTE.downloadUrl,
-      releaseNotes: '',
-    })
-    await store.checkForUpdates({ source: 'manual', force: true })
-    expect(store.downloadErrorMessage).toBe('')
-  })
-
-  it('clears download error when dismissing or closing update notice', async () => {
+describe('desktopUpdate download and install flow', () => {
+  beforeEach(() => {
     mockedGetLatest.mockResolvedValue(VALID_REMOTE)
+  })
+
+  it('transitions available -> downloading -> downloaded via updater IPC', async () => {
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    expect(store.status).toBe('available')
+
+    await store.downloadUpdate()
+    expect(store.status).toBe('downloaded')
+    expect(store.updaterState.percent).toBe(100)
+
+    await store.installUpdate()
+    expect(store.status).toBe('installing')
+  })
+
+  it('prevents duplicate download clicks while busy', async () => {
     const store = useDesktopUpdateStore()
     store.localVersion = '1.2.5'
     await store.checkForUpdates({ source: 'manual', force: true })
 
-    electronInvoke.mockImplementation(async (channel: string) => {
-      if (channel === 'app:openExternal') return { ok: false }
-      return null
+    window.electronAPI!.downloadDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('downloading', { percent: 10 }))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      emitUpdaterState(createUpdaterState('downloaded', { percent: 100 }))
+      return updaterState
     })
-    await store.openDownload()
-    expect(store.downloadErrorMessage).not.toBe('')
+
+    const first = store.downloadUpdate()
+    const second = store.downloadUpdate()
+    await Promise.all([first, second])
+    expect(window.electronAPI!.downloadDesktopUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('only allows install in downloaded state', async () => {
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    await store.installUpdate()
+    expect(window.electronAPI!.installDesktopUpdate).not.toHaveBeenCalled()
+
+    await store.downloadUpdate()
+    await store.installUpdate()
+    expect(window.electronAPI!.installDesktopUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows retry after error', async () => {
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+
+    window.electronAPI!.downloadDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('error', {
+        errorCode: 'download_failed',
+        errorMessage: '下载失败，请稍后重试。',
+      }))
+      return updaterState
+    })
+    await store.downloadUpdate()
+    expect(store.status).toBe('error')
+
+    window.electronAPI!.downloadDesktopUpdate = vi.fn(async () => {
+      emitUpdaterState(createUpdaterState('downloaded', { percent: 100 }))
+      return updaterState
+    })
+    await store.downloadUpdate()
+    expect(store.status).toBe('downloaded')
+  })
+
+  it('allows closing optional dialog while downloading without cancelling download', async () => {
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    store.applyUpdaterState(createUpdaterState('downloading', {
+      version: VALID_REMOTE.version,
+      percent: 20,
+    }))
+    store.syncDialogVisibility()
 
     store.dismissNotice()
-    expect(store.downloadErrorMessage).toBe('')
+    expect(store.dialogVisible).toBe(false)
+    expect(store.status).toBe('downloading')
+  })
 
+  it('blocks closing required dialog while downloading', async () => {
     mockedGetLatest.mockResolvedValue({
       ...VALID_REMOTE,
       minSupported: '1.3.0',
     })
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
     await store.checkForUpdates({ source: 'manual', force: true })
-    await store.openDownload()
+    store.applyUpdaterState(createUpdaterState('downloading', {
+      version: VALID_REMOTE.version,
+      percent: 20,
+    }))
+    store.syncDialogVisibility()
+
     store.closeDialog()
-    expect(store.downloadErrorMessage).toBe('')
+    expect(store.dialogVisible).toBe(true)
+  })
+
+  it('still applies downloaded state after optional dialog was closed during download', async () => {
+    const store = useDesktopUpdateStore()
+    store.initialize()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    store.applyUpdaterState(createUpdaterState('downloading', { percent: 50 }))
+    store.dismissNotice()
+
+    store.applyUpdaterState(createUpdaterState('downloaded', {
+      version: VALID_REMOTE.version,
+      percent: 100,
+    }))
+    expect(store.status).toBe('downloaded')
+    expect(store.hasUpdate).toBe(true)
+    store.dispose()
   })
 })

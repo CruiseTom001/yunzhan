@@ -9,28 +9,52 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Send,
+  Sparkles,
+  Trash2,
   X,
 } from 'lucide-vue-next'
 import {
   createAdminAnnouncement,
+  deleteAdminAnnouncement,
   listAdminAnnouncements,
+  repolishAdminAnnouncement,
   updateAdminAnnouncement,
   type AdminAnnouncement,
   type AdminAnnouncementInput,
+  type AnnouncementCategory,
 } from '@/utils/announcementApi'
 
 const PAGE_SIZE = 50
+const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
+
+const CATEGORY_OPTIONS: Array<{ value: AnnouncementCategory; label: string }> = [
+  { value: 'general', label: '公告' },
+  { value: 'web_release', label: '网站更新' },
+  { value: 'desktop_release', label: '桌面端更新' },
+]
+
+interface EditorState {
+  title: string
+  content: string
+  active: boolean
+  category: AnnouncementCategory
+  version: string
+}
 
 const announcements = ref<AdminAnnouncement[]>([])
 const total = ref(0)
 const offset = ref(0)
 const loading = ref(false)
 const pageError = ref('')
+const actionError = ref('')
+const actionBusyId = ref('')
 
 const editorOpen = ref(false)
 const editorMode = ref<'create' | 'edit'>('create')
 const editingId = ref('')
-const editor = ref({ title: '', content: '', active: true })
+const editingEntry = ref<AdminAnnouncement | null>(null)
+const editor = ref<EditorState>({ title: '', content: '', active: true, category: 'general', version: '' })
 const editorError = ref('')
 const editorSubmitting = ref(false)
 
@@ -38,6 +62,7 @@ const displayStart = computed(() => (total.value === 0 ? 0 : offset.value + 1))
 const displayEnd = computed(() => Math.min(offset.value + announcements.value.length, total.value))
 const canPrev = computed(() => !loading.value && offset.value > 0)
 const canNext = computed(() => !loading.value && offset.value + announcements.value.length < total.value)
+const editingGenerated = computed(() => Boolean(editingEntry.value?.sourceKey))
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
@@ -48,6 +73,22 @@ function formatDate(timestamp: number) {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit',
   }).format(timestamp)
+}
+
+function categoryLabel(category: AnnouncementCategory) {
+  return CATEGORY_OPTIONS.find(option => option.value === category)?.label ?? '公告'
+}
+
+function resetEditor(entry?: AdminAnnouncement) {
+  editor.value = entry
+    ? {
+      title: entry.title,
+      content: entry.content,
+      active: entry.active,
+      category: entry.category,
+      version: entry.version ?? '',
+    }
+    : { title: '', content: '', active: true, category: 'general', version: '' }
 }
 
 async function loadAnnouncements() {
@@ -65,17 +106,19 @@ async function loadAnnouncements() {
 }
 
 function openCreateEditor() {
-  editor.value = { title: '', content: '', active: true }
+  resetEditor()
   editorMode.value = 'create'
   editingId.value = ''
+  editingEntry.value = null
   editorError.value = ''
   editorOpen.value = true
 }
 
 function openEditEditor(entry: AdminAnnouncement) {
-  editor.value = { title: entry.title, content: entry.content, active: entry.active }
+  resetEditor(entry)
   editorMode.value = 'edit'
   editingId.value = entry.id
+  editingEntry.value = entry
   editorError.value = ''
   editorOpen.value = true
 }
@@ -84,14 +127,33 @@ function closeEditor() {
   if (editorSubmitting.value) return
   editorOpen.value = false
   editorError.value = ''
+  editingEntry.value = null
 }
 
 function validateEditor() {
   const title = editor.value.title.trim()
   const content = editor.value.content.trim()
+  const version = editor.value.version.trim()
   if (title.length < 1 || title.length > 120) return '公告标题需为 1-120 个字符。'
   if (content.length < 1 || content.length > 4000) return '公告内容需为 1-4000 个字符。'
+  if (editor.value.category !== 'general' && !VERSION_PATTERN.test(version)) {
+    return '更新类公告需要填写 x.y.z 版本号。'
+  }
+  if (editor.value.category === 'general' && version && !VERSION_PATTERN.test(version)) {
+    return '公告版本需为 x.y.z，或留空。'
+  }
   return ''
+}
+
+function buildEditorInput(): AdminAnnouncementInput {
+  const version = editor.value.version.trim()
+  return {
+    title: editor.value.title.trim(),
+    content: editor.value.content.trim(),
+    active: editor.value.active,
+    category: editor.value.category,
+    version: version || null,
+  }
 }
 
 async function submitEditor() {
@@ -100,11 +162,7 @@ async function submitEditor() {
     editorError.value = validationError
     return
   }
-  const input: AdminAnnouncementInput = {
-    title: editor.value.title.trim(),
-    content: editor.value.content.trim(),
-    active: editor.value.active,
-  }
+  const input = buildEditorInput()
   editorSubmitting.value = true
   editorError.value = ''
   try {
@@ -114,6 +172,7 @@ async function submitEditor() {
       await updateAdminAnnouncement(editingId.value, input)
     }
     editorOpen.value = false
+    editingEntry.value = null
     await loadAnnouncements()
   } catch (error: unknown) {
     editorError.value = errorMessage(error, '公告保存失败。')
@@ -122,13 +181,55 @@ async function submitEditor() {
   }
 }
 
-async function toggleActive(entry: AdminAnnouncement) {
+async function runAnnouncementAction(entry: AdminAnnouncement, action: () => Promise<unknown>, fallback: string) {
+  actionBusyId.value = entry.id
+  actionError.value = ''
   try {
-    await updateAdminAnnouncement(entry.id, { active: !entry.active })
+    await action()
     await loadAnnouncements()
   } catch (error: unknown) {
-    pageError.value = errorMessage(error, '公告状态切换失败。')
+    actionError.value = errorMessage(error, fallback)
+  } finally {
+    actionBusyId.value = ''
   }
+}
+
+async function publishDraft(entry: AdminAnnouncement) {
+  if (entry.active || actionBusyId.value) return
+  await runAnnouncementAction(
+    entry,
+    () => updateAdminAnnouncement(entry.id, { active: true }),
+    '公告发布失败。',
+  )
+}
+
+async function takeOffline(entry: AdminAnnouncement) {
+  if (!entry.active || actionBusyId.value) return
+  await runAnnouncementAction(
+    entry,
+    () => updateAdminAnnouncement(entry.id, { active: false }),
+    '公告下线失败。',
+  )
+}
+
+async function repolishDraft(entry: AdminAnnouncement) {
+  if (entry.active || actionBusyId.value) return
+  await runAnnouncementAction(
+    entry,
+    () => repolishAdminAnnouncement(entry.id),
+    '重新润色失败。',
+  )
+}
+
+async function discardDraft(entry: AdminAnnouncement) {
+  if (entry.active || actionBusyId.value) return
+  const confirmed = window.confirm(`确定放弃草稿「${entry.title}」吗？该操作不可恢复。`)
+  if (!confirmed) return
+  await runAnnouncementAction(
+    entry,
+    () => deleteAdminAnnouncement(entry.id),
+    '放弃草稿失败。',
+  )
 }
 
 function prevPage() {
@@ -158,7 +259,9 @@ onMounted(() => {
             SUPER ADMIN
           </div>
           <h1 class="text-2xl sm:text-3xl font-semibold text-white">公告管理</h1>
-          <p class="text-sm text-gray-500 mt-2">发布与维护面向所有登录用户的公告，用户登录后会自动弹窗展示未读公告。</p>
+          <p class="text-sm text-gray-500 mt-2">
+            发布与维护面向所有登录用户的公告；更新类公告发布后由首页公告按钮、公告中心和未读弹窗推送。
+          </p>
         </div>
         <button
           type="button"
@@ -189,48 +292,107 @@ onMounted(() => {
       <div v-if="pageError" class="flex items-start gap-2 p-4 mb-4 rounded-md border border-red-400/20 bg-red-400/[0.06] text-sm text-red-300" role="alert">
         <AlertCircle class="w-4 h-4 mt-0.5 shrink-0" />{{ pageError }}
       </div>
+      <div v-if="actionError" class="flex items-start gap-2 p-4 mb-4 rounded-md border border-amber-400/20 bg-amber-400/[0.06] text-sm text-amber-300" role="alert">
+        <AlertCircle class="w-4 h-4 mt-0.5 shrink-0" />{{ actionError }}
+      </div>
 
       <div class="overflow-x-auto border-y border-white/[0.06]">
-        <table class="w-full min-w-[760px] text-left">
+        <table class="w-full min-w-[980px] text-left">
           <thead class="text-xs text-gray-600 font-mono uppercase">
             <tr class="border-b border-white/[0.06]">
               <th class="py-3 px-3 font-medium">发布时间</th>
               <th class="py-3 px-3 font-medium">标题</th>
+              <th class="py-3 px-3 font-medium">分类 / 版本</th>
               <th class="py-3 px-3 font-medium">状态</th>
               <th class="py-3 px-3 font-medium text-right">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-white/[0.05]">
             <tr v-if="loading && announcements.length === 0">
-              <td colspan="4" class="py-16 text-center text-sm text-gray-600">
+              <td colspan="5" class="py-16 text-center text-sm text-gray-600">
                 <LoaderCircle class="w-5 h-5 animate-spin mx-auto mb-3" />
                 正在加载公告
               </td>
             </tr>
             <tr v-else-if="announcements.length === 0">
-              <td colspan="4" class="py-16 text-center text-sm text-gray-600">还没有公告</td>
+              <td colspan="5" class="py-16 text-center text-sm text-gray-600">还没有公告</td>
             </tr>
             <tr v-for="entry in announcements" v-else :key="entry.id" class="hover:bg-white/[0.015]">
               <td class="py-3 px-3 text-xs text-gray-500 font-mono whitespace-nowrap">{{ formatDate(entry.publishedAt) }}</td>
-              <td class="py-3 px-3 text-sm text-gray-200 truncate">{{ entry.title }}</td>
+              <td class="py-3 px-3 text-sm text-gray-200">
+                <div class="max-w-[320px]">
+                  <div class="truncate">{{ entry.title }}</div>
+                  <div v-if="entry.sourceKey" class="mt-1 text-[11px] text-gray-600 font-mono truncate">
+                    {{ entry.sourceKey }}<span v-if="entry.sourceCommit"> · {{ entry.sourceCommit.slice(0, 7) }}</span>
+                  </div>
+                  <div v-if="entry.generatedByAi || entry.generationError" class="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span v-if="entry.generatedByAi" class="inline-flex items-center gap-1 text-cyan-300">
+                      <Sparkles class="w-3 h-3" />AI 草稿<span v-if="entry.generationProvider"> · {{ entry.generationProvider }}</span>
+                    </span>
+                    <span v-if="entry.generationError" class="text-amber-400">已降级：{{ entry.generationError }}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3 px-3 text-xs text-gray-400 whitespace-nowrap">
+                <div>{{ categoryLabel(entry.category) }}</div>
+                <div v-if="entry.version" class="mt-1 font-mono text-cyan-400/80">v{{ entry.version }}</div>
+              </td>
               <td class="py-3 px-3">
                 <button
+                  v-if="entry.active"
                   type="button"
-                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium border"
-                  :class="entry.active
-                    ? 'border-emerald-400/30 bg-emerald-400/[0.08] text-emerald-300'
-                    : 'border-white/[0.08] text-gray-500 hover:text-white hover:bg-white/[0.04]'"
-                  :title="entry.active ? '点击下线' : '点击上线'"
-                  @click="toggleActive(entry)"
+                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium border border-emerald-400/30 bg-emerald-400/[0.08] text-emerald-300"
+                  title="点击下线"
+                  :disabled="actionBusyId === entry.id"
+                  @click="takeOffline(entry)"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full" :class="entry.active ? 'bg-emerald-400' : 'bg-gray-600'"></span>
-                  {{ entry.active ? '生效中' : '已下线' }}
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  生效中
                 </button>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium border border-white/[0.08] text-gray-500"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span>
+                  草稿
+                </span>
               </td>
-              <td class="py-3 px-3 text-right">
-                <button type="button" class="icon-action" title="编辑公告" @click="openEditEditor(entry)">
-                  <Pencil class="w-4 h-4" />
-                </button>
+              <td class="py-3 px-3">
+                <div class="flex items-center justify-end gap-1">
+                  <button type="button" class="icon-action" title="预览 / 编辑公告" :disabled="actionBusyId === entry.id" @click="openEditEditor(entry)">
+                    <Pencil class="w-4 h-4" />
+                  </button>
+                  <button
+                    v-if="!entry.active"
+                    type="button"
+                    class="icon-action text-emerald-300"
+                    title="发布草稿"
+                    :disabled="actionBusyId === entry.id"
+                    @click="publishDraft(entry)"
+                  >
+                    <Send class="w-4 h-4" />
+                  </button>
+                  <button
+                    v-if="!entry.active"
+                    type="button"
+                    class="icon-action text-cyan-300"
+                    title="重新润色"
+                    :disabled="actionBusyId === entry.id"
+                    @click="repolishDraft(entry)"
+                  >
+                    <Sparkles class="w-4 h-4" />
+                  </button>
+                  <button
+                    v-if="!entry.active"
+                    type="button"
+                    class="icon-action text-red-300"
+                    title="放弃草稿"
+                    :disabled="actionBusyId === entry.id"
+                    @click="discardDraft(entry)"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -257,33 +419,61 @@ onMounted(() => {
             <div>
               <div class="text-xs text-cyan-400 font-mono mb-1">ANNOUNCEMENT</div>
               <h2 :id="`${editorMode}-announcement-title`" class="text-lg font-semibold text-white">
-                {{ editorMode === 'create' ? '新建公告' : '编辑公告' }}
+                {{ editorMode === 'create' ? '新建公告' : editingGenerated ? '预览 / 编辑更新草稿' : '编辑公告' }}
               </h2>
             </div>
             <button type="button" class="icon-action" title="关闭" @click="closeEditor"><X class="w-4 h-4" /></button>
           </div>
 
           <form class="p-5 space-y-4" @submit.prevent="submitEditor">
+            <div v-if="editingEntry?.sourceKey" class="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3 text-xs text-cyan-200">
+              <div class="font-mono">source_key：{{ editingEntry.sourceKey }}</div>
+              <div v-if="editingEntry.generationProvider" class="mt-1">AI：{{ editingEntry.generationProvider }}</div>
+              <div v-if="editingEntry.generationError" class="mt-1 text-amber-300">降级原因：{{ editingEntry.generationError }}</div>
+            </div>
+
             <label class="form-field">
               <span>标题</span>
               <input v-model="editor.title" type="text" maxlength="120" autocomplete="off" required />
               <small>1-120 个字符</small>
             </label>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label class="form-field">
+                <span>分类</span>
+                <select v-model="editor.category">
+                  <option v-for="option in CATEGORY_OPTIONS" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+                <small>普通用户公告中心会展示该分类</small>
+              </label>
+              <label class="form-field">
+                <span>版本号</span>
+                <input v-model="editor.version" type="text" maxlength="32" autocomplete="off" placeholder="例如 1.2.5" />
+                <small>更新类公告必填；普通公告可留空</small>
+              </label>
+            </div>
+
             <label class="form-field">
               <span>内容</span>
               <textarea
                 v-model="editor.content"
-                rows="6"
+                rows="7"
                 maxlength="4000"
                 class="rounded-md border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50 resize-y"
                 placeholder="支持换行，纯文本展示，不支持 HTML"
               />
               <small>1-4000 个字符，纯文本展示，不会渲染 HTML</small>
             </label>
+
             <label class="flex items-center gap-2 text-xs text-gray-400">
               <input v-model="editor.active" type="checkbox" class="accent-cyan-400" />
-              <span>立即生效（用户登录后会看到该公告）</span>
+              <span>
+                {{ editorMode === 'create' ? '立即生效（用户登录后会看到该公告）' : editor.active ? '保持生效；取消勾选将下线' : '保存后立即生效（等同于发布草稿）' }}
+              </span>
             </label>
+
             <div v-if="editorError" class="form-error" role="alert">
               <AlertCircle class="w-4 h-4 shrink-0" />{{ editorError }}
             </div>
@@ -311,7 +501,7 @@ onMounted(() => {
 }
 
 .modal-panel {
-  @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-edge-card bg-surface-tertiary shadow-2xl;
+  @apply w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-edge-card bg-surface-tertiary shadow-2xl overflow-y-auto;
 }
 
 .modal-header {

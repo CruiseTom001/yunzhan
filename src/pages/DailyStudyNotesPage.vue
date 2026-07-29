@@ -50,6 +50,7 @@ import {
   setActiveLocalAiProvider,
   testAiProviderLocally,
 } from '@/utils/localAiProvider'
+import { createContentDirtyGuard, registerAppQuitGuard } from '@/utils/appQuitGuard'
 
 const notes = ref<StudyNote[]>([])
 const selectedDate = ref(formatLocalDate(new Date()))
@@ -59,6 +60,7 @@ const datePickerButton = ref<HTMLButtonElement | null>(null)
 /** 日历面板当前展示的年月，格式 YYYY-MM */
 const calendarMonthKey = ref(selectedDate.value.slice(0, 7))
 const content = ref('')
+const lastSavedContent = ref('')
 const polishedContent = ref('')
 const currentAiProviderName = ref<string | null>(null)
 const currentAiModel = ref<string | null>(null)
@@ -328,6 +330,7 @@ function setTransientMessage(message: string) {
 
 function loadEditor(note: StudyNote | null) {
   content.value = note?.content ?? ''
+  lastSavedContent.value = (note?.content ?? '').trim()
   polishedContent.value = note?.polishedContent ?? ''
   currentAiProviderName.value = note?.aiProviderName ?? null
   currentAiModel.value = note?.aiModel ?? null
@@ -685,9 +688,15 @@ async function executeExport() {
   }
 }
 
+let unregisterQuitGuard: (() => void) | null = null
+
 onMounted(() => {
   document.addEventListener('click', handleDatePickerDocumentClick)
   document.addEventListener('keydown', handleDatePickerKeydown)
+  unregisterQuitGuard = registerAppQuitGuard(createContentDirtyGuard(
+    () => content.value,
+    () => lastSavedContent.value,
+  ))
   void loadNotes()
   void loadAiProvider()
 })
@@ -695,6 +704,8 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleDatePickerDocumentClick)
   document.removeEventListener('keydown', handleDatePickerKeydown)
+  unregisterQuitGuard?.()
+  unregisterQuitGuard = null
 })
 </script>
 

@@ -1,4 +1,15 @@
+import type { DesktopUpdaterStatus } from '@/utils/desktopUpdaterTypes'
+
 export type UpdateDialogCloseAction = 'close' | 'dismiss'
+
+export function canCloseUpdateDialog(
+  noticeMode: 'optional' | 'required' | null,
+  status: DesktopUpdaterStatus,
+): boolean {
+  if (status === 'installing') return false
+  if (status === 'downloading' && noticeMode === 'required') return false
+  return true
+}
 
 export function resolveUpdateDialogCloseAction(
   noticeMode: 'optional' | 'required' | null,

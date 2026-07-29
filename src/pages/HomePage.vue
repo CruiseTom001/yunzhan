@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, BookOpen, PenTool, BarChart3, Terminal, Zap, Shield, Cloud, ChevronRight, Play, Lock, Unlock, Compass } from 'lucide-vue-next'
+import { ArrowRight, BookOpen, PenTool, BarChart3, Terminal, Zap, Shield, Cloud, ChevronRight, Play, Lock, Unlock, Compass, Megaphone } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
 import { getCourseIconChar } from '@/data/courseIcons'
 import type { Difficulty, CourseIcon } from '@/types'
 import ParticleBg from '@/components/common/ParticleBg.vue'
 import { useProgressStore } from '@/stores/progress'
+import { useAuthStore } from '@/stores/auth'
+import { useAnnouncementsStore } from '@/stores/announcements'
 import {
   isBeginnerPathComplete,
   resolveContinueTarget,
@@ -16,6 +18,9 @@ import { useOnboardingStore } from '@/stores/onboarding'
 const router = useRouter()
 const progressStore = useProgressStore()
 const onboardingStore = useOnboardingStore()
+const authStore = useAuthStore()
+const announcementsStore = useAnnouncementsStore()
+const announcementButtonRef = ref<HTMLButtonElement | null>(null)
 const appVersion = __APP_VERSION__
 const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
@@ -87,6 +92,17 @@ function resetInteractiveSurface(event: PointerEvent) {
   element.style.setProperty('--tilt-x', '0deg')
   element.style.setProperty('--tilt-y', '0deg')
 }
+
+async function openAnnouncementCenter() {
+  if (onboardingStore.isRunning || onboardingStore.blocksAnnouncements) {
+    announcementsStore.centerBlockedMessage = '请先完成或退出新手教程。'
+    return
+  }
+  announcementsStore.centerBlockedMessage = ''
+  await announcementsStore.openCenter()
+}
+
+const showAnnouncementButton = computed(() => authStore.isAuthenticated)
 
 const totalCourses = courseIndex.length
 
@@ -331,7 +347,34 @@ const termLines = computed(() => [
               <span class="text-[11px] font-normal text-cyan-400/70">3 分钟了解云栈</span>
             </span>
           </button>
+          <button
+            v-if="showAnnouncementButton"
+            ref="announcementButtonRef"
+            type="button"
+            data-tour-id="home-announcements-button"
+            class="action-button group relative flex items-center gap-2 px-6 py-3.5 rounded-xl border border-white/10 bg-white/[0.02] text-gray-300 font-medium text-sm hover:bg-white/[0.05] hover:border-white/20 transition-all duration-300"
+            title="查看公告"
+            aria-label="查看公告"
+            @click="openAnnouncementCenter"
+          >
+            <Megaphone class="w-4 h-4 text-gray-400 group-hover:text-cyan-300" aria-hidden="true" />
+            <span>公告</span>
+            <span
+              v-if="announcementsStore.hasUnread"
+              class="announcement-badge"
+              aria-label="未读公告数量"
+            >
+              {{ announcementsStore.unreadBadgeText }}
+            </span>
+          </button>
         </div>
+        <p
+          v-if="announcementsStore.centerBlockedMessage"
+          class="text-sm text-amber-400/90 mb-6 animate-fade-in"
+          role="status"
+        >
+          {{ announcementsStore.centerBlockedMessage }}
+        </p>
 
         <!-- 难度统计 - 六边形风格 -->
         <div class="grid grid-cols-3 gap-3 max-w-xl mx-auto animate-fade-in">
@@ -925,6 +968,10 @@ const termLines = computed(() => [
 
 .action-button:active {
   transform: translateY(1px) scale(0.98);
+}
+
+.announcement-badge {
+  @apply inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full bg-cyan-400 text-[11px] font-semibold text-gray-950 px-1.5;
 }
 
 @media (hover: none), (pointer: coarse) {

@@ -1,85 +1,110 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { Megaphone, X } from 'lucide-vue-next'
-import { useAuthStore } from '@/stores/auth'
+import { useAnnouncementsStore } from '@/stores/announcements'
+import { formatAnnouncementDate } from '@/utils/announcementDisplay'
 import {
-  getLatestUnread,
-  markAnnouncementRead,
-  type Announcement,
-} from '@/utils/announcementApi'
+  lockBodyScroll,
+  trapFocus,
+  unlockBodyScroll,
+} from '@/utils/authDialogFocus'
 
-const authStore = useAuthStore()
-const announcement = ref<Announcement | null>(null)
-const loading = ref(false)
+const store = useAnnouncementsStore()
+const dialogRef = ref<HTMLElement | null>(null)
+const dismissButtonRef = ref<HTMLButtonElement | null>(null)
 const dismissing = ref(false)
-const errorMessage = ref('')
 
-function formatDate(timestamp: number) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  }).format(timestamp)
-}
-
-async function checkLatest() {
-  if (!authStore.isAuthenticated) return
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    announcement.value = await getLatestUnread()
-  } catch (error: unknown) {
-    // 静默失败：公告加载失败不应阻塞用户使用应用
-    errorMessage.value = error instanceof Error ? error.message : ''
-  } finally {
-    loading.value = false
-  }
+function closeOnly() {
+  store.closeLatestModal()
 }
 
 async function dismiss() {
-  if (!announcement.value || dismissing.value) return
+  if (!store.latestAnnouncement || dismissing.value) return
   dismissing.value = true
-  const target = announcement.value
-  // 先乐观关闭，让用户立即看到反馈；后端失败也不重新弹出
-  announcement.value = null
   try {
-    await markAnnouncementRead(target.id)
-  } catch {
-    // 即使标记失败也不影响用户继续操作
+    await store.dismissLatest()
   } finally {
     dismissing.value = false
   }
 }
 
-function closeOnly() {
-  // 仅关闭弹窗，不标记已读（用户可能误点）
-  announcement.value = null
+function onBackdropClick(event: MouseEvent) {
+  if (event.target !== event.currentTarget) return
+  closeOnly()
 }
 
-onMounted(() => {
-  void checkLatest()
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeOnly()
+    return
+  }
+  if (dialogRef.value) trapFocus(dialogRef.value, event)
+}
+
+watch(
+  () => store.shouldShowLatestModal,
+  async (visible) => {
+    if (visible) {
+      lockBodyScroll()
+      await nextTick()
+      dismissButtonRef.value?.focus()
+      return
+    }
+    unlockBodyScroll()
+  },
+)
+
+onUnmounted(() => {
+  if (store.shouldShowLatestModal) unlockBodyScroll()
 })
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="announcement" class="modal-backdrop" role="presentation" @click.self="closeOnly">
-      <section class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="announcement-title">
+    <div
+      v-if="store.shouldShowLatestModal && store.latestAnnouncement"
+      class="modal-backdrop"
+      role="presentation"
+      @click="onBackdropClick"
+    >
+      <section
+        ref="dialogRef"
+        class="modal-panel max-w-md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="announcement-latest-title"
+        @keydown="onKeydown"
+      >
         <div class="modal-header">
           <div class="flex items-center gap-2">
-            <Megaphone class="w-5 h-5 text-cyan-400" />
+            <Megaphone class="w-5 h-5 text-cyan-400" aria-hidden="true" />
             <div>
               <div class="text-xs text-cyan-400 font-mono">ANNOUNCEMENT</div>
-              <h2 id="announcement-title" class="text-lg font-semibold text-white mt-0.5">最新公告</h2>
+              <h2 id="announcement-latest-title" class="text-lg font-semibold text-gray-100 mt-0.5">最新公告</h2>
             </div>
           </div>
-          <button type="button" class="icon-action" title="关闭" @click="closeOnly"><X class="w-4 h-4" /></button>
+          <button
+            type="button"
+            class="icon-action"
+            title="关闭"
+            aria-label="关闭最新公告"
+            @click="closeOnly"
+          >
+            <X class="w-4 h-4" />
+          </button>
         </div>
         <div class="p-5 space-y-4">
-          <h3 class="text-base font-semibold text-gray-100">{{ announcement.title }}</h3>
-          <div class="text-sm text-gray-300 leading-7 whitespace-pre-wrap">{{ announcement.content }}</div>
-          <div class="text-xs text-gray-600 font-mono">{{ formatDate(announcement.publishedAt) }}</div>
+          <h3 class="text-base font-semibold text-gray-100">{{ store.latestAnnouncement.title }}</h3>
+          <div class="text-sm text-gray-400 leading-7 whitespace-pre-wrap break-words">
+            {{ store.latestAnnouncement.content }}
+          </div>
+          <div class="text-xs text-gray-500 font-mono">
+            {{ formatAnnouncementDate(store.latestAnnouncement.publishedAt) }}
+          </div>
           <div class="flex justify-end pt-2">
             <button
+              ref="dismissButtonRef"
               type="button"
               class="primary-button"
               :disabled="dismissing"
@@ -96,7 +121,7 @@ onMounted(() => {
 
 <style scoped>
 .modal-backdrop {
-  @apply fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4;
+  @apply fixed inset-0 z-[105] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4;
 }
 
 .modal-panel {
@@ -104,14 +129,20 @@ onMounted(() => {
 }
 
 .modal-header {
-  @apply flex items-start justify-between gap-4 px-5 py-4 border-b border-white/[0.06];
+  @apply flex items-start justify-between gap-4 px-5 py-4 border-b border-edge-card;
 }
 
 .icon-action {
-  @apply inline-flex w-9 h-9 items-center justify-center rounded-md text-gray-500 hover:text-white hover:bg-white/[0.04];
+  @apply inline-flex w-9 h-9 items-center justify-center rounded-md text-gray-500 hover:text-gray-100 hover:bg-white/[0.04];
 }
 
 .primary-button {
   @apply inline-flex h-10 items-center justify-center gap-2 rounded-md px-5 text-sm font-medium bg-cyan-400 text-gray-950 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop {
+    @apply backdrop-blur-none;
+  }
 }
 </style>
