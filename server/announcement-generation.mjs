@@ -81,6 +81,20 @@ export function buildReleaseAnnouncementFallback({ category, version, changelogE
   }
 }
 
+export function extractChangelogEntryFromMarkdown(markdown, version) {
+  const normalizedVersion = typeof version === 'string' ? version.trim() : ''
+  if (!normalizedVersion) return ''
+  const source = normalizeWhitespace(markdown)
+  if (!source) return ''
+  const pattern = new RegExp(`^## \\[${escapeRegExp(normalizedVersion)}\\][\\s\\S]*?(?=\\n## \\[|$)`, 'm')
+  const match = source.match(pattern)
+  return match ? match[0].trim() : ''
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function sanitizeGenerationError(error) {
   const message = error instanceof Error ? error.message : String(error)
   return message

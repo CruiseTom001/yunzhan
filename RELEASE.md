@@ -27,11 +27,7 @@ node scripts/release-desktop.mjs --skip-build
 前置条件：生产数据库已执行 `server/migrations/012_announcement_release_generation.sql`；服务端 AI 仅通过环境变量配置（推荐 `AI_PROVIDERS_JSON` 中包含 DeepSeek Flash，或用 `ANNOUNCEMENT_AI_PROVIDER_ID` 指定）。
 
 - 桌面端：`npm run release:desktop` 在 GitHub Release 创建成功后会 best-effort 执行 `scripts/generate-release-announcement.mjs`，生成 `active=false` 的 `desktop_release` 草稿；数据库或 AI 失败只输出警告，不阻断 Release。可用 `--skip-announcement` 跳过。
-- 网站端：Vercel 部署成功后执行：
-
-```powershell
-node scripts/generate-release-announcement.mjs --kind web_release --version <x.y.z> --source-commit <sha>
-```
+- 网站端：Vercel 构建时会在 `npm run vercel:build` 内自动执行 `server/ensure-release-announcement.mjs`，生成 `web_release` 草稿；失败同样只告警不中断部署。
 
 - 草稿不会自动生效。超管需在 `/admin/announcements` 预览/编辑/必要时重新润色后发布；发布后第一阶段公告按钮、公告中心和最新未读弹窗会按真实未读数推送。
 
