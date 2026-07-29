@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AnnouncementModal from '@/components/common/AnnouncementModal.vue'
+import AnnouncementCenterDialog from '@/components/common/AnnouncementCenterDialog.vue'
 import OnboardingTour from '@/components/onboarding/OnboardingTour.vue'
 import UpdateBanner from '@/components/common/UpdateBanner.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
@@ -101,6 +102,7 @@ onUnmounted(() => {
     <UpdateBanner />
     <template v-if="!route.meta.hideChrome">
       <AnnouncementModal v-if="!onboardingStore.blocksAnnouncements" />
+      <AnnouncementCenterDialog />
       <OnboardingTour />
       <ConceptPopover />
       <GlobalSearch ref="globalSearch" />

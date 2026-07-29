@@ -12,9 +12,12 @@ vi.mock('@/utils/apiClient', () => ({
 import { apiRequest } from '@/utils/apiClient'
 import {
   createAdminAnnouncement,
+  deleteAdminAnnouncement,
   getLatestUnread,
   listAdminAnnouncements,
+  listAnnouncements,
   markAnnouncementRead,
+  repolishAdminAnnouncement,
   updateAdminAnnouncement,
 } from './announcementApi'
 
@@ -32,6 +35,20 @@ const VALID_ADMIN_ANNOUNCEMENT = {
   active: true,
   createdAt: 1700000000000,
   updatedAt: 1700000000000,
+  category: 'general',
+  version: null,
+  sourceKey: null,
+  sourceCommit: null,
+  generatedByAi: false,
+  generationProvider: null,
+  generationError: null,
+}
+
+const VALID_LIST_ITEM = {
+  ...VALID_ANNOUNCEMENT,
+  read: false,
+  category: 'general',
+  version: null,
 }
 
 function mockResponse(payload: unknown): ReturnType<typeof apiRequest> {
@@ -140,5 +157,115 @@ describe('announcementApi type guards', () => {
   it('rejects update when response missing announcement', async () => {
     mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
     await expect(updateAdminAnnouncement('a-1', { active: false })).rejects.toThrow('无效公告数据')
+  })
+
+  it('parses admin announcement generation metadata', async () => {
+    const generated = {
+      ...VALID_ADMIN_ANNOUNCEMENT,
+      active: false,
+      category: 'desktop_release',
+      version: '1.2.5',
+      sourceKey: 'desktop_release:1.2.5',
+      sourceCommit: 'abc1234',
+      generatedByAi: true,
+      generationProvider: 'DeepSeek Flash/deepseek-flash',
+      generationError: null,
+    }
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ announcement: generated }))
+    const result = await repolishAdminAnnouncement('a-1')
+    expect(result.generatedByAi).toBe(true)
+    expect(result.sourceKey).toBe('desktop_release:1.2.5')
+    expect(result.generationProvider).toContain('deepseek-flash')
+    const calledPath = mockedApiRequest.mock.calls[0]?.[0] as string
+    expect(calledPath).toContain('/repolish')
+  })
+
+  it('rejects admin announcement with invalid generation metadata', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [{ ...VALID_ADMIN_ANNOUNCEMENT, generatedByAi: 'yes' }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    }))
+    await expect(listAdminAnnouncements()).rejects.toThrow('包含无效数据')
+  })
+
+  it('deletes admin announcement with ok payload', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
+    await expect(deleteAdminAnnouncement('a-1')).resolves.toBeUndefined()
+    const calledOptions = mockedApiRequest.mock.calls[0]?.[1] as RequestInit
+    expect(calledOptions.method).toBe('DELETE')
+  })
+})
+
+describe('listAnnouncements', () => {
+  it('parses valid announcement list', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [VALID_LIST_ITEM],
+      total: 1,
+      unreadTotal: 1,
+      limit: 20,
+      offset: 0,
+    }))
+    const result = await listAnnouncements({ limit: 20, offset: 0 })
+    expect(result.announcements).toHaveLength(1)
+    expect(result.announcements[0].read).toBe(false)
+    expect(result.announcements[0].category).toBe('general')
+    expect(result.total).toBe(1)
+    expect(result.unreadTotal).toBe(1)
+  })
+
+  it('parses empty announcement list', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [],
+      total: 0,
+      unreadTotal: 0,
+      limit: 20,
+      offset: 0,
+    }))
+    const result = await listAnnouncements()
+    expect(result.announcements).toEqual([])
+    expect(result.total).toBe(0)
+  })
+
+  it('rejects invalid read type', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [{ ...VALID_LIST_ITEM, read: 'yes' }],
+      total: 1,
+      unreadTotal: 1,
+    }))
+    await expect(listAnnouncements()).rejects.toThrow('包含无效数据')
+  })
+
+  it('rejects invalid category', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [{ ...VALID_LIST_ITEM, category: 'invalid' }],
+      total: 1,
+      unreadTotal: 1,
+    }))
+    await expect(listAnnouncements()).rejects.toThrow('包含无效数据')
+  })
+
+  it('rejects invalid unreadTotal', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [],
+      total: 0,
+      unreadTotal: -1,
+    }))
+    await expect(listAnnouncements()).rejects.toThrow('无效公告统计')
+  })
+
+  it('accepts null version and string version', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      announcements: [
+        VALID_LIST_ITEM,
+        { ...VALID_LIST_ITEM, id: 'a-2', version: '1.2.5' },
+      ],
+      total: 2,
+      unreadTotal: 2,
+    }))
+    const result = await listAnnouncements()
+    expect(result.announcements[0].version).toBeNull()
+    expect(result.announcements[1].version).toBe('1.2.5')
   })
 })

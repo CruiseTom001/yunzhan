@@ -3,12 +3,14 @@
  * 桌面端发版辅助脚本（安全版）：
  * - 发版前校验 Git 状态、版本一致、tag/release 不存在
  * - 运行完整 quality 门禁并构建 Windows 安装包
+ * - 校验 latest.yml / exe / blockmap 一致性
  * - 创建 GitHub Release 并上传（禁止覆盖已发布版本）
  */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { validateReleaseArtifacts } from './validate-release-artifacts.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
@@ -16,6 +18,7 @@ const releaseDir = path.join(root, 'release')
 
 const args = new Set(process.argv.slice(2))
 const skipBuild = args.has('--skip-build')
+const skipAnnouncement = args.has('--skip-announcement')
 const dryRun = args.has('--dry-run')
 
 function fail(message) {
@@ -95,31 +98,39 @@ function assertTagAndReleaseAbsent(tag) {
   if (view.status === 0) fail(`GitHub Release ${tag} 已存在，禁止覆盖已发布版本。`)
 }
 
-function resolveAsciiSetupPath(version) {
-  const asciiName = `yunzhan-setup-${version}.exe`
-  const asciiPath = path.join(releaseDir, asciiName)
-  if (fs.existsSync(asciiPath)) {
-    fail(`已存在 ${asciiName}，禁止覆盖已发布安装包。请升级版本号。`)
-  }
-
-  const candidates = fs.readdirSync(releaseDir)
-    .filter(name => (name.endsWith(`Setup-${version}.exe`) || name.endsWith(`-Setup-${version}.exe`)))
-    .filter(name => !name.endsWith('.blockmap'))
-
-  if (candidates.length === 0) fail(`未找到 ${version} 的安装包，请先构建。`)
-
-  fs.copyFileSync(path.join(releaseDir, candidates[0]), asciiPath)
-  console.log(`[release-desktop] 已复制: ${candidates[0]} -> ${asciiName}`)
-  return asciiPath
+function collectUploadFiles(artifacts) {
+  return [artifacts.exePath, artifacts.blockmapPath, artifacts.latestYmlPath]
 }
 
-function collectUploadFiles(version, asciiPath) {
-  const uploadFiles = [asciiPath]
-  const blockmapPath = `${asciiPath}.blockmap`
-  if (fs.existsSync(blockmapPath)) uploadFiles.push(blockmapPath)
-  const latestYml = path.join(releaseDir, 'latest.yml')
-  if (fs.existsSync(latestYml)) uploadFiles.push(latestYml)
-  return uploadFiles
+function readCurrentCommit() {
+  const result = runCapture('git', ['rev-parse', 'HEAD'])
+  if (result.status !== 0) return null
+  const commit = result.stdout.trim()
+  return /^[0-9a-f]{7,64}$/i.test(commit) ? commit : null
+}
+
+function generateReleaseAnnouncement(version) {
+  if (skipAnnouncement) {
+    console.log('[release-desktop] 跳过更新公告草稿生成（--skip-announcement）')
+    return
+  }
+  const commit = readCurrentCommit()
+  const commandArgs = [
+    'scripts/generate-release-announcement.mjs',
+    '--kind',
+    'desktop_release',
+    '--version',
+    version,
+  ]
+  if (commit) commandArgs.push('--source-commit', commit)
+  const result = runCapture('node', commandArgs)
+  if (result.status !== 0) {
+    console.warn('[release-desktop] 更新公告草稿生成失败，但不影响 GitHub Release。')
+    if (result.stderr) console.warn(result.stderr.trim())
+    return
+  }
+  if (result.stdout) process.stdout.write(result.stdout)
+  if (result.stderr) process.stderr.write(result.stderr)
 }
 
 function main() {
@@ -139,9 +150,24 @@ function main() {
 
   if (!fs.existsSync(releaseDir)) fail('release/ 目录不存在')
 
-  const asciiPath = resolveAsciiSetupPath(version)
-  const uploadFiles = collectUploadFiles(version, asciiPath)
-  const downloadUrl = `https://github.com/CruiseTom001/yunzhan/releases/download/${tag}/${path.basename(asciiPath)}`
+  let artifacts
+  try {
+    artifacts = validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: version,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    fail(message)
+  }
+
+  const uploadFiles = collectUploadFiles(artifacts)
+  const downloadUrl = `https://github.com/CruiseTom001/yunzhan/releases/download/${tag}/${artifacts.downloadFileName}`
+
+  console.log('[release-desktop] 产物校验通过')
+  console.log(`[release-desktop] exe=${path.basename(artifacts.exePath)}`)
+  console.log(`[release-desktop] blockmap=${path.basename(artifacts.blockmapPath)}`)
+  console.log(`[release-desktop] latest.yml=latest.yml`)
 
   if (dryRun) {
     console.log('[release-desktop] dry-run，跳过 gh release create')
@@ -157,9 +183,11 @@ function main() {
     '--title',
     `云栈桌面端 ${tag}`,
     '--notes',
-    `桌面端 ${version} 安装包。覆盖安装保留学习进度。\n\n下载：${downloadUrl}`,
+    `桌面端 ${version} 安装包。覆盖安装保留学习进度。\n\n下载：${downloadUrl}\n\n注意：当前安装包未配置代码签名，Windows SmartScreen 可能提示未知发布者。`,
     ...uploadFiles,
   ])
+
+  generateReleaseAnnouncement(version)
 
   console.log('[release-desktop] 完成')
   console.log(`[release-desktop] releasePage=https://github.com/CruiseTom001/yunzhan/releases/tag/${tag}`)

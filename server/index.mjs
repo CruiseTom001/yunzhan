@@ -11,6 +11,15 @@ import { pool, withTransaction } from './db.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { persistFeedbackStatus } from './feedback-status.mjs'
+import {
+  listVisibleAnnouncements,
+  mapAdminAnnouncementRow,
+  markVisibleAnnouncementRead,
+  readAnnouncementCategoryInput,
+  readAnnouncementSourceKeyInput,
+  readAnnouncementVersionInput,
+} from './announcements.mjs'
+import { repolishAnnouncementDraft } from './announcement-generation.mjs'
 import { CURRENT_TOUR_VERSION, fetchOnboardingState, toOnboardingResponse } from './onboarding.mjs'
 import { AI_EXPORT_INPUT_MAX_LENGTH, listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import {
@@ -2083,6 +2092,12 @@ app.patch('/api/admin/feedback/:id', requireAuth, requireSuperAdmin, asyncRoute(
   })
 }))
 
+app.get('/api/announcements', requireAuth, asyncRoute(async (request, response) => {
+  const { limit, offset } = parsePagination(request.query)
+  const payload = await listVisibleAnnouncements(pool, request.auth.id, { limit, offset })
+  response.json(payload)
+}))
+
 app.get('/api/announcements/latest', requireAuth, asyncRoute(async (request, response) => {
   const result = await pool.query(
     `SELECT a.id, a.title, a.content, a.published_at
@@ -2117,12 +2132,11 @@ app.post('/api/announcements/:id/read', requireAuth, asyncRoute(async (request, 
     response.status(400).json({ error: '公告 ID 无效。' })
     return
   }
-  await pool.query(
-    `INSERT INTO announcement_reads (user_id, announcement_id)
-     VALUES ($1, $2)
-     ON CONFLICT (user_id, announcement_id) DO NOTHING`,
-    [request.auth.id, announcementId],
-  )
+  const marked = await markVisibleAnnouncementRead(pool, request.auth.id, announcementId)
+  if (!marked) {
+    response.status(404).json({ error: '公告不存在。' })
+    return
+  }
   response.json({ ok: true })
 }))
 
@@ -2131,7 +2145,9 @@ app.get('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(a
   const [announcementsResult, countResult] = await Promise.all([
     pool.query(
       `SELECT a.id, a.title, a.content, a.published_at, a.active,
-              a.created_at, a.updated_at
+              a.created_at, a.updated_at, a.category, a.version,
+              a.source_key, a.source_commit, a.generated_by_ai,
+              a.generation_provider, a.generation_error
          FROM announcements a
         ORDER BY a.published_at DESC, a.id DESC
         LIMIT $1 OFFSET $2`,
@@ -2142,15 +2158,7 @@ app.get('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(a
     ),
   ])
   response.json({
-    announcements: announcementsResult.rows.map(row => ({
-      id: String(row.id),
-      title: row.title,
-      content: row.content,
-      publishedAt: new Date(row.published_at).getTime(),
-      active: row.active,
-      createdAt: new Date(row.created_at).getTime(),
-      updatedAt: new Date(row.updated_at).getTime(),
-    })),
+    announcements: announcementsResult.rows.map(row => mapAdminAnnouncementRow(row)),
     total: countResult.rows[0].count,
     limit,
     offset,
@@ -2158,7 +2166,7 @@ app.get('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(a
 }))
 
 app.post('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
-  const allowedKeys = new Set(['title', 'content', 'active', 'publishedAt'])
+  const allowedKeys = new Set(['title', 'content', 'active', 'publishedAt', 'category', 'version', 'sourceKey'])
   if (!hasOnlyKeys(request.body, allowedKeys)) {
     response.status(400).json({ error: '公告参数无效。' })
     return
@@ -2181,39 +2189,71 @@ app.post('/api/admin/announcements', requireAuth, requireSuperAdmin, asyncRoute(
     response.status(400).json({ error: '公告内容需为 1-4000 个字符。' })
     return
   }
-  const active = request.body.active === undefined ? true : Boolean(request.body.active)
+  const category = readAnnouncementCategoryInput(request.body.category)
+  if (!category.ok) {
+    response.status(400).json({ error: '公告分类无效。' })
+    return
+  }
+  const version = readAnnouncementVersionInput(request.body.version)
+  if (!version.ok) {
+    response.status(400).json({ error: '公告版本无效。' })
+    return
+  }
+  const sourceKey = readAnnouncementSourceKeyInput(request.body.sourceKey)
+  if (!sourceKey.ok) {
+    response.status(400).json({ error: '公告 source_key 无效。' })
+    return
+  }
+  const active = request.body.active === undefined ? true : request.body.active === true
   let publishedAt = 'NOW()'
-  const params = [title, content, active, request.auth.id]
+  const params = [
+    title,
+    content,
+    active,
+    request.auth.id,
+    category.value ?? 'general',
+    version.value ?? null,
+    sourceKey.value ?? null,
+  ]
   if (request.body.publishedAt !== undefined) {
     const ts = Number(request.body.publishedAt)
     if (!Number.isFinite(ts) || ts <= 0) {
       response.status(400).json({ error: '公告发布时间无效。' })
       return
     }
-    publishedAt = 'TO_TIMESTAMP($5)'
+    publishedAt = 'TO_TIMESTAMP($8)'
     params.push(ts)
   }
-  const result = await withTransaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO announcements (title, content, active, created_by, published_at)
-       VALUES ($1, $2, $3, $4, ${publishedAt})
-       RETURNING id, title, content, published_at, active, created_at, updated_at`,
-      params,
-    )
-    await writeAudit(client, request.auth.id, 'announcement.create', request.auth.id, { title })
-    return inserted.rows[0]
-  })
-  response.json({
-    announcement: {
-      id: String(result.id),
-      title: result.title,
-      content: result.content,
-      publishedAt: new Date(result.published_at).getTime(),
-      active: result.active,
-      createdAt: new Date(result.created_at).getTime(),
-      updatedAt: new Date(result.updated_at).getTime(),
-    },
-  })
+
+  let result
+  try {
+    result = await withTransaction(async (client) => {
+      const inserted = await client.query(
+        `INSERT INTO announcements (
+           title, content, active, created_by, published_at, category, version, source_key
+         ) VALUES ($1, $2, $3, $4, ${publishedAt}, $5, $6, $7)
+         RETURNING id, title, content, published_at, active, created_at, updated_at,
+                   category, version, source_key, source_commit,
+                   generated_by_ai, generation_provider, generation_error`,
+        params,
+      )
+      await writeAudit(client, request.auth.id, 'announcement.create', request.auth.id, {
+        title,
+        category: category.value ?? 'general',
+        version: version.value ?? null,
+        sourceKey: sourceKey.value ?? null,
+      })
+      return inserted.rows[0]
+    })
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === '23505') {
+      response.status(409).json({ error: '公告 source_key 已存在。' })
+      return
+    }
+    throw error
+  }
+
+  response.json({ announcement: mapAdminAnnouncementRow(result) })
 }))
 
 app.patch('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
@@ -2222,11 +2262,12 @@ app.patch('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, asyncR
     response.status(400).json({ error: '公告 ID 无效。' })
     return
   }
-  const allowedKeys = new Set(['title', 'content', 'active'])
+  const allowedKeys = new Set(['title', 'content', 'active', 'category', 'version'])
   if (!hasOnlyKeys(request.body, allowedKeys)) {
     response.status(400).json({ error: '公告更新参数无效。' })
     return
   }
+
   const fields = []
   const values = []
   if (request.body.title !== undefined) {
@@ -2247,44 +2288,144 @@ app.patch('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, asyncR
     values.push(content)
     fields.push(`content = $${values.length}`)
   }
-  if (request.body.active !== undefined) {
-    values.push(Boolean(request.body.active))
-    fields.push(`active = $${values.length}`)
+  if (request.body.category !== undefined) {
+    const category = readAnnouncementCategoryInput(request.body.category)
+    if (!category.ok || category.value === undefined) {
+      response.status(400).json({ error: '公告分类无效。' })
+      return
+    }
+    values.push(category.value)
+    fields.push(`category = $${values.length}`)
   }
+  if (request.body.version !== undefined) {
+    const version = readAnnouncementVersionInput(request.body.version)
+    if (!version.ok || version.value === undefined) {
+      response.status(400).json({ error: '公告版本无效。' })
+      return
+    }
+    values.push(version.value)
+    fields.push(`version = $${values.length}`)
+  }
+
+  let publishNow = false
+  if (request.body.active !== undefined) {
+    const current = await pool.query('SELECT active FROM announcements WHERE id = $1', [announcementId])
+    if (current.rowCount === 0) {
+      response.status(404).json({ error: '公告不存在。' })
+      return
+    }
+    const nextActive = request.body.active === true
+    values.push(nextActive)
+    fields.push(`active = $${values.length}`)
+    publishNow = nextActive && current.rows[0].active !== true
+    if (publishNow) fields.push('published_at = NOW()')
+  }
+
   if (fields.length === 0) {
     response.status(400).json({ error: '没有需要更新的字段。' })
     return
   }
-  values.push('NOW()')
-  fields.push(`updated_at = $${values.length}`)
+  fields.push('updated_at = NOW()')
   values.push(announcementId)
-  const result = await withTransaction(async (client) => {
-    const updated = await client.query(
-      `UPDATE announcements
-          SET ${fields.join(', ')}
-        WHERE id = $${values.length}
-        RETURNING id, title, content, published_at, active, created_at, updated_at`,
-      values,
-    )
-    if (updated.rowCount === 0) return null
-    await writeAudit(client, request.auth.id, 'announcement.update', request.auth.id, { announcementId })
-    return updated.rows[0]
-  })
+
+  let result
+  try {
+    result = await withTransaction(async (client) => {
+      const updated = await client.query(
+        `UPDATE announcements
+            SET ${fields.join(', ')}
+          WHERE id = $${values.length}
+          RETURNING id, title, content, published_at, active, created_at, updated_at,
+                    category, version, source_key, source_commit,
+                    generated_by_ai, generation_provider, generation_error`,
+        values,
+      )
+      if (updated.rowCount === 0) return null
+      await writeAudit(client, request.auth.id, 'announcement.update', request.auth.id, {
+        announcementId,
+        published: publishNow,
+      })
+      return updated.rows[0]
+    })
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === '23505') {
+      response.status(409).json({ error: '公告 source_key 已存在。' })
+      return
+    }
+    throw error
+  }
   if (!result) {
     response.status(404).json({ error: '公告不存在。' })
     return
   }
-  response.json({
-    announcement: {
-      id: String(result.id),
-      title: result.title,
-      content: result.content,
-      publishedAt: new Date(result.published_at).getTime(),
-      active: result.active,
-      createdAt: new Date(result.created_at).getTime(),
-      updatedAt: new Date(result.updated_at).getTime(),
-    },
+  response.json({ announcement: mapAdminAnnouncementRow(result) })
+}))
+
+app.post('/api/admin/announcements/:id/repolish', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const announcementId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(announcementId) || announcementId < 1) {
+    response.status(400).json({ error: '公告 ID 无效。' })
+    return
+  }
+  const allowedKeys = new Set(['providerId'])
+  if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
+    response.status(400).json({ error: '重新润色参数无效。' })
+    return
+  }
+  const providerId = readOptionalProviderId(request.body?.providerId)
+  if (providerId === undefined) {
+    response.status(400).json({ error: 'AI 供应商 id 格式无效。' })
+    return
+  }
+  try {
+    const announcement = await repolishAnnouncementDraft(pool, announcementId, {
+      environment: process.env,
+      providerId,
+    })
+    await writeAudit(pool, request.auth.id, 'announcement.repolish', request.auth.id, {
+      announcementId,
+      generatedByAi: announcement.generatedByAi,
+    })
+    response.json({ announcement })
+  } catch (error) {
+    if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
+      response.status(error.statusCode).json({ error: error.message })
+      return
+    }
+    throw error
+  }
+}))
+
+app.delete('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const announcementId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(announcementId) || announcementId < 1) {
+    response.status(400).json({ error: '公告 ID 无效。' })
+    return
+  }
+  const result = await withTransaction(async (client) => {
+    const current = await client.query(
+      'SELECT id, title, active FROM announcements WHERE id = $1 FOR UPDATE',
+      [announcementId],
+    )
+    const row = current.rows[0]
+    if (!row) return { status: 'missing' }
+    if (row.active === true) return { status: 'active' }
+    await writeAudit(client, request.auth.id, 'announcement.delete', request.auth.id, {
+      announcementId,
+      title: row.title,
+    })
+    await client.query('DELETE FROM announcements WHERE id = $1', [announcementId])
+    return { status: 'deleted' }
   })
+  if (result.status === 'missing') {
+    response.status(404).json({ error: '公告不存在。' })
+    return
+  }
+  if (result.status === 'active') {
+    response.status(400).json({ error: '生效公告不能删除，请先下线。' })
+    return
+  }
+  response.json({ ok: true })
 }))
 
 

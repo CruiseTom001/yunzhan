@@ -1,27 +1,38 @@
 /// <reference types="vite/client" />
 
-declare const __APP_VERSION__: string
+export {}
 
-interface ElectronApi {
-  platform: string
-  version: string
-  invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>
-}
+declare global {
+  const __APP_VERSION__: string
 
-interface DesktopApiRequestInput {
-  path: string
-  method?: string
-  headers?: Record<string, string>
-  body?: string
-  timeoutMs?: number
-}
+  type DesktopUpdaterPublicState = import('@/utils/desktopUpdaterTypes').DesktopUpdaterPublicState
 
-interface DesktopApiResponse {
-  ok: boolean
-  status: number
-  payload: unknown
-}
+  interface DesktopApiRequestInput {
+    path: string
+    method?: string
+    headers?: Record<string, string>
+    body?: string
+    timeoutMs?: number
+  }
 
-interface Window {
-  electronAPI?: ElectronApi
+  interface DesktopApiResponse {
+    ok: boolean
+    status: number
+    payload: unknown
+  }
+
+  interface ElectronApi {
+    platform: string
+    version: string
+    invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>
+    getUpdaterState: () => Promise<DesktopUpdaterPublicState>
+    checkForDesktopUpdate: () => Promise<DesktopUpdaterPublicState>
+    downloadDesktopUpdate: () => Promise<DesktopUpdaterPublicState>
+    installDesktopUpdate: () => Promise<DesktopUpdaterPublicState>
+    onDesktopUpdaterStateChanged: (listener: (state: DesktopUpdaterPublicState) => void) => () => void
+  }
+
+  interface Window {
+    electronAPI?: ElectronApi
+  }
 }

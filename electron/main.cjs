@@ -2,9 +2,27 @@ const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron')
 const fs = require('fs/promises')
 const fsSync = require('fs')
 const path = require('path')
-const { isAllowedDesktopDownloadUrl } = require('./download-url-validation.cjs')
+const { createDesktopUpdater } = require('./desktop-updater.cjs')
 
 const isDev = !app.isPackaged
+let desktopUpdater = null
+
+function getDesktopUpdater() {
+  if (!desktopUpdater) {
+    desktopUpdater = createDesktopUpdater({
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+    })
+  }
+  return desktopUpdater
+}
+
+function registerUpdaterIpc() {
+  ipcMain.handle('updater:getState', () => getDesktopUpdater().getState())
+  ipcMain.handle('updater:check', () => getDesktopUpdater().checkForUpdates())
+  ipcMain.handle('updater:download', () => getDesktopUpdater().downloadUpdate())
+  ipcMain.handle('updater:install', () => getDesktopUpdater().installUpdate())
+}
 
 const progressFileName = 'progress.json'
 const backupFileName = 'progress.backup.json'
@@ -645,21 +663,6 @@ function registerIpc() {
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
   ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
-  ipcMain.handle('app:openExternal', async (_event, url) => {
-    if (typeof url !== 'string' || url.length === 0) {
-      return { ok: false, error: 'invalid url type' }
-    }
-    if (!isAllowedDesktopDownloadUrl(url)) {
-      return { ok: false, error: 'url not allowed' }
-    }
-    try {
-      await shell.openExternal(url)
-      return { ok: true }
-    } catch (error) {
-      console.warn('Failed to open external URL:', error)
-      return { ok: false, error: 'open failed' }
-    }
-  })
   ipcMain.handle('desktop:apiRequest', async (_event, payload) => requestDesktopApi(payload))
   ipcMain.handle('ai:polishStudyNote', async (_event, payload) => requestAiProvider(payload, 'polish'))
   ipcMain.handle('ai:testProvider', async (_event, provider) => requestAiProvider({ provider }, 'test'))
@@ -815,6 +818,7 @@ app.whenReady().then(() => {
   registerSecurityHeaders()
   registerDesktopApiHeaders()
   registerIpc()
+  registerUpdaterIpc()
   createWindow()
 
   app.on('activate', () => {

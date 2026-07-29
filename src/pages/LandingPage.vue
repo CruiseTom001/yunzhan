@@ -21,10 +21,11 @@ import AuthDialog from '@/components/auth/AuthDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/stores/theme'
 import {
-  openAllowedDesktopDownloadUrl,
+  openWebDesktopDownloadUrl,
   resolveLandingDesktopDownloadUrl,
 } from '@/utils/desktopDownloadUrl'
 import { getDesktopLatestVersion } from '@/utils/desktopVersionApi'
+import { isDesktopRuntime } from '@/stores/desktopUpdate'
 import {
   buildLandingAuthQuery,
   isAuthMode,
@@ -43,6 +44,8 @@ const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
 const desktopDownloadUrl = ref<string | null>(null)
+const isElectronDesktop = computed(() => isDesktopRuntime())
+const showDesktopDownloadButton = computed(() => !isElectronDesktop.value && Boolean(desktopDownloadUrl.value))
 
 const authDialogOpen = computed(() => isAuthMode(route.query.auth))
 const authMode = computed(() => parseAuthMode(route.query.auth))
@@ -67,8 +70,8 @@ async function loadDesktopDownloadUrl() {
 
 function openDesktopDownload() {
   const url = desktopDownloadUrl.value
-  if (!url) return
-  void openAllowedDesktopDownloadUrl(url)
+  if (!url || isElectronDesktop.value) return
+  void openWebDesktopDownloadUrl(url)
 }
 
 function openAuth(mode: AuthMode, redirect = '/') {
@@ -155,7 +158,9 @@ function setupReveal() {
 }
 
 onMounted(() => {
-  void loadDesktopDownloadUrl()
+  if (!isElectronDesktop.value) {
+    void loadDesktopDownloadUrl()
+  }
   startTyping()
   setupReveal()
 })
@@ -212,7 +217,7 @@ const stats = [
             <Moon v-else class="w-4 h-4" />
           </button>
           <button
-            v-if="desktopDownloadUrl"
+            v-if="showDesktopDownloadButton"
             type="button"
             class="inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-md border border-edge-card text-ink-secondary hover:text-ink-primary hover:bg-surface-elevated text-sm"
             title="下载桌面端"

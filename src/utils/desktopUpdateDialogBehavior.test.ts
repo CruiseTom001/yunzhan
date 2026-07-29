@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canCloseUpdateDialog,
   isUpdateDialogBackdropClick,
   pickFocusRestoreTarget,
   resolveUpdateDialogCloseAction,
@@ -8,6 +9,14 @@ import {
 import { lockBodyScroll, resetBodyScrollLockForTests, unlockBodyScroll } from './authDialogFocus'
 
 describe('desktopUpdateDialogBehavior', () => {
+  it('allows optional downloads to close while required downloads stay blocked', () => {
+    expect(canCloseUpdateDialog('optional', 'downloading')).toBe(true)
+    expect(canCloseUpdateDialog('required', 'downloading')).toBe(false)
+    expect(canCloseUpdateDialog('optional', 'installing')).toBe(false)
+    expect(canCloseUpdateDialog('required', 'installing')).toBe(false)
+    expect(canCloseUpdateDialog('optional', 'available')).toBe(true)
+  })
+
   it('dismisses optional notices and closes required notices on escape', () => {
     expect(resolveUpdateDialogCloseAction('optional')).toBe('dismiss')
     expect(resolveUpdateDialogCloseAction('required')).toBe('close')

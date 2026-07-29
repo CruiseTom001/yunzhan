@@ -4,6 +4,7 @@ import {
   listServerAiProviderSummaries,
   loadServerAiProvider,
   loadServerAiProviders,
+  requestAnnouncementPolish,
   requestStudyNoteAi,
   requestStudyNoteAiStream,
 } from './ai-provider.mjs'
@@ -271,6 +272,27 @@ describe('server AI provider request', () => {
       message: '选择的 AI 供应商不存在。',
       statusCode: 404,
     })
+  })
+
+  it('uses announcement prompt for announcement polish purpose', async () => {
+    const requests = []
+    const fetchImplementation = async (url, options) => {
+      requests.push({ url, options })
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '本次更新包含稳定性改进。' } }],
+      }))
+    }
+
+    const result = await requestAnnouncementPolish({
+      content: '公告类型：桌面端更新\n可用变更事实：\n- 修复更新提示',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation,
+    })
+
+    expect(result.content).toBe('本次更新包含稳定性改进。')
+    const body = JSON.parse(requests[0].options.body)
+    expect(body.messages[0].content).toContain('产品更新公告')
+    expect(body.max_tokens).toBe(2000)
   })
 })
 

@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useDesktopUpdateStore } from '@/stores/desktopUpdate'
+import { formatByteSize, formatTransferSpeed } from '@/utils/formatByteSize'
 import {
   changeAccountPassword,
   deleteAccount,
@@ -34,6 +35,7 @@ import {
   submitFeedback as submitFeedbackApi,
   type MyFeedback,
 } from '@/utils/feedbackApi'
+import { registerAppQuitGuard } from '@/utils/appQuitGuard'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const PASSWORD_HAS_LETTER = /[A-Za-z]/
@@ -311,7 +313,6 @@ async function exportData() {
   }
 }
 
-// 意见反馈
 const feedbackForm = ref({ category: 'suggestion' as 'suggestion' | 'bug' | 'other', content: '', contact: '' })
 const feedbackSubmitting = ref(false)
 const feedbackError = ref('')
@@ -429,16 +430,30 @@ async function handleDesktopUpdateCheck() {
   await desktopUpdateStore.checkForUpdates({ source: 'manual', force: true })
 }
 
-async function handleDesktopOpenDownload() {
-  await desktopUpdateStore.openDownload()
+async function handleDesktopDownloadUpdate() {
+  await desktopUpdateStore.downloadUpdate()
+}
+
+async function handleDesktopInstallUpdate() {
+  await desktopUpdateStore.installUpdate()
+}
+
+let unregisterFeedbackQuitGuard: (() => void) | null = null
+
+function isFeedbackDraftDirty(): boolean {
+  return feedbackForm.value.content.trim().length > 0
+    || feedbackForm.value.contact.trim().length > 0
 }
 
 onMounted(() => {
   void loadSessions()
+  unregisterFeedbackQuitGuard = registerAppQuitGuard(() => !isFeedbackDraftDirty())
 })
 
 onUnmounted(() => {
   if (cooldownTimer) clearInterval(cooldownTimer)
+  unregisterFeedbackQuitGuard?.()
+  unregisterFeedbackQuitGuard = null
 })
 </script>
 
@@ -514,7 +529,7 @@ onUnmounted(() => {
           </div>
 
           <div
-            v-if="desktopUpdateStore.status === 'updateAvailable'"
+            v-if="desktopUpdateStore.hasUpdate || desktopUpdateStore.status === 'downloading' || desktopUpdateStore.status === 'downloaded'"
             class="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 space-y-3"
           >
             <div class="text-sm text-gray-200">
@@ -529,17 +544,50 @@ onUnmounted(() => {
             >
               {{ desktopUpdateStore.releaseNotes }}
             </p>
-            <button type="button" class="primary-button h-10" @click="handleDesktopOpenDownload">
+
+            <div v-if="desktopUpdateStore.status === 'downloading'" class="space-y-2">
+              <div class="h-2 rounded-full bg-black/20 overflow-hidden">
+                <div
+                  class="h-full bg-cyan-400 transition-all duration-200"
+                  :style="{ width: `${Math.round(desktopUpdateStore.updaterState.percent ?? 0)}%` }"
+                />
+              </div>
+              <p class="text-xs text-gray-500 font-mono">
+                {{ Math.round(desktopUpdateStore.updaterState.percent ?? 0) }}%
+                · {{ formatByteSize(desktopUpdateStore.updaterState.transferred) }}
+                / {{ formatByteSize(desktopUpdateStore.updaterState.total) }}
+                · {{ formatTransferSpeed(desktopUpdateStore.updaterState.bytesPerSecond) }}
+              </p>
+            </div>
+
+            <button
+              v-if="desktopUpdateStore.status === 'available'"
+              type="button"
+              class="primary-button h-10"
+              :disabled="!desktopUpdateStore.canDownload"
+              @click="handleDesktopDownloadUpdate"
+            >
               <Download class="w-4 h-4" />
-              立即更新
+              下载更新
             </button>
+            <button
+              v-else-if="desktopUpdateStore.status === 'downloaded'"
+              type="button"
+              class="primary-button h-10"
+              :disabled="!desktopUpdateStore.canInstall"
+              @click="handleDesktopInstallUpdate"
+            >
+              <RefreshCw class="w-4 h-4" />
+              立即重启并安装
+            </button>
+
             <div
-              v-if="desktopUpdateStore.downloadErrorMessage"
+              v-if="desktopUpdateStore.displayErrorMessage"
               class="form-error"
               role="alert"
             >
               <AlertCircle class="w-4 h-4 shrink-0" />
-              {{ desktopUpdateStore.downloadErrorMessage }}
+              {{ desktopUpdateStore.displayErrorMessage }}
             </div>
           </div>
 

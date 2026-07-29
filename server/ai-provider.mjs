@@ -204,6 +204,17 @@ function buildStudyNoteExportPrompt(noteCount) {
   ].join('\n')
 }
 
+function buildAnnouncementPolishPrompt() {
+  return [
+    '你是云栈产品更新公告撰写助手。',
+    '请基于给定变更日志生成中文站内公告正文。',
+    '要求：只使用输入中的事实，不新增功能、不编造影响范围。',
+    '输出纯文本，不使用 Markdown、HTML、链接或表情。',
+    '语气简洁可靠，长度控制在 120-800 字，可按“本次更新”“使用提示”分段。',
+    '不要输出公告标题、版本号标题或解释性元信息。',
+  ].join('\n')
+}
+
 function buildAiEndpoint(provider) {
   const endpointByFormat = {
     anthropic_messages: '/messages',
@@ -225,7 +236,9 @@ function buildAiRequest(provider, content, purpose) {
     ? '请用中文简短回复”连接成功”。'
     : purpose === 'export'
       ? buildStudyNoteExportPrompt(content.split('\n').filter(l => l.startsWith('日期：')).length || 1)
-      : buildStudyNotePolishPrompt()
+      : purpose === 'announcement'
+        ? buildAnnouncementPolishPrompt()
+        : buildStudyNotePolishPrompt()
   const maxTokens = purpose === 'test' ? 64 : purpose === 'export' ? 4000 : 2000
   const effectiveModel = resolveEffectiveModel(provider, purpose)
   if (provider.format === 'anthropic_messages') {
@@ -416,6 +429,21 @@ export async function requestStudyNoteAi({
     providerName: provider.name,
     model: requestedModel,
   }
+}
+
+export async function requestAnnouncementPolish({
+  content,
+  environment = process.env,
+  fetchImplementation = globalThis.fetch,
+  providerId,
+}) {
+  return requestStudyNoteAi({
+    content,
+    environment,
+    fetchImplementation,
+    purpose: 'announcement',
+    providerId,
+  })
 }
 
 /**
