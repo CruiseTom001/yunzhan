@@ -37,8 +37,9 @@ node scripts/release-desktop.mjs --skip-build
 1. 修改 `package.json` 与 `package-lock.json` 中的版本号。
 2. 在 `CHANGELOG.md` 顶部新增条目，标注功能象限（A/B/C/D）。
 3. 运行 `npm run release:windows`。该命令会通过 `prebuild` 自动调用 `scripts/check-version-sync.cjs`，校验 `package.json` / `CHANGELOG.md` / `release/latest.yml` 三处版本号是否一致；不一致构建中止。
-4. 在超管后台“桌面端版本管理”页面（`/admin/desktop-releases`）新建一条记录，填写 `version` / `minSupported` / `downloadUrl` / `releaseNotes`。桌面端用户启动后会自动拉取最新启用版本并分级提示。
-5. 将新的 `云栈-Setup-<version>.exe` 手动分发给用户覆盖安装。
+4. 在超管后台“桌面端版本管理”页面（`/admin/desktop-releases`）新建一条记录，填写 `version` / `minSupported` / `downloadUrl` / `releaseNotes`。桌面端用户启动后会自动拉取最新启用版本并分级提示；个人中心「桌面端与更新」可手动检查。
+5. 将新的 `云栈-Setup-<version>.exe` 上传至 GitHub Release（`npm run release:desktop` 可一键构建并上传），`downloadUrl` 须为 `https://github.com/...` 或 GitHub 资产域名，桌面端通过受控 IPC `app:openExternal` 打开。
+6. 将安装包分发给用户覆盖安装。
 
 约束：
 

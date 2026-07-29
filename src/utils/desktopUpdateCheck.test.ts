@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   decideUpdateNotice,
-  getIgnoredVersion,
-  hasShownModalToday,
-  rememberIgnoredVersion,
-  shouldShowBanner,
-  shouldShowModalAndPersist,
+  DESKTOP_UPDATE_SNOOZE_MS,
+  hasShownRequiredNoticeToday,
+  InvalidDesktopUpdateInfoError,
+  isOptionalNoticeSnoozed,
+  resolveDesktopUpdateCheckError,
+  shouldShowOptionalAutoNotice,
+  shouldShowRequiredAutoNotice,
+  snoozeOptionalNotice,
 } from './desktopUpdateCheck'
+import { ApiError } from './apiClient'
 import type { DesktopLatestVersion } from './desktopVersionApi'
 
 let values: Map<string, string>
@@ -27,7 +31,7 @@ afterEach(() => {
 const LATEST_OK: DesktopLatestVersion = {
   version: '1.2.0',
   minSupported: '1.1.0',
-  downloadUrl: 'https://x/setup.exe',
+  downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.0/setup.exe',
   releaseNotes: 'changes',
 }
 
@@ -36,72 +40,76 @@ describe('decideUpdateNotice', () => {
     expect(decideUpdateNotice('1.2.0', LATEST_OK)).toBeNull()
     expect(decideUpdateNotice('1.3.0', LATEST_OK)).toBeNull()
   })
-  it('returns banner when local < remote and local >= minSupported', () => {
+
+  it('returns optional when local < remote and local >= minSupported', () => {
     const result = decideUpdateNotice('1.1.0', LATEST_OK)
-    expect(result?.mode).toBe('banner')
+    expect(result?.mode).toBe('optional')
     expect(result?.remoteVersion).toBe('1.2.0')
-    expect(result?.downloadUrl).toBe('https://x/setup.exe')
   })
-  it('returns modal when local < minSupported', () => {
+
+  it('returns required when local < minSupported', () => {
     const result = decideUpdateNotice('1.0.0', LATEST_OK)
-    expect(result?.mode).toBe('modal')
+    expect(result?.mode).toBe('required')
   })
-  it('returns null when remote version missing', () => {
+
+  it('returns null when remote version missing or malformed', () => {
     expect(decideUpdateNotice('1.1.0', {
-      version: null, minSupported: '1.1.0', downloadUrl: 'https://x', releaseNotes: '',
+      version: null, minSupported: '1.1.0', downloadUrl: 'https://github.com/x', releaseNotes: '',
     })).toBeNull()
-  })
-  it('returns null when downloadUrl missing', () => {
     expect(decideUpdateNotice('1.1.0', {
-      version: '1.2.0', minSupported: '1.1.0', downloadUrl: null, releaseNotes: '',
+      version: 'v1.2.0', minSupported: '1.1.0', downloadUrl: 'https://github.com/x', releaseNotes: '',
     })).toBeNull()
-  })
-  it('returns null when remote version malformed', () => {
-    expect(decideUpdateNotice('1.1.0', {
-      version: 'v1.2.0', minSupported: '1.1.0', downloadUrl: 'https://x', releaseNotes: '',
-    })).toBeNull()
-  })
-  it('falls back local to 0.0.0 when malformed', () => {
-    const result = decideUpdateNotice('garbage', LATEST_OK)
-    expect(result?.mode).toBe('modal')
   })
 })
 
-describe('shouldShowBanner', () => {
-  const bannerNotice = decideUpdateNotice('1.1.0', LATEST_OK)!
-  it('shows when remote version not ignored', () => {
-    expect(shouldShowBanner(bannerNotice, null)).toBe(true)
-    expect(shouldShowBanner(bannerNotice, '2.0.0')).toBe(true)
+describe('optional snooze', () => {
+  const optionalNotice = decideUpdateNotice('1.1.0', LATEST_OK)!
+
+  it('snoozes optional notice for 24 hours', () => {
+    const now = 1_700_000_000_000
+    snoozeOptionalNotice('1.2.0', DESKTOP_UPDATE_SNOOZE_MS, now)
+    expect(isOptionalNoticeSnoozed('1.2.0', now + 1000)).toBe(true)
+    expect(isOptionalNoticeSnoozed('1.2.0', now + DESKTOP_UPDATE_SNOOZE_MS)).toBe(false)
   })
-  it('hides when remote version matches ignored', () => {
-    expect(shouldShowBanner(bannerNotice, '1.2.0')).toBe(false)
+
+  it('allows auto popup when not snoozed', () => {
+    expect(shouldShowOptionalAutoNotice(optionalNotice)).toBe(true)
   })
-  it('returns false for modal notice', () => {
-    const modalNotice = decideUpdateNotice('1.0.0', LATEST_OK)!
-    expect(shouldShowBanner(modalNotice, null)).toBe(false)
+
+  it('blocks auto popup while snoozed but not for other versions', () => {
+    snoozeOptionalNotice('1.2.0', DESKTOP_UPDATE_SNOOZE_MS)
+    expect(shouldShowOptionalAutoNotice(optionalNotice)).toBe(false)
+    expect(shouldShowOptionalAutoNotice({
+      ...optionalNotice,
+      remoteVersion: '1.3.0',
+    })).toBe(true)
   })
 })
 
-describe('rememberIgnoredVersion / getIgnoredVersion', () => {
-  it('persists version to localStorage', () => {
-    rememberIgnoredVersion('1.2.0')
-    expect(getIgnoredVersion()).toBe('1.2.0')
+describe('required auto notice', () => {
+  it('shows required notice first time same day and blocks repeats', () => {
+    const requiredNotice = decideUpdateNotice('1.0.0', LATEST_OK)!
+    expect(shouldShowRequiredAutoNotice(requiredNotice)).toBe(true)
+    expect(shouldShowRequiredAutoNotice(requiredNotice)).toBe(false)
+    expect(hasShownRequiredNoticeToday()).toBe(true)
   })
 })
 
-describe('shouldShowModalAndPersist', () => {
-  it('shows modal first time same day and persists date', () => {
-    const modalNotice = decideUpdateNotice('1.0.0', LATEST_OK)!
-    expect(shouldShowModalAndPersist(modalNotice)).toBe(true)
-    expect(hasShownModalToday()).toBe(true)
+describe('resolveDesktopUpdateCheckError', () => {
+  it('maps network and server errors to readable messages', () => {
+    expect(resolveDesktopUpdateCheckError(new ApiError('网络错误', 0, null))).toContain('网络')
+    expect(resolveDesktopUpdateCheckError(new ApiError('server', 503, null))).toContain('服务器')
+    expect(resolveDesktopUpdateCheckError(new ApiError('无效版本数据', 400, null))).toContain('版本信息')
   })
-  it('does not show modal twice same day', () => {
-    const modalNotice = decideUpdateNotice('1.0.0', LATEST_OK)!
-    expect(shouldShowModalAndPersist(modalNotice)).toBe(true)
-    expect(shouldShowModalAndPersist(modalNotice)).toBe(false)
+
+  it('maps invalid update info before ApiError status zero', () => {
+    expect(resolveDesktopUpdateCheckError(new InvalidDesktopUpdateInfoError())).toContain('版本信息')
+    expect(resolveDesktopUpdateCheckError(new InvalidDesktopUpdateInfoError())).not.toContain('网络')
   })
-  it('returns false for banner notice', () => {
-    const bannerNotice = decideUpdateNotice('1.1.0', LATEST_OK)!
-    expect(shouldShowModalAndPersist(bannerNotice)).toBe(false)
+
+  it('does not classify invalid payload as network failure when status is zero', () => {
+    const invalidWithStatusZero = Object.assign(new InvalidDesktopUpdateInfoError(), { status: 0 })
+    expect(resolveDesktopUpdateCheckError(invalidWithStatusZero)).toContain('版本信息')
+    expect(resolveDesktopUpdateCheckError(invalidWithStatusZero)).not.toContain('网络')
   })
 })

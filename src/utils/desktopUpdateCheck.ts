@@ -1,10 +1,16 @@
+import { ApiError } from './apiClient'
 import { compareVersions, isSemver } from './semver'
 import type { DesktopLatestVersion } from './desktopVersionApi'
 
-const IGNORED_KEY = 'yunzhan:ignoredUpdateVersion'
+export const DESKTOP_UPDATE_SNOOZE_MS = 24 * 60 * 60 * 1000
+export const DESKTOP_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+export const DESKTOP_UPDATE_STARTUP_DELAY_MS = 3000
+
+const SNOOZE_VERSION_KEY = 'yunzhan:snoozedUpdateVersion'
+const SNOOZE_UNTIL_KEY = 'yunzhan:snoozedUpdateUntil'
 const BLOCKED_DATE_KEY = 'yunzhan:lastBlockedPromptDate'
 
-export type UpdateNoticeMode = 'banner' | 'modal'
+export type UpdateNoticeMode = 'optional' | 'required'
 
 export interface UpdateNotice {
   mode: UpdateNoticeMode
@@ -14,21 +20,24 @@ export interface UpdateNotice {
   releaseNotes: string
 }
 
+export class InvalidDesktopUpdateInfoError extends Error {
+  constructor(message = '版本信息格式无效。') {
+    super(message)
+    this.name = 'InvalidDesktopUpdateInfoError'
+  }
+}
+
 function isStringRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function safeLocalVersion(value: unknown): string {
+export function safeLocalVersion(value: unknown): string {
   if (typeof value !== 'string' || !isSemver(value)) return '0.0.0'
   return value
 }
 
 /**
  * 根据本地版本与远端版本数据,决定是否提示以及提示层级。
- * - local >= remote:不提示(null)
- * - local < remote 且 local >= minSupported:L2 横幅(banner)
- * - local < minSupported:L3 阻塞弹窗(modal)
- * 远端信息缺字段或版本格式非法时静默(null,不阻断用户)。
  */
 export function decideUpdateNotice(local: unknown, remote: DesktopLatestVersion): UpdateNotice | null {
   if (!remote.version || !remote.minSupported || !remote.downloadUrl) return null
@@ -38,7 +47,7 @@ export function decideUpdateNotice(local: unknown, remote: DesktopLatestVersion)
   const releaseNotes = typeof remote.releaseNotes === 'string' ? remote.releaseNotes : ''
   if (compareVersions(localVersion, remote.minSupported) < 0) {
     return {
-      mode: 'modal',
+      mode: 'required',
       remoteVersion: remote.version,
       minSupported: remote.minSupported,
       downloadUrl: remote.downloadUrl,
@@ -46,7 +55,7 @@ export function decideUpdateNotice(local: unknown, remote: DesktopLatestVersion)
     }
   }
   return {
-    mode: 'banner',
+    mode: 'optional',
     remoteVersion: remote.version,
     minSupported: remote.minSupported,
     downloadUrl: remote.downloadUrl,
@@ -54,72 +63,99 @@ export function decideUpdateNotice(local: unknown, remote: DesktopLatestVersion)
   }
 }
 
-/**
- * 判断是否应显示本次横幅提示。
- * 被用户忽略的远端版本不再显示。
- */
-export function shouldShowBanner(notice: UpdateNotice, ignoredVersion: string | null): boolean {
-  if (notice.mode !== 'banner') return false
-  return ignoredVersion !== notice.remoteVersion
+function todayIsoDate(now: number): string {
+  return new Date(now).toISOString().slice(0, 10)
 }
 
-/**
- * 记录用户忽略的远端版本到 localStorage。
- */
-export function rememberIgnoredVersion(version: string): void {
+function readStorage(key: string): string | null {
   try {
-    localStorage.setItem(IGNORED_KEY, version)
-  } catch {
-    // 隐私模式或空间不足,静默
-  }
-}
-
-function readIgnoredVersion(): string | null {
-  try {
-    const value = localStorage.getItem(IGNORED_KEY)
+    const value = localStorage.getItem(key)
     return typeof value === 'string' ? value : null
   } catch {
     return null
   }
 }
 
-/**
- * 返回当前已忽略的远端版本号(供组件判断横幅是否隐藏)。
- */
-export function getIgnoredVersion(): string | null {
-  return readIgnoredVersion()
-}
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-/**
- * 判断是否应显示阻塞弹窗。同一天至多一次。
- * 返回 true 时会把当天日期写入 localStorage。
- */
-export function shouldShowModalAndPersist(notice: UpdateNotice): boolean {
-  if (notice.mode !== 'modal') return false
-  const today = todayIsoDate()
+function writeStorage(key: string, value: string): void {
   try {
-    if (localStorage.getItem(BLOCKED_DATE_KEY) === today) return false
-    localStorage.setItem(BLOCKED_DATE_KEY, today)
+    localStorage.setItem(key, value)
   } catch {
-    // localStorage 不可用时每次都允许弹,符合"安全默认"——让用户能看到升级提示
+    // 隐私模式或空间不足,静默
   }
+}
+
+export function snoozeOptionalNotice(version: string, untilMs: number, now: number = Date.now()): void {
+  writeStorage(SNOOZE_VERSION_KEY, version)
+  writeStorage(SNOOZE_UNTIL_KEY, String(now + untilMs))
+}
+
+export function isOptionalNoticeSnoozed(version: string, now: number = Date.now()): boolean {
+  const snoozedVersion = readStorage(SNOOZE_VERSION_KEY)
+  if (snoozedVersion !== version) return false
+  const untilRaw = readStorage(SNOOZE_UNTIL_KEY)
+  if (!untilRaw) return false
+  const until = Number.parseInt(untilRaw, 10)
+  if (!Number.isFinite(until)) return false
+  return now < until
+}
+
+export function shouldShowOptionalAutoNotice(notice: UpdateNotice, now: number = Date.now()): boolean {
+  if (notice.mode !== 'optional') return false
+  return !isOptionalNoticeSnoozed(notice.remoteVersion, now)
+}
+
+export function shouldShowRequiredAutoNotice(notice: UpdateNotice, now: number = Date.now()): boolean {
+  if (notice.mode !== 'required') return false
+  const today = todayIsoDate(now)
+  if (readStorage(BLOCKED_DATE_KEY) === today) return false
+  writeStorage(BLOCKED_DATE_KEY, today)
   return true
 }
 
-/** 判断 localStorage 中是否已记录今天弹窗(供测试与组件复用)。 */
-export function hasShownModalToday(): boolean {
-  try {
-    return localStorage.getItem(BLOCKED_DATE_KEY) === todayIsoDate()
-  } catch {
-    return false
-  }
+export function hasShownRequiredNoticeToday(now: number = Date.now()): boolean {
+  return readStorage(BLOCKED_DATE_KEY) === todayIsoDate(now)
 }
 
-/** 用于测试:把外部传入的 storage 抽象绕开真实 localStorage(此处仅供测试场景装饰)。 */
+export function resolveDesktopUpdateCheckError(error: unknown): string {
+  if (error instanceof InvalidDesktopUpdateInfoError) {
+    return '版本信息格式无效，请稍后再试。'
+  }
+
+  if (error instanceof ApiError) {
+    if (error.message.includes('无效')) return '版本信息格式无效，请稍后再试。'
+    if (error.status === 0) return '网络连接失败，请检查网络后重试。'
+    if (error.status >= 500) return '服务器暂时不可用，请稍后再试。'
+  }
+
+  if (error instanceof Error) {
+    if (error.message.includes('无效版本') || error.message.includes('无效版本数据')) {
+      return '版本信息格式无效，请稍后再试。'
+    }
+    if (error.message.includes('超时') || error.message.includes('timeout')) {
+      return '请求超时，请检查网络后重试。'
+    }
+    if (error.message.includes('网络') || error.message.includes('连接')) {
+      return '网络连接失败，请检查网络后重试。'
+    }
+  }
+
+  const status = readErrorStatus(error)
+  if (status === 0) return '网络连接失败，请检查网络后重试。'
+  if (status !== null && status >= 500) return '服务器暂时不可用，请稍后再试。'
+
+  if (error instanceof Error && error.message.includes('账号服务')) {
+    return '版本信息格式无效，请稍后再试。'
+  }
+
+  return '检查更新失败，请稍后再试。'
+}
+
+function readErrorStatus(error: unknown): number | null {
+  if (!isStringRecord(error)) return null
+  if (typeof error.status !== 'number') return null
+  return error.status
+}
+
 export function _isRecord(value: unknown): value is Record<string, unknown> {
   return isStringRecord(value)
 }

@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { useDesktopUpdateStore } from '@/stores/desktopUpdate'
 import {
   changeAccountPassword,
   deleteAccount,
@@ -43,6 +44,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const progressStore = useProgressStore()
 const onboardingStore = useOnboardingStore()
+const desktopUpdateStore = useDesktopUpdateStore()
 
 // 资料编辑
 const profileEditor = ref({ username: '', displayName: '' })
@@ -422,6 +424,15 @@ async function confirmDeleteAccount() {
   }
 }
 
+async function handleDesktopUpdateCheck() {
+  if (desktopUpdateStore.isChecking) return
+  await desktopUpdateStore.checkForUpdates({ source: 'manual', force: true })
+}
+
+async function handleDesktopOpenDownload() {
+  await desktopUpdateStore.openDownload()
+}
+
 onMounted(() => {
   void loadSessions()
 })
@@ -458,6 +469,90 @@ onUnmounted(() => {
           >
             重新开始新手教程
           </button>
+        </div>
+      </div>
+
+      <div v-if="desktopUpdateStore.isDesktop" class="card p-5 mb-6">
+        <div class="flex flex-col gap-4">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+              <MonitorSmartphone class="w-4 h-4 text-cyan-400" />
+              桌面端与更新
+            </h2>
+            <button
+              type="button"
+              class="secondary-button h-10 shrink-0"
+              :disabled="desktopUpdateStore.isChecking"
+              @click="handleDesktopUpdateCheck"
+            >
+              <LoaderCircle v-if="desktopUpdateStore.isChecking" class="w-4 h-4 animate-spin" />
+              <RefreshCw v-else class="w-4 h-4" />
+              检查更新
+            </button>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+              <span class="text-gray-600 text-xs">当前版本</span>
+              <div class="text-gray-200 font-mono mt-0.5">v{{ desktopUpdateStore.localVersion || '—' }}</div>
+            </div>
+            <div>
+              <span class="text-gray-600 text-xs">最近检查</span>
+              <div class="text-gray-200 mt-0.5">
+                {{ desktopUpdateStore.lastCheckedAt ? formatDate(desktopUpdateStore.lastCheckedAt) : '尚未检查' }}
+              </div>
+            </div>
+            <div class="sm:col-span-2">
+              <span class="text-gray-600 text-xs">状态</span>
+              <div
+                class="mt-0.5"
+                :class="desktopUpdateStore.status === 'error' ? 'text-red-400' : 'text-gray-200'"
+              >
+                {{ desktopUpdateStore.accountStatusLabel }}
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="desktopUpdateStore.status === 'updateAvailable'"
+            class="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 space-y-3"
+          >
+            <div class="text-sm text-gray-200">
+              最新版本 v{{ desktopUpdateStore.remoteVersion }}
+              <span v-if="desktopUpdateStore.noticeMode === 'required'" class="text-amber-300">
+                （低于最低兼容 v{{ desktopUpdateStore.minSupported }}）
+              </span>
+            </div>
+            <p
+              v-if="desktopUpdateStore.releaseNotes"
+              class="text-sm text-gray-400 leading-7 whitespace-pre-wrap"
+            >
+              {{ desktopUpdateStore.releaseNotes }}
+            </p>
+            <button type="button" class="primary-button h-10" @click="handleDesktopOpenDownload">
+              <Download class="w-4 h-4" />
+              立即更新
+            </button>
+            <div
+              v-if="desktopUpdateStore.downloadErrorMessage"
+              class="form-error"
+              role="alert"
+            >
+              <AlertCircle class="w-4 h-4 shrink-0" />
+              {{ desktopUpdateStore.downloadErrorMessage }}
+            </div>
+          </div>
+
+          <div v-else-if="desktopUpdateStore.status === 'error'" class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="secondary-button h-10"
+              :disabled="desktopUpdateStore.isChecking"
+              @click="handleDesktopUpdateCheck"
+            >
+              重新检查
+            </button>
+          </div>
         </div>
       </div>
 

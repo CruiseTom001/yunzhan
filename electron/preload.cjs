@@ -11,6 +11,7 @@ const allowedChannels = [
   'app:getVersion',
   'app:getApiBaseUrl',
   'app:openDataFolder',
+  'app:openExternal',
   'desktop:apiRequest',
   'ai:polishStudyNote',
   'ai:testProvider',

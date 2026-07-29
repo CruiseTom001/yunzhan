@@ -98,10 +98,10 @@ onUnmounted(() => {
         </keep-alive>
       </transition>
     </router-view>
+    <UpdateBanner />
     <template v-if="!route.meta.hideChrome">
       <AnnouncementModal v-if="!onboardingStore.blocksAnnouncements" />
       <OnboardingTour />
-      <UpdateBanner />
       <ConceptPopover />
       <GlobalSearch ref="globalSearch" />
       <FloatingTerminal :visible="showTerminal" @close="showTerminal = false" />

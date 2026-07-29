@@ -62,6 +62,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     return status.value === 'pending' && version.value < tourVersion.value
   })
 
+  const blocksDesktopUpdateDialog = computed(() => blocksAnnouncements.value)
+
   const shouldDeferLastRouteRestore = computed(() => {
     return authStore.isAuthenticated && status.value === 'pending' && version.value < tourVersion.value
   })
@@ -273,6 +275,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     syncWarning,
     shouldAutoStart,
     blocksAnnouncements,
+    blocksDesktopUpdateDialog,
     shouldDeferLastRouteRestore,
     initialize,
     resetForLogout,

@@ -20,6 +20,10 @@ import ParticleBg from '@/components/common/ParticleBg.vue'
 import AuthDialog from '@/components/auth/AuthDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/stores/theme'
+import {
+  openAllowedDesktopDownloadUrl,
+  resolveLandingDesktopDownloadUrl,
+} from '@/utils/desktopDownloadUrl'
 import { getDesktopLatestVersion } from '@/utils/desktopVersionApi'
 import {
   buildLandingAuthQuery,
@@ -55,18 +59,16 @@ function toggleLandingTheme() {
 async function loadDesktopDownloadUrl() {
   try {
     const latest = await getDesktopLatestVersion()
-    if (typeof latest.downloadUrl === 'string' && /^https?:\/\//.test(latest.downloadUrl)) {
-      desktopDownloadUrl.value = latest.downloadUrl
-    }
+    desktopDownloadUrl.value = resolveLandingDesktopDownloadUrl(latest.downloadUrl)
   } catch {
     // 静默:落地页不应因版本服务异常影响主流程
   }
 }
 
 function openDesktopDownload() {
-  if (desktopDownloadUrl.value) {
-    window.open(desktopDownloadUrl.value, '_blank', 'noopener')
-  }
+  const url = desktopDownloadUrl.value
+  if (!url) return
+  void openAllowedDesktopDownloadUrl(url)
 }
 
 function openAuth(mode: AuthMode, redirect = '/') {
