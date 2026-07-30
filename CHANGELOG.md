@@ -3,6 +3,21 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/) 简化版,每条变更在括号内标注功能象限:
 A = 必须同步(进度/实验/IPC/Schema) · B = 推荐同步(UI/内容) · C = 桌面专属 · D = 桌面跳过。
 
+## [1.2.8] - 2026-07-30
+
+### 修复
+- AI 供应商返回 HTTP 529 时提示供应商可能繁忙，并建议稍后重试。[audience:user] (B/C)
+- 成对补建时无用户侧内容的渠道返回 skipped 且不携带无效占位公告对象。[audience:admin] (Web)
+- 公告自动生成将 HTTP 529 视为临时错误并做有限重试，全部失败后仍保留详细更新说明。[audience:admin] (Web)
+
+### 新增
+- 管理后台支持一次补建网站端与桌面端更新公告草稿，并分别展示各渠道结果。[audience:admin] (Web)
+- 补建更新草稿支持仅填写 Source Commit，从 GitHub 官方仓库安全解析版本。[audience:admin] (Web)
+
+### 变更
+- 完善成对补建、HTTP 529 提示与公告生成相关回归测试。[audience:internal] (B/C)
+- 更新 Phase 2 公告生成设计与实施计划文档。[audience:internal] (Web)
+
 ## [1.2.7] - 2026-07-30
 
 ### 修复
