@@ -27,29 +27,38 @@ function fail(message) {
 }
 
 function commandFor(baseName) {
-  if (process.platform !== 'win32') return baseName
-  if (baseName === 'npm') return 'npm.cmd'
-  if (baseName === 'npx') return 'npx.cmd'
-  if (baseName === 'gh') return 'gh.exe'
-  return baseName
+  if (process.platform !== 'win32') return { executable: baseName, args: [] }
+  if (baseName === 'npm') {
+    const npmCli = path.join(process.execPath, '..', 'node_modules', 'npm', 'bin', 'npm-cli.js')
+    return { executable: process.execPath, args: [npmCli] }
+  }
+  if (baseName === 'npx') {
+    const npxCli = path.join(process.execPath, '..', 'node_modules', 'npm', 'bin', 'npx-cli.js')
+    return { executable: process.execPath, args: [npxCli] }
+  }
+  if (baseName === 'gh') return { executable: 'gh.exe', args: [] }
+  return { executable: baseName, args: [] }
 }
 
 function run(command, commandArgs, options = {}) {
-  const executable = commandFor(command)
-  const result = spawnSync(executable, commandArgs, {
+  const { executable, args: prefixArgs } = commandFor(command)
+  const result = spawnSync(executable, [...prefixArgs, ...commandArgs], {
     cwd: root,
     stdio: 'inherit',
     shell: false,
     ...options,
   })
+  if (result.error) {
+    fail(`命令启动失败: ${executable} ${[...prefixArgs, ...commandArgs].join(' ')} (${result.error.message})`)
+  }
   if (result.status !== 0) {
-    fail(`命令失败: ${executable} ${commandArgs.join(' ')}`)
+    fail(`命令失败: ${executable} ${[...prefixArgs, ...commandArgs].join(' ')}`)
   }
 }
 
 function runCapture(command, commandArgs) {
-  const executable = commandFor(command)
-  return spawnSync(executable, commandArgs, {
+  const { executable, args: prefixArgs } = commandFor(command)
+  return spawnSync(executable, [...prefixArgs, ...commandArgs], {
     cwd: root,
     encoding: 'utf8',
     shell: false,
