@@ -99,10 +99,16 @@ function assertSyncedWithOriginMain() {
   if (aheadBehind.status !== 0) fail('无法比较 origin/main 与 HEAD。')
   const [behindText, aheadText] = aheadBehind.stdout.trim().split(/\s+/)
   if (Number(behindText) > 0) fail('本地 main 落后于 origin/main，请先拉取同步。')
-  if (Number(aheadText) > 0) fail('本地 main 尚未推送到 origin/main，请先推送再发版。')
+  // dry-run 允许本地领先，便于提交后先核对上传清单再推送。
+  if (!dryRun && Number(aheadText) > 0) {
+    fail('本地 main 尚未推送到 origin/main，请先推送再发版。')
+  }
 }
 
 function assertTagAndReleaseAbsent(tag) {
+  // dry-run 只校验本地产物与上传清单，不创建 Release，允许已存在的 tag/release。
+  if (dryRun) return
+
   const localTag = runCapture('git', ['tag', '--list', tag])
   if (localTag.stdout.trim()) fail(`Git tag ${tag} 已存在，请升级版本号。`)
 
