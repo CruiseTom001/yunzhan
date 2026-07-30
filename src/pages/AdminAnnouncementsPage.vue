@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  FileText,
   LoaderCircle,
   Megaphone,
   Pencil,
@@ -18,6 +19,7 @@ import {
   createAdminAnnouncement,
   deleteAdminAnnouncement,
   listAdminAnnouncements,
+  regenerateAdminAnnouncementFromChangelog,
   repolishAdminAnnouncement,
   updateAdminAnnouncement,
   type AdminAnnouncement,
@@ -222,6 +224,26 @@ async function repolishDraft(entry: AdminAnnouncement) {
   )
 }
 
+function canRegenerateFromChangelog(entry: AdminAnnouncement): boolean {
+  return !entry.active
+    && (entry.category === 'web_release' || entry.category === 'desktop_release')
+    && typeof entry.version === 'string'
+    && VERSION_PATTERN.test(entry.version)
+}
+
+async function regenerateFromChangelog(entry: AdminAnnouncement) {
+  if (!canRegenerateFromChangelog(entry) || actionBusyId.value) return
+  const confirmed = window.confirm(
+    `确定根据 CHANGELOG 重新生成「${entry.title}」吗？\n这将覆盖当前草稿正文（不会影响已发布公告）。`,
+  )
+  if (!confirmed) return
+  await runAnnouncementAction(
+    entry,
+    () => regenerateAdminAnnouncementFromChangelog(entry.id),
+    '从更新日志重新生成失败。',
+  )
+}
+
 async function discardDraft(entry: AdminAnnouncement) {
   if (entry.active || actionBusyId.value) return
   const confirmed = window.confirm(`确定放弃草稿「${entry.title}」吗？该操作不可恢复。`)
@@ -389,6 +411,16 @@ onMounted(() => {
                   >
                     <LoaderCircle v-if="actionBusyId === entry.id" class="w-4 h-4 animate-spin" />
                     <Sparkles v-else class="w-4 h-4" />
+                  </button>
+                  <button
+                    v-if="canRegenerateFromChangelog(entry)"
+                    type="button"
+                    class="icon-action text-amber-300"
+                    title="从更新日志重新生成"
+                    :disabled="actionBusyId === entry.id"
+                    @click="regenerateFromChangelog(entry)"
+                  >
+                    <FileText class="w-4 h-4" />
                   </button>
                   <button
                     v-if="!entry.active"

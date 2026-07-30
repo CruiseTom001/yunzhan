@@ -157,6 +157,7 @@ function main() {
   assertSyncedWithOriginMain()
   assertSkipBuildAllowed()
   run('node', ['scripts/check-version-sync.cjs'])
+  run('node', ['scripts/check-changelog-entry.mjs'])
   assertTagAndReleaseAbsent(tag)
 
   if (!skipBuild) {

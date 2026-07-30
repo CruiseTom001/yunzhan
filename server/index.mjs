@@ -19,7 +19,7 @@ import {
   readAnnouncementSourceKeyInput,
   readAnnouncementVersionInput,
 } from './announcements.mjs'
-import { repolishAnnouncementDraft } from './announcement-generation.mjs'
+import { regenerateAnnouncementFromChangelog, repolishAnnouncementDraft, readChangelogFile } from './announcement-generation.mjs'
 import { CURRENT_TOUR_VERSION, fetchOnboardingState, toOnboardingResponse } from './onboarding.mjs'
 import { AI_EXPORT_INPUT_MAX_LENGTH, listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import {
@@ -2384,6 +2384,54 @@ app.post('/api/admin/announcements/:id/repolish', requireAuth, requireSuperAdmin
     })
     await writeAudit(pool, request.auth.id, 'announcement.repolish', request.auth.id, {
       announcementId,
+      generatedByAi: announcement.generatedByAi,
+    })
+    response.json({ announcement })
+  } catch (error) {
+    if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
+      response.status(error.statusCode).json({ error: error.message })
+      return
+    }
+    throw error
+  }
+}))
+
+app.post('/api/admin/announcements/:id/regenerate-from-changelog', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const announcementId = Number.parseInt(request.params.id ?? '', 10)
+  if (!Number.isInteger(announcementId) || announcementId < 1) {
+    response.status(400).json({ error: '公告 ID 无效。' })
+    return
+  }
+  const allowedKeys = new Set(['providerId'])
+  if (!hasOnlyKeys(request.body ?? {}, allowedKeys)) {
+    response.status(400).json({ error: '重新生成参数无效。' })
+    return
+  }
+  const providerId = readOptionalProviderId(request.body?.providerId)
+  if (providerId === undefined) {
+    response.status(400).json({ error: 'AI 供应商 id 格式无效。' })
+    return
+  }
+  let changelogMarkdown
+  try {
+    changelogMarkdown = readChangelogFile()
+  } catch (error) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500
+    response.status(statusCode).json({
+      error: error instanceof Error ? error.message : '无法读取 CHANGELOG.md。',
+    })
+    return
+  }
+  try {
+    const announcement = await regenerateAnnouncementFromChangelog(pool, announcementId, {
+      changelogMarkdown,
+      environment: process.env,
+      providerId,
+    })
+    await writeAudit(pool, request.auth.id, 'announcement.regenerate_from_changelog', request.auth.id, {
+      announcementId,
+      category: announcement.category,
+      version: announcement.version,
       generatedByAi: announcement.generatedByAi,
     })
     response.json({ announcement })

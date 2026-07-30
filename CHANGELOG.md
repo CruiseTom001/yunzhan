@@ -6,21 +6,27 @@ A = 必须同步(进度/实验/IPC/Schema) · B = 推荐同步(UI/内容) · C =
 ## [1.2.7] - 2026-07-30
 
 ### 修复
-- 桌面更新对话框：安装失败重试改为调用 installUpdate，检查/下载/校验失败路径分离。(C)
-- 公告 Store：标记已读、列表加载、分页、未读数与最新公告请求在账号切换后忽略过期响应，避免串号污染状态。(B/C)
-- 公告草稿生成：source_key 已存在时跳过 AI；重新润色禁止覆盖已生效公告。(Web)
-- ParticleBg：visibilitychange 监听不依赖初始减少动画状态；补充组件级回归测试。(B)
-- 发版与验证：正式发布禁用 --skip-build；验证脚本移除 shell:true；jsdom 对齐 Node 引擎范围。(C)
+- 修复桌面端更新失败后无法正确重试的问题，并区分检查、下载和安装阶段的错误提示。[audience:user] (C)
+- 修复切换账号后公告列表、未读数量或最新公告可能残留上一账号状态的问题。[audience:user] (B/C)
+- 优化页面切回前台后的背景动画恢复表现。[audience:user] (B)
+- 公告草稿生成：source_key 已存在时跳过 AI；重新润色禁止覆盖已生效公告。[audience:admin] (Web)
+- 调整 DesktopUpdateDialog 的 installUpdate 重试分支。[audience:internal] (C)
+- 调整公告 Store 的过期请求隔离逻辑。[audience:internal] (B/C)
+- 调整 ParticleBg 的 visibilitychange 监听流程。[audience:internal] (B)
+- 补充 ParticleBg 组件级回归测试。[audience:internal] (B)
+- 发版与验证：正式发布禁用 --skip-build；验证脚本移除 shell:true；jsdom 对齐 Node 引擎范围。[audience:internal] (C)
 
 ## [1.2.6] - 2026-07-29
 
 ### 新增
-- 公告中心 Phase 2：发布后自动生成 inactive 更新公告草稿，超管可预览/编辑/重新润色/发布。(Web)
-- 桌面端与网站端公告展示分类与版本信息；桌面 Release 成功后 best-effort 生成草稿。(B/C)
+- 公告中心支持按公告类型和版本查看更新信息。[audience:user] (B/C)
+- 网站发布和桌面端发版后自动生成待审核的更新公告草稿，供超管预览、编辑、重新润色与发布。[audience:admin] (Web)
 
 ### 修复
-- 桌面自动更新：版本源对账、未保存内容退出保护、可选更新对话框关闭、quitAndInstall 异常捕获。(C)
-- 公告中心未读计数与展示问题；生产依赖审计与 Release 产物校验。(B/C)
+- 修复桌面端更新版本判断异常的问题，并在安装更新前保护尚未保存的内容。[audience:user] (C)
+- 优化可选更新的下载与安装流程，安装过程出现异常时给出明确提示。[audience:user] (C)
+- 修复公告中心未读数量和公告展示异常的问题。[audience:user] (B/C)
+- 完善生产依赖审计和桌面安装包产物校验。[audience:internal] (C)
 
 ## [1.2.5] - 2026-07-26
 

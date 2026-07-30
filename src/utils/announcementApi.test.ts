@@ -17,6 +17,7 @@ import {
   listAdminAnnouncements,
   listAnnouncements,
   markAnnouncementRead,
+  regenerateAdminAnnouncementFromChangelog,
   repolishAdminAnnouncement,
   updateAdminAnnouncement,
 } from './announcementApi'
@@ -178,6 +179,41 @@ describe('announcementApi type guards', () => {
     expect(result.generationProvider).toContain('deepseek-flash')
     const calledPath = mockedApiRequest.mock.calls[0]?.[0] as string
     expect(calledPath).toContain('/repolish')
+  })
+
+  it('regenerates admin announcement from changelog endpoint', async () => {
+    const regenerated = {
+      ...VALID_ADMIN_ANNOUNCEMENT,
+      active: false,
+      category: 'web_release',
+      version: '1.2.7',
+      sourceKey: 'web_release:1.2.7',
+      generatedByAi: false,
+      generationError: 'AI 供应商响应超时。',
+      content: '云栈网站 v1.2.7 已发布。\n\n本次更新：\n修复：\n- 公告 Store',
+    }
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ announcement: regenerated }))
+    const result = await regenerateAdminAnnouncementFromChangelog('a-1')
+    expect(result.category).toBe('web_release')
+    expect(result.content).toContain('公告 Store')
+    const calledPath = mockedApiRequest.mock.calls[0]?.[0] as string
+    expect(calledPath).toContain('/regenerate-from-changelog')
+    const calledOptions = mockedApiRequest.mock.calls[0]?.[1] as RequestInit
+    expect(calledOptions.method).toBe('POST')
+  })
+
+  it('does not call regenerate API when confirm is cancelled', async () => {
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('window', { confirm })
+    mockedApiRequest.mockClear()
+    // 与 AdminAnnouncementsPage.regenerateFromChangelog 相同的取消短路语义
+    const confirmed = window.confirm('确定根据 CHANGELOG 重新生成吗？')
+    if (confirmed) {
+      await regenerateAdminAnnouncementFromChangelog('a-1')
+    }
+    expect(confirm).toHaveBeenCalled()
+    expect(mockedApiRequest).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
   it('rejects admin announcement with invalid generation metadata', async () => {

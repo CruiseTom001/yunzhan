@@ -211,7 +211,8 @@ export async function runPhase2Verification(db, { label = 'verify:phase2' } = {}
     'announcements_category_check',
   )
 
-  const aiContent = '云栈桌面端 v9.9.9 已发布，包含桌面更新修复与公告体验优化。'
+  // 方案 A：AI 只写开场摘要，且每个显著名词必须能在用户事实中落地
+  const aiContent = '本次修复了桌面更新提示。'
   const firstDraft = await generateReleaseAnnouncementDraft(db, {
     category: 'desktop_release',
     version: '9.9.9',
@@ -224,7 +225,10 @@ export async function runPhase2Verification(db, { label = 'verify:phase2' } = {}
   assertCondition(firstDraft.announcement.active === false, '草稿应为 inactive')
   assertCondition(firstDraft.announcement.sourceKey === VERIFY_DESKTOP_SOURCE_KEY, 'source_key 不匹配')
   assertCondition(firstDraft.announcement.generatedByAi === true, 'AI 成功路径应标记 generatedByAi=true')
-  assertCondition(firstDraft.announcement.content === aiContent, 'AI 润色正文未写入')
+  assertCondition(firstDraft.announcement.content.includes(aiContent), 'AI 开场摘要未写入')
+  assertCondition(firstDraft.announcement.content.includes('修复桌面更新提示'), '确定性详细条目应保留')
+  assertCondition(firstDraft.announcement.content.includes('云栈桌面端 v9.9.9 已发布。'), '版本发布行缺失')
+  assertCondition(firstDraft.announcement.content.includes('本次更新：'), '本次更新区块缺失')
 
   const duplicateDraft = await generateReleaseAnnouncementDraft(db, {
     category: 'desktop_release',

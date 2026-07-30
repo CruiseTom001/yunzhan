@@ -233,6 +233,20 @@ export async function repolishAdminAnnouncement(id: string, input: { providerId?
   return announcement
 }
 
+export async function regenerateAdminAnnouncementFromChangelog(
+  id: string,
+  input: { providerId?: string | null } = {},
+) {
+  const payload = await apiRequest(`/admin/announcements/${encodeURIComponent(id)}/regenerate-from-changelog`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  if (!isRecord(payload)) throw new Error('账号服务返回了无效公告数据。')
+  const announcement = readAdminAnnouncement(payload.announcement)
+  if (!announcement) throw new Error('账号服务返回了无效公告数据。')
+  return announcement
+}
+
 export async function deleteAdminAnnouncement(id: string) {
   const payload = await apiRequest(`/admin/announcements/${encodeURIComponent(id)}`, {
     method: 'DELETE',
