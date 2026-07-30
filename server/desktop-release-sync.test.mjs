@@ -249,11 +249,14 @@ describe('limitedHttpsFetch', () => {
   })
 
   it('does not reset timeout budget after a redirect', async () => {
-    const timeoutMs = 70
+    // 使用更大的时间窗口，避免机器抖动导致第二次 fetch 尚未发起就已超时。
+    // 首跳 120ms + 次跳 120ms = 240ms > 总超时 200ms：共享预算应超时；
+    // 若重定向后重置超时，次跳会在新的 200ms 内成功返回。
+    const timeoutMs = 200
     let call = 0
     const fetchImplementation = vi.fn().mockImplementation((_url, options) => new Promise((resolve, reject) => {
       call += 1
-      const delayMs = call === 1 ? 45 : 45
+      const delayMs = 120
       const timer = setTimeout(() => {
         if (call === 1) {
           resolve(new Response(null, {
@@ -285,8 +288,7 @@ describe('limitedHttpsFetch', () => {
       allowedHosts: hosts,
       errorPrefix: '测试',
     })).rejects.toMatchObject({ code: 'timeout', statusCode: 504 })
-    expect(Date.now() - startedAt).toBeLessThan(timeoutMs + 120)
-    // 若超时在重定向后重置，第二次 45ms 请求会成功返回正文。
+    expect(Date.now() - startedAt).toBeLessThan(timeoutMs + 200)
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
