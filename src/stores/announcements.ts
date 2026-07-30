@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useDesktopUpdateStore } from '@/stores/desktopUpdate'
@@ -49,11 +49,14 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
   const suppressedLatestId = ref<string | null>(null)
   const initialized = ref(false)
   const centerBlockedMessage = ref('')
+  const markReadInFlight = reactive(new Map<string, number>())
 
   let loadPromise: Promise<void> | null = null
   let loadMorePromise: Promise<void> | null = null
   let latestCheckPromise: Promise<void> | null = null
   let activeUserId: string | null = null
+  let stateEpoch = 0
+  let nextMarkReadOperationId = 1
 
   const selectedAnnouncement = computed(() => (
     announcements.value.find((item) => item.id === selectedAnnouncementId.value) ?? null
@@ -96,6 +99,8 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     loadPromise = null
     loadMorePromise = null
     latestCheckPromise = null
+    markReadInFlight.clear()
+    stateEpoch += 1
   }
 
   function resetForLogout() {
@@ -104,10 +109,16 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     clearState()
   }
 
+  function isCurrentEpoch(requestEpoch: number): boolean {
+    return requestEpoch === stateEpoch
+  }
+
   async function refreshUnreadCount() {
     if (!authStore.isAuthenticated) return
+    const requestEpoch = stateEpoch
     try {
       const result = await listAnnouncements({ limit: 1, offset: 0 })
+      if (!isCurrentEpoch(requestEpoch)) return
       unreadTotal.value = result.unreadTotal
       total.value = result.total
     } catch {
@@ -125,9 +136,11 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
       errorMessage.value = ''
     }
 
-    loadPromise = (async () => {
+    const requestEpoch = stateEpoch
+    const requestPromise = (async () => {
       try {
         const result = await listAnnouncements({ limit: ANNOUNCEMENT_PAGE_SIZE, offset: 0 })
+        if (!isCurrentEpoch(requestEpoch)) return
         announcements.value = result.announcements
         total.value = result.total
         unreadTotal.value = result.unreadTotal
@@ -140,13 +153,19 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
           selectedAnnouncementId.value = result.announcements[0]?.id ?? null
         }
       } catch {
+        if (!isCurrentEpoch(requestEpoch)) return
         errorMessage.value = ANNOUNCEMENT_LOAD_ERROR_MESSAGE
       } finally {
-        loading.value = false
-        loadPromise = null
+        if (isCurrentEpoch(requestEpoch)) {
+          loading.value = false
+        }
+        if (loadPromise === requestPromise) {
+          loadPromise = null
+        }
       }
     })()
 
+    loadPromise = requestPromise
     return loadPromise
   }
 
@@ -157,23 +176,31 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     loadingMore.value = true
     errorMessage.value = ''
 
-    loadMorePromise = (async () => {
+    const requestEpoch = stateEpoch
+    const requestPromise = (async () => {
       try {
         const result = await listAnnouncements({
           limit: ANNOUNCEMENT_PAGE_SIZE,
           offset: announcements.value.length,
         })
+        if (!isCurrentEpoch(requestEpoch)) return
         announcements.value = mergeAnnouncements(announcements.value, result.announcements)
         total.value = result.total
         unreadTotal.value = result.unreadTotal
       } catch {
+        if (!isCurrentEpoch(requestEpoch)) return
         errorMessage.value = ANNOUNCEMENT_LOAD_ERROR_MESSAGE
       } finally {
-        loadingMore.value = false
-        loadMorePromise = null
+        if (isCurrentEpoch(requestEpoch)) {
+          loadingMore.value = false
+        }
+        if (loadMorePromise === requestPromise) {
+          loadMorePromise = null
+        }
       }
     })()
 
+    loadMorePromise = requestPromise
     return loadMorePromise
   }
 
@@ -181,9 +208,11 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     if (!authStore.isAuthenticated || centerVisible.value || overlayBlocked.value) return
     if (latestCheckPromise) return latestCheckPromise
 
-    latestCheckPromise = (async () => {
+    const requestEpoch = stateEpoch
+    const requestPromise = (async () => {
       try {
         const latest = await getLatestUnread()
+        if (!isCurrentEpoch(requestEpoch)) return
         if (!latest || latest.id === suppressedLatestId.value) {
           latestAnnouncement.value = null
           latestModalVisible.value = false
@@ -192,13 +221,17 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
         latestAnnouncement.value = latest
         latestModalVisible.value = true
       } catch {
+        if (!isCurrentEpoch(requestEpoch)) return
         latestAnnouncement.value = null
         latestModalVisible.value = false
       } finally {
-        latestCheckPromise = null
+        if (latestCheckPromise === requestPromise) {
+          latestCheckPromise = null
+        }
       }
     })()
 
+    latestCheckPromise = requestPromise
     return latestCheckPromise
   }
 
@@ -208,11 +241,17 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
   }
 
   async function markRead(id: string) {
+    if (markReadInFlight.has(id)) return false
     markReadError.value = ''
+    const requestEpoch = stateEpoch
+    const operationId = nextMarkReadOperationId
+    nextMarkReadOperationId += 1
+    markReadInFlight.set(id, operationId)
     const target = announcements.value.find((item) => item.id === id)
     const wasUnread = target?.read === false
     try {
       await markAnnouncementRead(id)
+      if (!isCurrentEpoch(requestEpoch)) return false
       announcements.value = announcements.value.map((item) => (
         item.id === id ? { ...item, read: true } : item
       ))
@@ -225,9 +264,18 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
       }
       return true
     } catch {
+      if (!isCurrentEpoch(requestEpoch)) return false
       markReadError.value = '标记已读失败，请稍后再试。'
       return false
+    } finally {
+      if (markReadInFlight.get(id) === operationId) {
+        markReadInFlight.delete(id)
+      }
     }
+  }
+
+  function isMarkReadInFlight(id: string): boolean {
+    return markReadInFlight.has(id)
   }
 
   function closeLatestModal() {
@@ -341,6 +389,7 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     closeCenter,
     selectAnnouncement,
     markRead,
+    isMarkReadInFlight,
     refreshUnreadCount,
     resetForLogout,
     checkLatestUnread,

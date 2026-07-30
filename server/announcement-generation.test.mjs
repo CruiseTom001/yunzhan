@@ -97,14 +97,16 @@ describe('generateReleaseAnnouncementDraft', () => {
   it('creates inactive AI draft with source metadata', async () => {
     const requests = []
     const client = {
-      query: vi.fn().mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [adminRow({
-          content: '本次更新修复了桌面更新与公告已读问题。',
-          generated_by_ai: true,
-          generation_provider: 'DeepSeek Flash/deepseek-flash',
-        })],
-      }),
+      query: vi.fn()
+        .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+        .mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [adminRow({
+            content: '本次更新修复了桌面更新与公告已读问题。',
+            generated_by_ai: true,
+            generation_provider: 'DeepSeek Flash/deepseek-flash',
+          })],
+        }),
     }
 
     const result = await generateReleaseAnnouncementDraft(client, {
@@ -120,8 +122,8 @@ describe('generateReleaseAnnouncementDraft', () => {
     expect(result.announcement.active).toBe(false)
     expect(result.announcement.generatedByAi).toBe(true)
     expect(result.announcement.generationProvider).toBe('DeepSeek Flash/deepseek-flash')
-    expect(client.query).toHaveBeenCalledOnce()
-    const [sql, params] = client.query.mock.calls[0]
+    expect(client.query).toHaveBeenCalledTimes(2)
+    const [sql, params] = client.query.mock.calls[1]
     expect(sql).toContain('ON CONFLICT (source_key) DO NOTHING')
     expect(params).toContain('desktop_release:1.2.5')
     expect(params).toContain('abc1234')
@@ -133,15 +135,17 @@ describe('generateReleaseAnnouncementDraft', () => {
 
   it('falls back to deterministic changelog text when AI fails', async () => {
     const client = {
-      query: vi.fn().mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [adminRow({
-          content: '云栈桌面端 v1.2.5 已发布。\n\n本次更新：\n修复：\n- 修复桌面更新提示',
-          generated_by_ai: false,
-          generation_provider: null,
-          generation_error: '服务端无法连接 AI 供应商。',
-        })],
-      }),
+      query: vi.fn()
+        .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+        .mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [adminRow({
+            content: '云栈桌面端 v1.2.5 已发布。\n\n本次更新：\n修复：\n- 修复桌面更新提示',
+            generated_by_ai: false,
+            generation_provider: null,
+            generation_error: '服务端无法连接 AI 供应商。',
+          })],
+        }),
     }
 
     const result = await generateReleaseAnnouncementDraft(client, {
@@ -163,7 +167,6 @@ describe('generateReleaseAnnouncementDraft', () => {
   it('returns existing announcement when source_key already exists', async () => {
     const client = {
       query: vi.fn()
-        .mockResolvedValueOnce({ rowCount: 0, rows: [] })
         .mockResolvedValueOnce({ rowCount: 1, rows: [adminRow()] }),
     }
 
@@ -176,7 +179,27 @@ describe('generateReleaseAnnouncementDraft', () => {
 
     expect(result.created).toBe(false)
     expect(result.announcement.sourceKey).toBe('desktop_release:1.2.5')
-    expect(client.query).toHaveBeenCalledTimes(2)
+    expect(client.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call AI when source_key already exists', async () => {
+    const requests = []
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rowCount: 1, rows: [adminRow()] }),
+    }
+
+    const result = await generateReleaseAnnouncementDraft(client, {
+      category: 'desktop_release',
+      version: '1.2.5',
+      environment: FLASH_ENVIRONMENT,
+      fetchImplementation: aiFetch('AI 正文', requests),
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.announcement.sourceKey).toBe('desktop_release:1.2.5')
+    expect(client.query).toHaveBeenCalledTimes(1)
+    expect(requests).toHaveLength(0)
   })
 })
 
@@ -218,6 +241,39 @@ describe('repolishAnnouncementDraft', () => {
     expect(result.generationError).toContain('无法连接 AI 供应商')
     expect(client.query).toHaveBeenCalledTimes(2)
     expect(client.query.mock.calls[1][1][1]).toBe('原始草稿正文')
+  })
+
+  it('rejects repolish when announcement becomes active during AI call', async () => {
+    const current = adminRow({ active: false })
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [current] })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [{ active: true }] }),
+    }
+
+    await expect(repolishAnnouncementDraft(client, 7, {
+      environment: FLASH_ENVIRONMENT,
+      fetchImplementation: aiFetch('AI 正文'),
+    })).rejects.toMatchObject({ statusCode: 409, message: '公告已生效，不能重新润色。' })
+    expect(client.query).toHaveBeenCalledTimes(3)
+    expect(client.query.mock.calls[1][0]).toContain('WHERE id = $1 AND active = false')
+  })
+
+  it('returns 404 when announcement is deleted during AI call', async () => {
+    const current = adminRow({ active: false })
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [current] })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [] }),
+    }
+
+    await expect(repolishAnnouncementDraft(client, 7, {
+      environment: FLASH_ENVIRONMENT,
+      fetchImplementation: aiFetch('AI 正文'),
+    })).rejects.toMatchObject({ statusCode: 404 })
+    expect(client.query).toHaveBeenCalledTimes(3)
   })
 })
 

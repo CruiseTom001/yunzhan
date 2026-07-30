@@ -28,7 +28,7 @@ function stopAnimation(): void {
 
 function startAnimation(): void {
   stopAnimation()
-  if (!engine?.shouldAnimate()) return
+  if (!engine?.shouldAnimate() || document.hidden || preferencesStore.reduceMotion) return
 
   const draw = (now: number) => {
     if (!engine || !canvas.value) return
@@ -131,8 +131,8 @@ onMounted(() => {
 
   if (!initialReduceMotion) {
     attachInteractionListeners()
-    document.addEventListener('visibilitychange', visibilityHandler)
   }
+  document.addEventListener('visibilitychange', visibilityHandler)
 
   intersectionObserver = new IntersectionObserver((entries) => {
     const visible = entries.some(entry => entry.isIntersecting)

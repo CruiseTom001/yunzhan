@@ -16,11 +16,13 @@ Windows 图标由发布命令根据 `public/favicon.svg` 自动生成。
 npm run release:desktop
 ```
 
-仅上传已有产物：
+仅上传已有产物（仅允许 dry-run，正式发布必须完整构建）：
 
 ```powershell
-node scripts/release-desktop.mjs --skip-build
+node scripts/release-desktop.mjs --skip-build --dry-run
 ```
+
+**安全约束**：`--skip-build` 不再允许单独用于正式发布。所有正式 GitHub Release 必须通过完整 `npm run quality` 与 `npm run release:windows` 构建，确保安装包与当前 HEAD 一致。
 
 ## 更新公告草稿（Phase 2）
 

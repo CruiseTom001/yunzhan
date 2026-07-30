@@ -232,6 +232,17 @@ export async function generateReleaseAnnouncementDraft(
   const normalizedVersion = version.trim()
   const commit = readAnnouncementCommitInput(sourceCommit)
   if (!commit.ok) throw createHttpError('source_commit 无效。', 400)
+
+  const existing = await client.query(
+    `SELECT ${ADMIN_RETURNING_COLUMNS}
+       FROM announcements
+      WHERE source_key = $1`,
+    [sourceKey],
+  )
+  if (existing.rows.length > 0) {
+    return { announcement: mapAdminAnnouncementRow(existing.rows[0]), created: false }
+  }
+
   const fallback = buildReleaseAnnouncementFallback({
     category,
     version: normalizedVersion,
@@ -275,16 +286,16 @@ export async function generateReleaseAnnouncementDraft(
     return { announcement: mapAdminAnnouncementRow(inserted.rows[0]), created: true }
   }
 
-  const existing = await client.query(
+  const conflictExisting = await client.query(
     `SELECT ${ADMIN_RETURNING_COLUMNS}
        FROM announcements
       WHERE source_key = $1`,
     [sourceKey],
   )
-  if (existing.rows.length === 0) {
+  if (conflictExisting.rows.length === 0) {
     throw createHttpError('公告草稿生成失败。', 500)
   }
-  return { announcement: mapAdminAnnouncementRow(existing.rows[0]), created: false }
+  return { announcement: mapAdminAnnouncementRow(conflictExisting.rows[0]), created: false }
 }
 
 export async function repolishAnnouncementDraft(
@@ -325,7 +336,7 @@ export async function repolishAnnouncementDraft(
             generation_provider = $4,
             generation_error = $5,
             updated_at = NOW()
-      WHERE id = $1
+      WHERE id = $1 AND active = false
       RETURNING ${ADMIN_RETURNING_COLUMNS}`,
     [
       announcementId,
@@ -335,5 +346,20 @@ export async function repolishAnnouncementDraft(
       polished.generationError,
     ],
   )
+
+  if (updated.rows.length === 0) {
+    const recheck = await client.query(
+      `SELECT active FROM announcements WHERE id = $1`,
+      [announcementId],
+    )
+    if (recheck.rows.length === 0) {
+      throw createHttpError('公告不存在。', 404)
+    }
+    if (recheck.rows[0].active === true) {
+      throw createHttpError('公告已生效，不能重新润色。', 409)
+    }
+    throw createHttpError('公告更新失败。', 500)
+  }
+
   return mapAdminAnnouncementRow(updated.rows[0])
 }

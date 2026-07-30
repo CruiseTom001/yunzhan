@@ -236,9 +236,10 @@ onUnmounted(() => {
                   v-if="!store.selectedAnnouncement.read"
                   type="button"
                   class="primary-button"
+                  :disabled="store.isMarkReadInFlight(store.selectedAnnouncement.id)"
                   @click="handleMarkRead"
                 >
-                  标记已读
+                  {{ store.isMarkReadInFlight(store.selectedAnnouncement.id) ? '处理中…' : '标记已读' }}
                 </button>
                 <p v-if="store.markReadError" class="text-xs text-amber-400">{{ store.markReadError }}</p>
               </div>

@@ -93,7 +93,12 @@ async function handlePrimaryAction() {
     return
   }
   if (status.value === 'error') {
-    if (store.updaterState.errorCode?.startsWith('download') || store.updaterState.errorCode === 'checksum_failed') {
+    const errorCode = store.updaterState.errorCode
+    if (errorCode === 'install_failed') {
+      await store.installUpdate()
+      return
+    }
+    if (errorCode === 'download_failed' || errorCode === 'download_cancelled' || errorCode === 'checksum_failed') {
       await store.downloadUpdate()
       return
     }

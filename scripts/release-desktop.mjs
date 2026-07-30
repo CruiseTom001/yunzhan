@@ -74,6 +74,12 @@ function assertCleanGitTree() {
   if (dirty.length > 0) fail('Git 工作区不干净，请先提交或清理后再发版。')
 }
 
+function assertSkipBuildAllowed() {
+  if (!skipBuild) return
+  if (dryRun) return
+  fail('--skip-build 仅允许与 --dry-run 一起使用；正式发布必须执行完整构建。')
+}
+
 function assertSyncedWithOriginMain() {
   runCapture('git', ['fetch', 'origin', 'main'])
   const branch = runCapture('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
@@ -140,6 +146,7 @@ function main() {
 
   assertCleanGitTree()
   assertSyncedWithOriginMain()
+  assertSkipBuildAllowed()
   run('node', ['scripts/check-version-sync.cjs'])
   assertTagAndReleaseAbsent(tag)
 
