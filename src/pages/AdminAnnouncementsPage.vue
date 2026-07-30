@@ -18,6 +18,7 @@ import {
 import {
   createAdminAnnouncement,
   deleteAdminAnnouncement,
+  generateAdminAnnouncementFromChangelog,
   listAdminAnnouncements,
   regenerateAdminAnnouncementFromChangelog,
   repolishAdminAnnouncement,
@@ -25,14 +26,22 @@ import {
   type AdminAnnouncement,
   type AdminAnnouncementInput,
   type AnnouncementCategory,
+  type ReleaseAnnouncementCategory,
 } from '@/utils/announcementApi'
+import { ApiError } from '@/utils/apiClient'
 import PageState from '@/components/common/PageState.vue'
 
 const PAGE_SIZE = 50
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
+const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i
 
 const CATEGORY_OPTIONS: Array<{ value: AnnouncementCategory; label: string }> = [
   { value: 'general', label: '公告' },
+  { value: 'web_release', label: '网站更新' },
+  { value: 'desktop_release', label: '桌面端更新' },
+]
+
+const RELEASE_CATEGORY_OPTIONS: Array<{ value: ReleaseAnnouncementCategory; label: string }> = [
   { value: 'web_release', label: '网站更新' },
   { value: 'desktop_release', label: '桌面端更新' },
 ]
@@ -61,11 +70,27 @@ const editor = ref<EditorState>({ title: '', content: '', active: true, category
 const editorError = ref('')
 const editorSubmitting = ref(false)
 
+const generateOpen = ref(false)
+const generateCategory = ref<ReleaseAnnouncementCategory>('desktop_release')
+const generateVersion = ref('')
+const generateSourceCommit = ref('')
+const generateError = ref('')
+const generateInfo = ref('')
+const generateSubmitting = ref(false)
+
 const displayStart = computed(() => (total.value === 0 ? 0 : offset.value + 1))
 const displayEnd = computed(() => Math.min(offset.value + announcements.value.length, total.value))
 const canPrev = computed(() => !loading.value && offset.value > 0)
 const canNext = computed(() => !loading.value && offset.value + announcements.value.length < total.value)
 const editingGenerated = computed(() => Boolean(editingEntry.value?.sourceKey))
+const canSubmitGenerate = computed(() => (
+  !generateSubmitting.value
+  && VERSION_PATTERN.test(generateVersion.value.trim())
+  && (
+    !generateSourceCommit.value.trim()
+    || COMMIT_PATTERN.test(generateSourceCommit.value.trim())
+  )
+))
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
@@ -244,6 +269,65 @@ async function regenerateFromChangelog(entry: AdminAnnouncement) {
   )
 }
 
+function openGenerateDialog() {
+  generateCategory.value = 'desktop_release'
+  generateVersion.value = ''
+  generateSourceCommit.value = ''
+  generateError.value = ''
+  generateInfo.value = ''
+  generateOpen.value = true
+}
+
+function closeGenerateDialog() {
+  if (generateSubmitting.value) return
+  generateOpen.value = false
+  generateError.value = ''
+  generateInfo.value = ''
+}
+
+async function submitGenerateDraft() {
+  if (generateSubmitting.value) return
+  const version = generateVersion.value.trim()
+  const sourceCommit = generateSourceCommit.value.trim()
+  if (!VERSION_PATTERN.test(version)) {
+    generateError.value = '版本号需为 x.y.z。'
+    return
+  }
+  if (sourceCommit && !COMMIT_PATTERN.test(sourceCommit)) {
+    generateError.value = 'Source Commit 需为 7-40 位十六进制 Git SHA。'
+    return
+  }
+
+  generateSubmitting.value = true
+  generateError.value = ''
+  generateInfo.value = ''
+  try {
+    const result = await generateAdminAnnouncementFromChangelog({
+      category: generateCategory.value,
+      version,
+      sourceCommit: sourceCommit || null,
+    })
+    await loadAnnouncements()
+    if (result.created) {
+      generateInfo.value = result.announcement.generationError
+        ? `草稿已创建（仍为未发布）。AI 已降级：${result.announcement.generationError}`
+        : '草稿已创建（仍为未发布）。'
+      generateOpen.value = false
+    } else {
+      generateInfo.value = `该版本草稿已存在（${result.announcement.sourceKey}），未重复创建，也未修改正文。如需更新正文，请使用“从更新日志重新生成”。`
+      generateOpen.value = false
+    }
+  } catch (error: unknown) {
+    if (error instanceof ApiError && error.status === 409) {
+      generateError.value = '该版本公告已经发布，不能补建覆盖。'
+    } else {
+      generateError.value = errorMessage(error, '补建更新草稿失败。')
+    }
+  } finally {
+    generateSubmitting.value = false
+  }
+}
+
 async function discardDraft(entry: AdminAnnouncement) {
   if (entry.active || actionBusyId.value) return
   const confirmed = window.confirm(`确定放弃草稿「${entry.title}」吗？该操作不可恢复。`)
@@ -286,14 +370,24 @@ onMounted(() => {
             发布与维护面向所有登录用户的公告；更新类公告发布后由首页公告按钮、公告中心和未读弹窗推送。
           </p>
         </div>
-        <button
-          type="button"
-          class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-cyan-400 text-gray-950 text-sm font-semibold hover:bg-cyan-300"
-          @click="openCreateEditor"
-        >
-          <Plus class="w-4 h-4" />
-          新建公告
-        </button>
+        <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <button
+            type="button"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-cyan-400/30 text-cyan-200 text-sm font-semibold hover:bg-cyan-400/10"
+            @click="openGenerateDialog"
+          >
+            <FileText class="w-4 h-4" />
+            补建更新草稿
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-cyan-400 text-gray-950 text-sm font-semibold hover:bg-cyan-300"
+            @click="openCreateEditor"
+          >
+            <Plus class="w-4 h-4" />
+            新建公告
+          </button>
+        </div>
       </div>
 
       <div class="flex items-center justify-between mb-3">
@@ -317,6 +411,9 @@ onMounted(() => {
       </div>
       <div v-if="actionError" class="flex items-start gap-2 p-4 mb-4 rounded-md border border-amber-400/20 bg-amber-400/[0.06] text-sm text-amber-300" role="alert">
         <AlertCircle class="w-4 h-4 mt-0.5 shrink-0" />{{ actionError }}
+      </div>
+      <div v-if="generateInfo" class="flex items-start gap-2 p-4 mb-4 rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] text-sm text-cyan-200" role="status">
+        <FileText class="w-4 h-4 mt-0.5 shrink-0" />{{ generateInfo }}
       </div>
 
       <div class="overflow-x-auto border-y border-white/[0.06] -mx-4 sm:mx-0">
@@ -522,6 +619,76 @@ onMounted(() => {
               <button type="submit" class="primary-button" :disabled="editorSubmitting">
                 <LoaderCircle v-if="editorSubmitting" class="w-4 h-4 animate-spin" />
                 {{ editorMode === 'create' ? '发布公告' : '保存修改' }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="generateOpen" class="modal-backdrop" role="presentation" @click.self="closeGenerateDialog">
+        <section class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="generate-announcement-title">
+          <div class="modal-header">
+            <div>
+              <div class="text-xs text-cyan-400 font-mono mb-1">CHANGELOG</div>
+              <h2 id="generate-announcement-title" class="text-lg font-semibold text-white">补建更新草稿</h2>
+            </div>
+            <button type="button" class="icon-action" title="关闭" :disabled="generateSubmitting" @click="closeGenerateDialog">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <form class="p-5 space-y-4" @submit.prevent="submitGenerateDraft">
+            <p class="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3 text-xs text-cyan-100 leading-relaxed">
+              只会根据 CHANGELOG 创建未发布草稿，不会自动发布。source_key 由服务端按分类与版本计算，无需也不允许手工填写。
+            </p>
+
+            <label class="form-field">
+              <span>公告类型</span>
+              <select v-model="generateCategory" :disabled="generateSubmitting">
+                <option v-for="option in RELEASE_CATEGORY_OPTIONS" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>版本号</span>
+              <input
+                v-model="generateVersion"
+                type="text"
+                maxlength="32"
+                autocomplete="off"
+                placeholder="例如 1.2.6"
+                required
+                :disabled="generateSubmitting"
+              />
+              <small>必须与 CHANGELOG 中的版本一致</small>
+            </label>
+
+            <label class="form-field">
+              <span>Source Commit（可选）</span>
+              <input
+                v-model="generateSourceCommit"
+                type="text"
+                maxlength="40"
+                autocomplete="off"
+                placeholder="7-40 位 Git SHA"
+                :disabled="generateSubmitting"
+              />
+              <small>仅记录来源提交，不影响草稿可见性</small>
+            </label>
+
+            <div v-if="generateError" class="form-error" role="alert">
+              <AlertCircle class="w-4 h-4 shrink-0" />{{ generateError }}
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" class="secondary-button" :disabled="generateSubmitting" @click="closeGenerateDialog">取消</button>
+              <button type="submit" class="primary-button" :disabled="!canSubmitGenerate">
+                <LoaderCircle v-if="generateSubmitting" class="w-4 h-4 animate-spin" />
+                {{ generateSubmitting ? '处理中…' : '生成草稿' }}
               </button>
             </div>
           </form>

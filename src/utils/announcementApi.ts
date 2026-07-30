@@ -247,6 +247,49 @@ export async function regenerateAdminAnnouncementFromChangelog(
   return announcement
 }
 
+export type ReleaseAnnouncementCategory = 'web_release' | 'desktop_release'
+
+export interface GenerateAnnouncementFromChangelogInput {
+  category: ReleaseAnnouncementCategory
+  version: string
+  sourceCommit?: string | null
+}
+
+export interface GenerateAnnouncementFromChangelogResult {
+  announcement: AdminAnnouncement
+  created: boolean
+  repaired: boolean
+  skipped: boolean
+}
+
+export async function generateAdminAnnouncementFromChangelog(
+  input: GenerateAnnouncementFromChangelogInput,
+): Promise<GenerateAnnouncementFromChangelogResult> {
+  const body: Record<string, string> = {
+    category: input.category,
+    version: input.version,
+  }
+  if (typeof input.sourceCommit === 'string' && input.sourceCommit.trim()) {
+    body.sourceCommit = input.sourceCommit.trim()
+  }
+  const payload = await apiRequest('/admin/announcements/generate-from-changelog', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!isRecord(payload)) throw new Error('账号服务返回了无效公告数据。')
+  const announcement = readAdminAnnouncement(payload.announcement)
+  if (!announcement) throw new Error('账号服务返回了无效公告数据。')
+  if (typeof payload.created !== 'boolean' || typeof payload.repaired !== 'boolean') {
+    throw new Error('账号服务返回了无效公告数据。')
+  }
+  return {
+    announcement,
+    created: payload.created,
+    repaired: payload.repaired,
+    skipped: payload.skipped === true,
+  }
+}
+
 export async function deleteAdminAnnouncement(id: string) {
   const payload = await apiRequest(`/admin/announcements/${encodeURIComponent(id)}`, {
     method: 'DELETE',

@@ -953,12 +953,15 @@ export async function generateReleaseAnnouncementDraft(
     providerId,
     maxAttempts,
     retryDelayMs,
+    repairExistingGeneric = true,
+    auditContext = null,
   },
 ) {
   const sourceKey = buildReleaseAnnouncementSourceKey(category, version)
   const normalizedVersion = version.trim()
   const commit = readAnnouncementCommitInput(sourceCommit)
   if (!commit.ok) throw createHttpError('source_commit 无效。', 400)
+  const normalizedAudit = normalizeAnnouncementAuditContext(auditContext)
 
   const existing = await client.query(
     `SELECT ${ADMIN_RETURNING_COLUMNS}
@@ -970,6 +973,11 @@ export async function generateReleaseAnnouncementDraft(
   if (existing.rows.length > 0) {
     const current = mapAdminAnnouncementRow(existing.rows[0])
     if (current.active) {
+      return { announcement: current, created: false, repaired: false }
+    }
+
+    // 超管“补建”等显式关闭修复时：已存在 inactive 草稿一律原样返回，不 AI、不 UPDATE
+    if (!repairExistingGeneric) {
       return { announcement: current, created: false, repaired: false }
     }
 
@@ -1085,6 +1093,7 @@ export async function generateReleaseAnnouncementDraft(
     }
   }
 
+  // AI 在事务外完成；仅最终写入使用短 SQL / CTE，避免长事务占用连接
   const { fallback, polished } = await polishFromChangelogEntry({
     category,
     version: normalizedVersion,
@@ -1096,30 +1105,73 @@ export async function generateReleaseAnnouncementDraft(
     retryDelayMs,
   })
 
-  const inserted = await client.query(
-    `INSERT INTO announcements (
-       title, content, published_at, active, created_by,
-       category, version, source_key, source_commit,
-       generated_by_ai, generation_provider, generation_error
-     ) VALUES (
-       $1, $2, NOW(), false, NULL,
-       $3, $4, $5, $6,
-       $7, $8, $9
-     )
-     ON CONFLICT (source_key) DO NOTHING
-     RETURNING ${ADMIN_RETURNING_COLUMNS}`,
-    [
-      fallback.title,
-      polished.content,
-      category,
-      normalizedVersion,
-      sourceKey,
-      commit.value,
-      polished.generatedByAi,
-      polished.generationProvider,
-      polished.generationError,
-    ],
-  )
+  const insertParams = [
+    fallback.title,
+    polished.content,
+    category,
+    normalizedVersion,
+    sourceKey,
+    commit.value,
+    polished.generatedByAi,
+    polished.generationProvider,
+    polished.generationError,
+  ]
+
+  let inserted
+  if (normalizedAudit) {
+    inserted = await client.query(
+      `WITH inserted AS (
+         INSERT INTO announcements (
+           title, content, published_at, active, created_by,
+           category, version, source_key, source_commit,
+           generated_by_ai, generation_provider, generation_error
+         ) VALUES (
+           $1, $2, NOW(), false, NULL,
+           $3, $4, $5, $6,
+           $7, $8, $9
+         )
+         ON CONFLICT (source_key) DO NOTHING
+         RETURNING ${ADMIN_RETURNING_COLUMNS}
+       ),
+       _audit AS (
+         INSERT INTO audit_logs (actor_user_id, action, target_user_id, metadata)
+         SELECT
+           $10::uuid,
+           $11,
+           $12::uuid,
+           jsonb_build_object(
+             'category', inserted.category,
+             'version', inserted.version,
+             'sourceKey', inserted.source_key,
+             'sourceCommit', inserted.source_commit
+           )
+         FROM inserted
+         RETURNING id
+       )
+       SELECT * FROM inserted`,
+      [
+        ...insertParams,
+        normalizedAudit.actorUserId,
+        normalizedAudit.action,
+        normalizedAudit.targetUserId,
+      ],
+    )
+  } else {
+    inserted = await client.query(
+      `INSERT INTO announcements (
+         title, content, published_at, active, created_by,
+         category, version, source_key, source_commit,
+         generated_by_ai, generation_provider, generation_error
+       ) VALUES (
+         $1, $2, NOW(), false, NULL,
+         $3, $4, $5, $6,
+         $7, $8, $9
+       )
+       ON CONFLICT (source_key) DO NOTHING
+       RETURNING ${ADMIN_RETURNING_COLUMNS}`,
+      insertParams,
+    )
+  }
 
   if (inserted.rows.length > 0) {
     return { announcement: mapAdminAnnouncementRow(inserted.rows[0]), created: true, repaired: false }
@@ -1138,6 +1190,29 @@ export async function generateReleaseAnnouncementDraft(
     announcement: mapAdminAnnouncementRow(conflictExisting.rows[0]),
     created: false,
     repaired: false,
+  }
+}
+
+function normalizeAnnouncementAuditContext(auditContext) {
+  if (auditContext == null) return null
+  if (typeof auditContext !== 'object' || Array.isArray(auditContext)) {
+    throw createHttpError('审计上下文无效。', 400)
+  }
+  const action = typeof auditContext.action === 'string' ? auditContext.action.trim() : ''
+  const actorUserId = typeof auditContext.actorUserId === 'string' ? auditContext.actorUserId.trim() : ''
+  const targetUserId = typeof auditContext.targetUserId === 'string' ? auditContext.targetUserId.trim() : ''
+  if (!action || action.length > 64) {
+    throw createHttpError('审计动作无效。', 400)
+  }
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!uuidPattern.test(actorUserId) || !uuidPattern.test(targetUserId)) {
+    throw createHttpError('审计用户 ID 无效。', 400)
+  }
+  // 元数据仅由 inserted 行派生，忽略调用方传入的正文/密钥类字段
+  return {
+    action,
+    actorUserId: actorUserId.toLowerCase(),
+    targetUserId: targetUserId.toLowerCase(),
   }
 }
 

@@ -602,6 +602,147 @@ describe('generateReleaseAnnouncementDraft', () => {
     expect(requests).toHaveLength(1)
   })
 
+  it('does not repair existing inactive drafts when repairExistingGeneric=false', async () => {
+    const original = '原 inactive 草稿正文，禁止补建修改。'
+    const requests = []
+    const client = {
+      query: vi.fn().mockResolvedValueOnce({
+        rows: [adminRow({
+          category: 'desktop_release',
+          version: '1.2.6',
+          source_key: 'desktop_release:1.2.6',
+          content: original,
+          active: false,
+        })],
+      }),
+    }
+
+    const result = await generateReleaseAnnouncementDraft(client, {
+      category: 'desktop_release',
+      version: '1.2.6',
+      changelogEntry: extractChangelogEntryFromMarkdown(SAMPLE_CHANGELOG, '1.2.6'),
+      environment: FLASH_ENVIRONMENT,
+      repairExistingGeneric: false,
+      fetchImplementation: aiFetch('不应调用 AI', requests),
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.repaired).toBe(false)
+    expect(result.announcement.content).toBe(original)
+    expect(requests).toHaveLength(0)
+    expect(client.query).toHaveBeenCalledTimes(1)
+    expect(String(client.query.mock.calls[0][0])).toContain('WHERE source_key = $1')
+    expect(client.query.mock.calls.some(call => String(call[0]).includes('UPDATE'))).toBe(false)
+  })
+
+  it('does not auto-repair inactive generic drafts when repairExistingGeneric=false', async () => {
+    const generic = buildGenericReleaseAnnouncementContent('desktop_release', '1.2.6')
+    const requests = []
+    const client = {
+      query: vi.fn().mockResolvedValueOnce({
+        rows: [adminRow({
+          category: 'desktop_release',
+          version: '1.2.6',
+          source_key: 'desktop_release:1.2.6',
+          content: generic,
+          active: false,
+        })],
+      }),
+    }
+
+    const result = await generateReleaseAnnouncementDraft(client, {
+      category: 'desktop_release',
+      version: '1.2.6',
+      changelogEntry: extractChangelogEntryFromMarkdown(SAMPLE_CHANGELOG, '1.2.6'),
+      environment: FLASH_ENVIRONMENT,
+      repairExistingGeneric: false,
+      fetchImplementation: aiFetch('不应调用 AI', requests),
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.repaired).toBe(false)
+    expect(result.announcement.content).toBe(generic)
+    expect(requests).toHaveLength(0)
+    expect(client.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('inserts announcement and audit atomically via CTE when auditContext is provided', async () => {
+    const requests = []
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+        .mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [adminRow({
+            category: 'desktop_release',
+            version: '1.2.6',
+            source_key: 'desktop_release:1.2.6',
+            source_commit: '0f3cdbe',
+            content: '云栈桌面端 v1.2.6 已发布。\n\n本次更新：\n新增：\n- 公告中心',
+          })],
+        }),
+    }
+
+    const result = await generateReleaseAnnouncementDraft(client, {
+      category: 'desktop_release',
+      version: '1.2.6',
+      sourceCommit: '0f3cdbe',
+      changelogEntry: extractChangelogEntryFromMarkdown(SAMPLE_CHANGELOG, '1.2.6'),
+      environment: FLASH_ENVIRONMENT,
+      fetchImplementation: aiFetch('本次修复了公告中心状态。', requests),
+      auditContext: {
+        action: 'announcement.generate_from_changelog',
+        actorUserId: '11111111-1111-4111-8111-111111111111',
+        targetUserId: '11111111-1111-4111-8111-111111111111',
+      },
+    })
+
+    expect(result.created).toBe(true)
+    expect(requests).toHaveLength(1)
+    const insertSql = String(client.query.mock.calls[1][0])
+    expect(insertSql).toContain('WITH inserted AS')
+    expect(insertSql).toContain('INSERT INTO audit_logs')
+    expect(insertSql).toContain('ON CONFLICT (source_key) DO NOTHING')
+    expect(insertSql).toContain("jsonb_build_object")
+    expect(insertSql).toContain("'sourceKey'")
+    expect(JSON.stringify(client.query.mock.calls[1][1])).not.toContain('本次修复了公告中心状态')
+  })
+
+  it('does not write audit again when ON CONFLICT returns existing draft', async () => {
+    const existingContent = '已存在的桌面草稿正文'
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [adminRow({
+            category: 'desktop_release',
+            version: '1.2.6',
+            source_key: 'desktop_release:1.2.6',
+            content: existingContent,
+            active: false,
+          })],
+        }),
+    }
+
+    const result = await generateReleaseAnnouncementDraft(client, {
+      category: 'desktop_release',
+      version: '1.2.6',
+      changelogEntry: extractChangelogEntryFromMarkdown(SAMPLE_CHANGELOG, '1.2.6'),
+      environment: {},
+      auditContext: {
+        action: 'announcement.generate_from_changelog',
+        actorUserId: '11111111-1111-4111-8111-111111111111',
+        targetUserId: '11111111-1111-4111-8111-111111111111',
+      },
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.repaired).toBe(false)
+    expect(result.announcement.content).toBe(existingContent)
+    expect(client.query).toHaveBeenCalledTimes(3)
+  })
+
   it('does not auto-repair active announcements', async () => {
     const requests = []
     const client = {

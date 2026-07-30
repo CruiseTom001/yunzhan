@@ -12,14 +12,23 @@ import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { persistFeedbackStatus } from './feedback-status.mjs'
 import {
+  ANNOUNCEMENT_VERSION_PATTERN,
   listVisibleAnnouncements,
   mapAdminAnnouncementRow,
   markVisibleAnnouncementRead,
   readAnnouncementCategoryInput,
   readAnnouncementSourceKeyInput,
   readAnnouncementVersionInput,
+  RELEASE_ANNOUNCEMENT_CATEGORIES,
 } from './announcements.mjs'
-import { regenerateAnnouncementFromChangelog, repolishAnnouncementDraft, readChangelogFile } from './announcement-generation.mjs'
+import {
+  EMPTY_FILTERED_RELEASE_NOTICE,
+  extractChangelogEntryFromMarkdown,
+  generateReleaseAnnouncementDraft,
+  regenerateAnnouncementFromChangelog,
+  repolishAnnouncementDraft,
+  readChangelogFile,
+} from './announcement-generation.mjs'
 import { CURRENT_TOUR_VERSION, fetchOnboardingState, toOnboardingResponse } from './onboarding.mjs'
 import { AI_EXPORT_INPUT_MAX_LENGTH, listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import {
@@ -2387,6 +2396,111 @@ app.post('/api/admin/announcements/:id/repolish', requireAuth, requireSuperAdmin
       generatedByAi: announcement.generatedByAi,
     })
     response.json({ announcement })
+  } catch (error) {
+    if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
+      response.status(error.statusCode).json({ error: error.message })
+      return
+    }
+    throw error
+  }
+}))
+
+app.post('/api/admin/announcements/generate-from-changelog', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['category', 'version', 'sourceCommit'])
+  if (!isRecord(request.body) || !hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '补建参数无效。' })
+    return
+  }
+
+  const category = typeof request.body.category === 'string' ? request.body.category.trim() : ''
+  if (!RELEASE_ANNOUNCEMENT_CATEGORIES.has(category)) {
+    response.status(400).json({ error: '公告分类无效，仅支持网站更新或桌面端更新。' })
+    return
+  }
+
+  const version = typeof request.body.version === 'string' ? request.body.version.trim() : ''
+  if (!ANNOUNCEMENT_VERSION_PATTERN.test(version)) {
+    response.status(400).json({ error: '版本号无效，需为 x.y.z。' })
+    return
+  }
+
+  let sourceCommit = null
+  if (Object.prototype.hasOwnProperty.call(request.body, 'sourceCommit')) {
+    const rawCommit = request.body.sourceCommit
+    if (rawCommit === null || rawCommit === undefined || rawCommit === '') {
+      sourceCommit = null
+    } else if (typeof rawCommit !== 'string' || !/^[0-9a-f]{7,40}$/i.test(rawCommit.trim())) {
+      response.status(400).json({ error: 'sourceCommit 无效，需为 7-40 位十六进制 Git SHA。' })
+      return
+    } else {
+      sourceCommit = rawCommit.trim().toLowerCase()
+    }
+  }
+
+  let changelogMarkdown
+  try {
+    changelogMarkdown = readChangelogFile()
+  } catch (error) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500
+    response.status(statusCode).json({
+      error: error instanceof Error ? error.message : '无法读取 CHANGELOG.md。',
+    })
+    return
+  }
+
+  const changelogEntry = extractChangelogEntryFromMarkdown(changelogMarkdown, version)
+  if (!changelogEntry) {
+    response.status(422).json({ error: `CHANGELOG 中未找到版本 ${version}。` })
+    return
+  }
+
+  try {
+    const result = await generateReleaseAnnouncementDraft(pool, {
+      category,
+      version,
+      sourceCommit,
+      changelogEntry,
+      environment: process.env,
+      repairExistingGeneric: false,
+      auditContext: {
+        action: 'announcement.generate_from_changelog',
+        actorUserId: request.auth.id,
+        targetUserId: request.auth.id,
+      },
+    })
+
+    if (result.skipped) {
+      response.status(422).json({
+        error: result.announcement?.generationError || EMPTY_FILTERED_RELEASE_NOTICE,
+        announcement: result.announcement ?? null,
+        created: false,
+        repaired: false,
+        skipped: true,
+      })
+      return
+    }
+
+    if (!result.created && result.announcement?.active === true) {
+      response.status(409).json({ error: '该版本公告已经发布，不能补建覆盖。' })
+      return
+    }
+
+    if (result.created) {
+      response.status(201).json({
+        announcement: result.announcement,
+        created: true,
+        repaired: false,
+        skipped: false,
+      })
+      return
+    }
+
+    response.status(200).json({
+      announcement: result.announcement,
+      created: false,
+      repaired: false,
+      skipped: false,
+    })
   } catch (error) {
     if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
       response.status(error.statusCode).json({ error: error.message })
