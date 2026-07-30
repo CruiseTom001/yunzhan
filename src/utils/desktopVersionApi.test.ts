@@ -15,6 +15,7 @@ import {
   deleteAdminDesktopRelease,
   getDesktopLatestVersion,
   listAdminDesktopReleases,
+  syncAdminDesktopReleaseFromGitHub,
   updateAdminDesktopRelease,
 } from './desktopVersionApi'
 
@@ -98,5 +99,20 @@ describe('desktopVersionApi', () => {
   it('rejects delete when ok missing', async () => {
     mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: false }))
     await expect(deleteAdminDesktopRelease(1)).rejects.toThrow('无效')
+  })
+  it('syncs from GitHub and validates response', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      ok: true,
+      created: true,
+      alreadyExists: false,
+      message: '已创建为未启用，请检查后启用。',
+      release: { ...VALID_RECORD, enabled: false },
+    }))
+    const result = await syncAdminDesktopReleaseFromGitHub({ version: '1.2.0' })
+    expect(result.created).toBe(true)
+    expect(result.release.enabled).toBe(false)
+    expect(mockedApiRequest).toHaveBeenCalledWith('/admin/desktop-releases/sync-from-github', expect.objectContaining({
+      method: 'POST',
+    }))
   })
 })

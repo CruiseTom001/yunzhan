@@ -38,6 +38,20 @@ import {
   parseAiLayout,
   toDocxBuffer,
 } from './export-word.mjs'
+import {
+  DESKTOP_RELEASE_REPO_FULL_NAME,
+  DESKTOP_RELEASE_SEMVER_PATTERN,
+} from './desktop-release-manifest.mjs'
+import {
+  assertPublishedReleaseWebhook,
+  fetchGitHubReleaseByTag,
+  mapDesktopReleaseRow,
+  parseGitHubReleaseWebhookPayload,
+  syncDesktopReleaseFromGitHubRelease,
+  validateDesktopReleaseFields,
+  validateGitHubDeliveryId,
+  verifyGitHubWebhookSignature,
+} from './desktop-release-sync.mjs'
 import { loadRuntimeConfig } from './runtime-config.mjs'
 import { isDesktopOriginAllowed } from './origin-validation.mjs'
 import {
@@ -87,7 +101,22 @@ const AI_MODEL_MAX_LENGTH = 128
 
 app.set('trust proxy', trustProxy ? 1 : false)
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }))
-app.use(express.json({ limit: '2mb', strict: true }))
+
+const GITHUB_RELEASE_WEBHOOK_PATH = '/api/integrations/github/releases'
+const GITHUB_RELEASE_WEBHOOK_BODY_LIMIT = '1mb'
+
+// Webhook 必须使用原始字节验签；仅该路径保留 rawBody，不影响其它 JSON API。
+app.use(GITHUB_RELEASE_WEBHOOK_PATH, express.raw({
+  type: ['application/json', 'application/*+json'],
+  limit: GITHUB_RELEASE_WEBHOOK_BODY_LIMIT,
+}))
+app.use((request, response, next) => {
+  if (request.path === GITHUB_RELEASE_WEBHOOK_PATH) {
+    next()
+    return
+  }
+  express.json({ limit: '2mb', strict: true })(request, response, next)
+})
 app.use(cookieParser())
 app.use(cors({
   credentials: true,
@@ -110,6 +139,12 @@ app.use((request, response, next) => {
   }
   const method = request.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    next()
+    return
+  }
+
+  // GitHub Webhook 无浏览器 Origin；依赖 HMAC 验签，不走站点来源白名单。
+  if (request.path === GITHUB_RELEASE_WEBHOOK_PATH) {
     next()
     return
   }
@@ -2593,6 +2628,119 @@ app.delete('/api/admin/announcements/:id', requireAuth, requireSuperAdmin, async
 
 // ---------- 桌面端版本发布 ----------
 
+function respondDesktopReleaseError(response, error) {
+  if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
+    response.status(error.statusCode).json({
+      error: error.message,
+      code: typeof error.code === 'string' ? error.code : undefined,
+    })
+    return true
+  }
+  return false
+}
+
+app.post(GITHUB_RELEASE_WEBHOOK_PATH, asyncRoute(async (request, response) => {
+  const secret = typeof process.env.GITHUB_RELEASE_WEBHOOK_SECRET === 'string'
+    ? process.env.GITHUB_RELEASE_WEBHOOK_SECRET.trim()
+    : ''
+  if (!secret) {
+    response.status(503).json({ error: 'GitHub Webhook Secret 未配置。', code: 'webhook_secret_missing' })
+    return
+  }
+
+  const rawBody = request.body
+  if (!Buffer.isBuffer(rawBody)) {
+    response.status(400).json({ error: 'Webhook 原始请求体无效。', code: 'webhook_raw_body' })
+    return
+  }
+
+  try {
+    verifyGitHubWebhookSignature({
+      rawBody,
+      signatureHeader: request.get('x-hub-signature-256'),
+      secret,
+    })
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
+    throw error
+  }
+
+  let deliveryId
+  try {
+    deliveryId = validateGitHubDeliveryId(request.get('x-github-delivery'))
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
+    throw error
+  }
+
+  const eventName = request.get('x-github-event')
+  let payload
+  try {
+    payload = parseGitHubReleaseWebhookPayload(rawBody)
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
+    throw error
+  }
+
+  let assertion
+  try {
+    assertion = assertPublishedReleaseWebhook(payload, {
+      eventName,
+      repositoryFullName: DESKTOP_RELEASE_REPO_FULL_NAME,
+    })
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
+    throw error
+  }
+
+  if (assertion.ignored) {
+    response.status(202).json({
+      ok: true,
+      ignored: true,
+      reason: assertion.reason,
+      deliveryId,
+    })
+    return
+  }
+
+  try {
+    const result = await syncDesktopReleaseFromGitHubRelease(pool, assertion.release, {
+      audit: {
+        action: 'desktop_release.sync_from_github',
+        actorUserId: null,
+        targetUserId: null,
+        metadata: {
+          deliveryId,
+          repository: DESKTOP_RELEASE_REPO_FULL_NAME,
+          source: 'github_webhook',
+        },
+      },
+    })
+
+    if (result.alreadyExists) {
+      response.status(200).json({
+        ok: true,
+        created: false,
+        alreadyExists: true,
+        deliveryId,
+        release: result.release,
+      })
+      return
+    }
+
+    response.status(201).json({
+      ok: true,
+      created: true,
+      alreadyExists: false,
+      deliveryId,
+      release: result.release,
+    })
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
+    throw error
+  }
+}))
+
 // 公开端点:桌面端启动时拉取,可能用户未登录,因此不加 requireAuth
 app.get('/api/desktop/latest-version', asyncRoute(async (_request, response) => {
   const result = await pool.query(
@@ -2649,28 +2797,21 @@ app.post('/api/admin/desktop-releases', requireAuth, requireSuperAdmin, asyncRou
     response.status(400).json({ error: '桌面端版本参数无效。' })
     return
   }
-  if (typeof request.body.version !== 'string' || !SEMVER_RE_SERVER.test(request.body.version)) {
-    response.status(400).json({ error: '版本号需为 x.y.z 形式纯数字。' })
-    return
+
+  let fields
+  try {
+    fields = validateDesktopReleaseFields({
+      version: request.body.version,
+      minSupported: request.body.minSupported,
+      downloadUrl: request.body.downloadUrl,
+      releaseNotes: typeof request.body.releaseNotes === 'string' ? request.body.releaseNotes : '',
+      enabled: request.body.enabled === undefined ? true : Boolean(request.body.enabled),
+      requireGitHubDownloadUrl: false,
+    })
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
+    throw error
   }
-  const version = request.body.version
-  if (typeof request.body.minSupported !== 'string' || !SEMVER_RE_SERVER.test(request.body.minSupported)) {
-    response.status(400).json({ error: '最低兼容版本需为 x.y.z 形式纯数字。' })
-    return
-  }
-  const minSupported = request.body.minSupported
-  if (typeof request.body.downloadUrl !== 'string' || !/^https?:\/\//.test(request.body.downloadUrl) || request.body.downloadUrl.length > 500) {
-    response.status(400).json({ error: '下载地址需为 http(s):// 开头且不超过 500 字符。' })
-    return
-  }
-  const downloadUrl = request.body.downloadUrl
-  const releaseNotesRaw = typeof request.body.releaseNotes === 'string' ? request.body.releaseNotes : ''
-  if (releaseNotesRaw.length > 2000) {
-    response.status(400).json({ error: '发布说明不超过 2000 字符。' })
-    return
-  }
-  const releaseNotes = releaseNotesRaw
-  const enabled = request.body.enabled === undefined ? true : Boolean(request.body.enabled)
 
   try {
     const result = await withTransaction(async (client) => {
@@ -2678,29 +2819,74 @@ app.post('/api/admin/desktop-releases', requireAuth, requireSuperAdmin, asyncRou
         `INSERT INTO desktop_releases (version, min_supported, download_url, release_notes, enabled)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, version, min_supported, download_url, release_notes, enabled, created_at, updated_at`,
-        [version, minSupported, downloadUrl, releaseNotes, enabled ? 1 : 0],
+        [fields.version, fields.minSupported, fields.downloadUrl, fields.releaseNotes, fields.enabled ? 1 : 0],
       )
-      await writeAudit(client, request.auth.id, 'desktop_release.create', request.auth.id, { version })
+      await writeAudit(client, request.auth.id, 'desktop_release.create', request.auth.id, { version: fields.version })
       return inserted.rows[0]
     })
     response.json({
-      release: {
-        id: Number(result.id),
-        version: result.version,
-        minSupported: result.min_supported,
-        downloadUrl: result.download_url,
-        releaseNotes: result.release_notes,
-        enabled: result.enabled === 1,
-        createdAt: new Date(result.created_at).getTime(),
-        updatedAt: new Date(result.updated_at).getTime(),
-      },
+      release: mapDesktopReleaseRow(result),
     })
   } catch (error) {
-    // version 唯一约束冲突
     if (error?.code === '23505') {
       response.status(400).json({ error: '该版本号已存在。' })
       return
     }
+    throw error
+  }
+}))
+
+app.post('/api/admin/desktop-releases/sync-from-github', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['version'])
+  if (!isRecord(request.body) || !hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '同步参数无效，仅允许 version。' })
+    return
+  }
+  const version = typeof request.body.version === 'string' ? request.body.version.trim() : ''
+  if (!DESKTOP_RELEASE_SEMVER_PATTERN.test(version)) {
+    response.status(400).json({ error: '版本号需为 x.y.z 形式纯数字。' })
+    return
+  }
+
+  try {
+    const githubToken = typeof process.env.GITHUB_TOKEN === 'string' ? process.env.GITHUB_TOKEN.trim() : ''
+    const releasePayload = await fetchGitHubReleaseByTag(version, {
+      githubToken: githubToken || null,
+    })
+    const result = await syncDesktopReleaseFromGitHubRelease(pool, releasePayload, {
+      expectedVersion: version,
+      audit: {
+        action: 'desktop_release.sync_from_github',
+        actorUserId: request.auth.id,
+        targetUserId: request.auth.id,
+        metadata: {
+          deliveryId: null,
+          repository: DESKTOP_RELEASE_REPO_FULL_NAME,
+          source: 'admin_sync',
+        },
+      },
+    })
+
+    if (result.alreadyExists) {
+      response.status(200).json({
+        ok: true,
+        created: false,
+        alreadyExists: true,
+        message: '版本记录已存在，未覆盖。',
+        release: result.release,
+      })
+      return
+    }
+
+    response.status(201).json({
+      ok: true,
+      created: true,
+      alreadyExists: false,
+      message: '已创建为未启用，请检查后启用。',
+      release: result.release,
+    })
+  } catch (error) {
+    if (respondDesktopReleaseError(response, error)) return
     throw error
   }
 }))

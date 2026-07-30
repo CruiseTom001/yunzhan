@@ -134,3 +134,36 @@ export async function deleteAdminDesktopRelease(id: number): Promise<void> {
   const payload = await apiRequest(`/admin/desktop-releases/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!readOk(payload)) throw new Error('账号服务返回了无效结果。')
 }
+
+export interface DesktopReleaseSyncResult {
+  ok: true
+  created: boolean
+  alreadyExists: boolean
+  message: string
+  release: DesktopReleaseRecord
+}
+
+export async function syncAdminDesktopReleaseFromGitHub(input: { version: string }): Promise<DesktopReleaseSyncResult> {
+  const payload = await apiRequest('/admin/desktop-releases/sync-from-github', {
+    method: 'POST',
+    body: JSON.stringify({ version: input.version }),
+  })
+  if (
+    !isRecord(payload)
+    || payload.ok !== true
+    || typeof payload.created !== 'boolean'
+    || typeof payload.alreadyExists !== 'boolean'
+    || typeof payload.message !== 'string'
+  ) {
+    throw new Error('账号服务返回了无效同步结果。')
+  }
+  const release = readRecord(payload.release)
+  if (!release) throw new Error('账号服务返回了无效版本数据。')
+  return {
+    ok: true,
+    created: payload.created,
+    alreadyExists: payload.alreadyExists,
+    message: payload.message,
+    release,
+  }
+}

@@ -48,15 +48,26 @@ node scripts/release-desktop.mjs --skip-build --dry-run
 每次发布新桌面端版本，按以下顺序操作：
 
 1. 修改 `package.json` 与 `package-lock.json` 中的版本号。
-2. 在 `CHANGELOG.md` 顶部新增条目，标注功能象限（A/B/C/D）。
-3. 运行 `npm run release:windows`。该命令会通过 `prebuild` 自动调用 `scripts/check-version-sync.cjs`，校验 `package.json` / `CHANGELOG.md` / `release/latest.yml` 三处版本号是否一致；不一致构建中止。
-4. 在超管后台“桌面端版本管理”页面（`/admin/desktop-releases`）新建一条记录，填写 `version` / `minSupported` / `downloadUrl` / `releaseNotes`。桌面端用户启动后会自动拉取最新启用版本并分级提示；个人中心「桌面端与更新」可手动检查。
-5. 将新的 `yunzhan-setup-<version>.exe`、`yunzhan-setup-<version>.exe.blockmap` 与 `latest.yml` 上传至 GitHub Release（`npm run release:desktop` 可一键构建、校验并上传）。网页端落地页仍通过白名单 HTTPS 地址 `window.open` 下载；桌面端使用 electron-updater 应用内自动更新，不再跳转浏览器。
-6. 将安装包分发给用户覆盖安装。
+2. 更新仓库根目录 `desktop-release.json`：填写当前 `version` 与明确的 `minSupported`（禁止猜测；`minSupported` 不得高于 `version`）。
+3. 在 `CHANGELOG.md` 顶部新增条目，标注功能象限（A/B/C/D）与 audience。
+4. 运行 `npm run release:desktop`。该命令会校验版本一致、构建安装包、校验 `latest.yml` / exe / blockmap / `yunzhan-desktop-release.json`，再创建 GitHub Release 并上传上述资产。
+5. GitHub `release/published` Webhook（或超管后台「从 GitHub 同步」）会在 `desktop_releases` 自动创建 `enabled=false` 的版本记录；超管检查后手动启用，桌面端用户才会收到更新。
+6. 同一发版流程仍会 best-effort 生成 `desktop_release` 公告草稿（`active=false`），需超管另行审核发布。
 
 约束：
 
-- 三处版本号一致性由 `check-version-sync.cjs` 对账，发版前必须通过。
-- `desktop_releases` 记录由超管维护，前端启动时自动读取；该表为空时桌面端不提示。
-- 应用标识 `com.yunzhan.app` 与产品名保持不变，学习进度位于 Electron `userData` 目录，覆盖安装不清空（同上文“更新规则”第 3 条）。
-- 当前 Windows 安装包**未配置代码签名**，SmartScreen 可能提示“未知发布者”；覆盖安装不会清空 `userData`，但首次从旧版手动安装到带自动更新器版本仍需用户确认 UAC/安装向导。
+- `package.json` / `package-lock.json` / `CHANGELOG.md` / `desktop-release.json`（及已有 `release/latest.yml`）版本一致性由 `check-version-sync.cjs` 对账。
+- `desktop_releases` 控制检查更新与强制/可选更新；公告草稿面向用户说明。两者默认都不生效。
+- Webhook 失败时不要删除 GitHub Release；可在 `/admin/desktop-releases` 使用「从 GitHub 同步」按版本号安全重试（已存在则不覆盖）。
+- 应用标识 `com.yunzhan.app` 与产品名保持不变，学习进度位于 Electron `userData` 目录，覆盖安装不清空。
+- 当前 Windows 安装包**未配置代码签名**，SmartScreen 可能提示“未知发布者”。
+
+### GitHub Webhook / Vercel 人工配置
+
+1. Vercel Production 环境变量增加 `GITHUB_RELEASE_WEBHOOK_SECRET`（高强度随机串；不要写入仓库）。
+2. GitHub 仓库 → Settings → Webhooks → Add webhook：
+   - Payload URL：`https://yunzhan.vercel.app/api/integrations/github/releases`
+   - Content type：`application/json`
+   - Secret：与 Vercel 相同
+   - 仅勾选 `Releases` 事件
+3. 可选：若需提高 GitHub API 限额，可在服务端配置 `GITHUB_TOKEN`（仅服务端，公共仓库默认可不配）。

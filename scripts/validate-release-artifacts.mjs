@@ -1,53 +1,40 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import {
+  DESKTOP_RELEASE_MANIFEST_FILE_NAME,
+  DESKTOP_RELEASE_SOURCE_FILE_NAME,
+  readDesktopReleaseManifestFromPath,
+} from '../server/desktop-release-manifest.mjs'
+import { parseLatestYml } from '../server/latest-yml.mjs'
 
-const FIELD_PATTERN = /^([a-zA-Z0-9_-]+):\s*(.+)$/
-
-export function parseLatestYml(content) {
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('latest.yml 为空或格式无效。')
-  }
-
-  const fields = {}
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('-')) continue
-    const match = trimmed.match(FIELD_PATTERN)
-    if (!match) continue
-    fields[match[1]] = match[2].trim()
-  }
-
-  const version = fields.version
-  const artifactPath = fields.path
-  const sha512 = fields.sha512
-  const sizeText = fields.size
-
-  if (!version || !artifactPath || !sha512 || !sizeText) {
-    throw new Error('latest.yml 缺少 version/path/sha512/size 字段。')
-  }
-
-  const size = Number(sizeText)
-  if (!Number.isFinite(size) || size <= 0) {
-    throw new Error('latest.yml size 字段无效。')
-  }
-
-  return {
-    version,
-    path: artifactPath,
-    sha512,
-    size,
-  }
-}
+export { parseLatestYml } from '../server/latest-yml.mjs'
 
 export function computeFileSha512Base64(filePath) {
   const buffer = fs.readFileSync(filePath)
   return crypto.createHash('sha512').update(buffer).digest('base64')
 }
 
+export function prepareDesktopReleaseManifestArtifact({
+  projectRoot,
+  releaseDir,
+  expectedVersion,
+}) {
+  const sourcePath = path.join(projectRoot, DESKTOP_RELEASE_SOURCE_FILE_NAME)
+  const manifest = readDesktopReleaseManifestFromPath(sourcePath, { expectedVersion })
+  const manifestPath = path.join(releaseDir, DESKTOP_RELEASE_MANIFEST_FILE_NAME)
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  return {
+    manifest,
+    manifestPath,
+  }
+}
+
 export function validateReleaseArtifacts(options) {
   const releaseDir = options.releaseDir
   const expectedVersion = options.expectedVersion
+  const projectRoot = options.projectRoot
+  const requireManifest = options.requireManifest !== false
 
   if (typeof releaseDir !== 'string' || !releaseDir.trim()) {
     throw new Error('releaseDir 无效。')
@@ -91,11 +78,31 @@ export function validateReleaseArtifacts(options) {
     throw new Error('安装包 sha512 与 latest.yml 不一致。')
   }
 
+  let manifestPath = null
+  let manifest = null
+  if (requireManifest) {
+    if (typeof projectRoot !== 'string' || !projectRoot.trim()) {
+      throw new Error('projectRoot 无效，无法校验桌面发版清单。')
+    }
+    const prepared = prepareDesktopReleaseManifestArtifact({
+      projectRoot,
+      releaseDir,
+      expectedVersion,
+    })
+    manifestPath = prepared.manifestPath
+    manifest = prepared.manifest
+    if (!fs.existsSync(manifestPath) || fs.statSync(manifestPath).size <= 0) {
+      throw new Error(`缺少发版清单资产: ${DESKTOP_RELEASE_MANIFEST_FILE_NAME}`)
+    }
+  }
+
   return {
     version: parsed.version,
     exePath,
     blockmapPath,
     latestYmlPath,
+    manifestPath,
+    manifest,
     downloadFileName: parsed.path,
   }
 }

@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
-  ChevronLeft, ChevronRight, LoaderCircle, MonitorCog, Pencil, Plus,
+  ChevronLeft, ChevronRight, CloudDownload, LoaderCircle, MonitorCog, Pencil, Plus,
   RefreshCw, Trash2, X,
 } from 'lucide-vue-next'
 import {
   createAdminDesktopRelease,
   deleteAdminDesktopRelease,
   listAdminDesktopReleases,
+  syncAdminDesktopReleaseFromGitHub,
   updateAdminDesktopRelease,
   type DesktopReleaseInput,
   type DesktopReleaseRecord,
 } from '@/utils/desktopVersionApi'
+import { ApiError } from '@/utils/apiClient'
 
 const PAGE_SIZE = 50
+const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
 const releases = ref<DesktopReleaseRecord[]>([])
 const total = ref(0)
 const offset = ref(0)
 const loading = ref(false)
 const pageError = ref('')
+const pageInfo = ref('')
 
 const editorOpen = ref(false)
 const editorMode = ref<'create' | 'edit'>('create')
@@ -31,10 +35,18 @@ const editorSubmitting = ref(false)
 const deleteTarget = ref<DesktopReleaseRecord | null>(null)
 const deleting = ref(false)
 
+const syncOpen = ref(false)
+const syncVersion = ref('')
+const syncError = ref('')
+const syncSubmitting = ref(false)
+
 const displayStart = computed(() => (total.value === 0 ? 0 : offset.value + 1))
 const displayEnd = computed(() => Math.min(offset.value + releases.value.length, total.value))
 const canPrev = computed(() => !loading.value && offset.value > 0)
 const canNext = computed(() => !loading.value && offset.value + releases.value.length < total.value)
+const canSubmitSync = computed(() => (
+  !syncSubmitting.value && VERSION_PATTERN.test(syncVersion.value.trim())
+))
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
@@ -134,6 +146,44 @@ function gotoNext() {
   void loadReleases()
 }
 
+function openSyncDialog() {
+  syncVersion.value = ''
+  syncError.value = ''
+  pageInfo.value = ''
+  syncOpen.value = true
+}
+
+function closeSyncDialog() {
+  if (syncSubmitting.value) return
+  syncOpen.value = false
+  syncError.value = ''
+}
+
+async function submitSyncFromGitHub() {
+  if (syncSubmitting.value) return
+  const version = syncVersion.value.trim()
+  if (!VERSION_PATTERN.test(version)) {
+    syncError.value = '版本号需为 x.y.z。'
+    return
+  }
+  syncSubmitting.value = true
+  syncError.value = ''
+  try {
+    const result = await syncAdminDesktopReleaseFromGitHub({ version })
+    await loadReleases()
+    pageInfo.value = result.message
+    syncOpen.value = false
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      syncError.value = error.message
+    } else {
+      syncError.value = errorMessage(error, '从 GitHub 同步失败。')
+    }
+  } finally {
+    syncSubmitting.value = false
+  }
+}
+
 onMounted(() => {
   void loadReleases()
 })
@@ -141,18 +191,24 @@ onMounted(() => {
 
 <template>
   <main class="mx-auto min-h-screen max-w-5xl pt-24 pb-16 px-4 sm:px-6 text-white">
-    <div class="flex items-center gap-3 mb-6">
+    <div class="flex flex-wrap items-center gap-3 mb-6">
       <MonitorCog class="w-7 h-7 text-cyan-400" />
       <h1 class="text-2xl font-semibold">桌面端版本管理</h1>
-      <button type="button" class="ml-auto primary-button" @click="openCreateEditor">
-        <Plus class="w-4 h-4 inline" /> 新建版本
-      </button>
-      <button type="button" class="ghost-button" title="刷新" :disabled="loading" @click="loadReleases">
-        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
-      </button>
+      <div class="ml-auto flex flex-wrap gap-2">
+        <button type="button" class="ghost-button" @click="openSyncDialog">
+          <CloudDownload class="w-4 h-4" /> 从 GitHub 同步
+        </button>
+        <button type="button" class="primary-button" @click="openCreateEditor">
+          <Plus class="w-4 h-4 inline" /> 新建版本
+        </button>
+        <button type="button" class="ghost-button" title="刷新" :disabled="loading" @click="loadReleases">
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
+        </button>
+      </div>
     </div>
 
-    <p v-if="pageError" class="text-red-400 text-sm mb-4">{{ pageError }}</p>
+    <p v-if="pageError" class="text-red-400 text-sm mb-4" role="alert">{{ pageError }}</p>
+    <p v-if="pageInfo" class="text-cyan-200 text-sm mb-4" role="status">{{ pageInfo }}</p>
 
     <div v-if="loading && releases.length === 0" class="text-gray-500 flex items-center gap-2">
       <LoaderCircle class="w-4 h-4 animate-spin" /> 加载中...
@@ -252,6 +308,46 @@ onMounted(() => {
               </button>
             </div>
           </div>
+        </section>
+      </div>
+    </Teleport>
+
+    <!-- 从 GitHub 同步 -->
+    <Teleport to="body">
+      <div v-if="syncOpen" class="modal-backdrop" role="presentation" @click.self="closeSyncDialog">
+        <section class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="sync-desktop-release-title">
+          <div class="modal-header">
+            <h2 id="sync-desktop-release-title" class="text-lg font-semibold">从 GitHub 同步</h2>
+            <button type="button" class="icon-action" title="关闭" :disabled="syncSubmitting" @click="closeSyncDialog">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+          <form class="p-5 space-y-4" @submit.prevent="submitSyncFromGitHub">
+            <p class="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3 text-xs text-cyan-100 leading-relaxed">
+              服务端将固定查询本仓库 GitHub Release（tags/vX.Y.Z），校验安装包与发版清单后创建未启用记录。不会覆盖已有版本，也不会自动启用。
+            </p>
+            <label class="block">
+              <span class="text-sm text-gray-300">版本号 (x.y.z)</span>
+              <input
+                v-model="syncVersion"
+                type="text"
+                class="text-input"
+                maxlength="32"
+                autocomplete="off"
+                placeholder="例如 1.2.7"
+                required
+                :disabled="syncSubmitting"
+              />
+            </label>
+            <p v-if="syncError" class="text-red-400 text-sm" role="alert">{{ syncError }}</p>
+            <div class="flex justify-end gap-2 pt-2">
+              <button type="button" class="ghost-button" :disabled="syncSubmitting" @click="closeSyncDialog">取消</button>
+              <button type="submit" class="primary-button" :disabled="!canSubmitSync">
+                <LoaderCircle v-if="syncSubmitting" class="w-4 h-4 animate-spin" />
+                {{ syncSubmitting ? '同步中…' : '开始同步' }}
+              </button>
+            </div>
+          </form>
         </section>
       </div>
     </Teleport>

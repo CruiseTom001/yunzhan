@@ -46,16 +46,17 @@ afterEach(() => {
 
 describe('validate-release-artifacts', () => {
   it('parses latest.yml required fields', () => {
+    const sha512 = Buffer.alloc(64, 9).toString('base64')
     const parsed = parseLatestYml([
       'version: 1.2.5',
       'path: yunzhan-setup-1.2.5.exe',
-      'sha512: abc',
+      `sha512: ${sha512}`,
       'size: 123',
     ].join('\n'))
     expect(parsed).toEqual({
       version: '1.2.5',
       path: 'yunzhan-setup-1.2.5.exe',
-      sha512: 'abc',
+      sha512,
       size: 123,
     })
   })
@@ -63,7 +64,11 @@ describe('validate-release-artifacts', () => {
   it('passes when latest.yml matches exe and blockmap', () => {
     const releaseDir = createTempReleaseDir()
     writeFixture(releaseDir, '1.2.5')
-    const result = validateReleaseArtifacts({ releaseDir, expectedVersion: '1.2.5' })
+    const result = validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.5',
+      requireManifest: false,
+    })
     expect(result.downloadFileName).toBe('yunzhan-setup-1.2.5.exe')
   })
 
@@ -71,34 +76,92 @@ describe('validate-release-artifacts', () => {
     const releaseDir = createTempReleaseDir()
     writeFixture(releaseDir, '1.2.5')
     fs.unlinkSync(path.join(releaseDir, 'yunzhan-setup-1.2.5.exe'))
-    expect(() => validateReleaseArtifacts({ releaseDir, expectedVersion: '1.2.5' }))
-      .toThrow(/安装包不存在/)
+    expect(() => validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.5',
+      requireManifest: false,
+    })).toThrow(/安装包不存在/)
   })
 
   it('fails when blockmap is missing', () => {
     const releaseDir = createTempReleaseDir()
     writeFixture(releaseDir, '1.2.5')
     fs.unlinkSync(path.join(releaseDir, 'yunzhan-setup-1.2.5.exe.blockmap'))
-    expect(() => validateReleaseArtifacts({ releaseDir, expectedVersion: '1.2.5' }))
-      .toThrow(/blockmap/)
+    expect(() => validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.5',
+      requireManifest: false,
+    })).toThrow(/blockmap/)
   })
 
   it('fails when sha512 or size mismatch', () => {
     const releaseDir = createTempReleaseDir()
-    writeFixture(releaseDir, '1.2.5', { sha512: 'wrong' })
-    expect(() => validateReleaseArtifacts({ releaseDir, expectedVersion: '1.2.5' }))
-      .toThrow(/sha512/)
+    const wrongSha = Buffer.alloc(64, 3).toString('base64')
+    writeFixture(releaseDir, '1.2.5', { sha512: wrongSha })
+    expect(() => validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.5',
+      requireManifest: false,
+    })).toThrow(/sha512/)
 
     const releaseDir2 = createTempReleaseDir()
     writeFixture(releaseDir2, '1.2.5', { size: 99999 })
-    expect(() => validateReleaseArtifacts({ releaseDir: releaseDir2, expectedVersion: '1.2.5' }))
-      .toThrow(/size/)
+    expect(() => validateReleaseArtifacts({
+      releaseDir: releaseDir2,
+      expectedVersion: '1.2.5',
+      requireManifest: false,
+    })).toThrow(/size/)
   })
 
   it('fails when latest.yml points to wrong filename', () => {
     const releaseDir = createTempReleaseDir()
     writeFixture(releaseDir, '1.2.5', { path: 'wrong-setup-1.2.5.exe' })
-    expect(() => validateReleaseArtifacts({ releaseDir, expectedVersion: '1.2.5' }))
-      .toThrow(/path=wrong-setup-1.2.5.exe/)
+    expect(() => validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.5',
+      requireManifest: false,
+    })).toThrow(/path=wrong-setup-1.2.5.exe/)
+  })
+
+  it('writes and validates yunzhan-desktop-release.json from desktop-release.json', () => {
+    const projectRoot = createTempReleaseDir()
+    const releaseDir = path.join(projectRoot, 'release')
+    fs.mkdirSync(releaseDir)
+    writeFixture(releaseDir, '1.2.7')
+    fs.writeFileSync(path.join(projectRoot, 'desktop-release.json'), JSON.stringify({
+      schemaVersion: 1,
+      version: '1.2.7',
+      minSupported: '1.2.5',
+    }))
+    const result = validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.7',
+      projectRoot,
+      requireManifest: true,
+    })
+    expect(result.manifest).toEqual({
+      schemaVersion: 1,
+      version: '1.2.7',
+      minSupported: '1.2.5',
+    })
+    expect(fs.existsSync(result.manifestPath)).toBe(true)
+  })
+
+  it('blocks release when minSupported is higher than version', () => {
+    const projectRoot = createTempReleaseDir()
+    const releaseDir = path.join(projectRoot, 'release')
+    fs.mkdirSync(releaseDir)
+    writeFixture(releaseDir, '1.2.7')
+    fs.writeFileSync(path.join(projectRoot, 'desktop-release.json'), JSON.stringify({
+      schemaVersion: 1,
+      version: '1.2.7',
+      minSupported: '1.2.8',
+    }))
+    expect(() => validateReleaseArtifacts({
+      releaseDir,
+      expectedVersion: '1.2.7',
+      projectRoot,
+      requireManifest: true,
+    })).toThrow(/minSupported/)
   })
 })

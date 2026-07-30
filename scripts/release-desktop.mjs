@@ -114,7 +114,9 @@ function assertTagAndReleaseAbsent(tag) {
 }
 
 function collectUploadFiles(artifacts) {
-  return [artifacts.exePath, artifacts.blockmapPath, artifacts.latestYmlPath]
+  const files = [artifacts.exePath, artifacts.blockmapPath, artifacts.latestYmlPath]
+  if (artifacts.manifestPath) files.push(artifacts.manifestPath)
+  return files
 }
 
 function readCurrentCommit() {
@@ -172,6 +174,8 @@ function main() {
     artifacts = validateReleaseArtifacts({
       releaseDir,
       expectedVersion: version,
+      projectRoot: root,
+      requireManifest: true,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -185,6 +189,8 @@ function main() {
   console.log(`[release-desktop] exe=${path.basename(artifacts.exePath)}`)
   console.log(`[release-desktop] blockmap=${path.basename(artifacts.blockmapPath)}`)
   console.log(`[release-desktop] latest.yml=latest.yml`)
+  console.log(`[release-desktop] manifest=${path.basename(artifacts.manifestPath)}`)
+  console.log(`[release-desktop] minSupported=${artifacts.manifest.minSupported}`)
 
   if (dryRun) {
     console.log('[release-desktop] dry-run，跳过 gh release create')
