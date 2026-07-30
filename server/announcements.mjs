@@ -1,5 +1,20 @@
+import {
+  ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP,
+  ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+} from './announcement-client-channel.mjs'
+
 export const ANNOUNCEMENT_CATEGORIES = new Set(['general', 'web_release', 'desktop_release'])
 export const RELEASE_ANNOUNCEMENT_CATEGORIES = new Set(['web_release', 'desktop_release'])
+
+const WEB_VISIBLE_ANNOUNCEMENT_CATEGORIES = ['general', 'web_release']
+const DESKTOP_VISIBLE_ANNOUNCEMENT_CATEGORIES = ['general', 'desktop_release']
+
+export function getVisibleAnnouncementCategoriesForChannel(channel) {
+  if (channel === ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP) {
+    return DESKTOP_VISIBLE_ANNOUNCEMENT_CATEGORIES
+  }
+  return WEB_VISIBLE_ANNOUNCEMENT_CATEGORIES
+}
 
 export const DEFAULT_ANNOUNCEMENT_CATEGORY = 'general'
 export const ANNOUNCEMENT_VERSION_PATTERN = /^\d+\.\d+\.\d+$/
@@ -91,17 +106,25 @@ export function mapAdminAnnouncementRow(row) {
   }
 }
 
-export async function countVisibleAnnouncements(client) {
+export async function countVisibleAnnouncements(client, channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB) {
+  const categories = getVisibleAnnouncementCategoriesForChannel(channel)
   const result = await client.query(
     `SELECT COUNT(*)::INTEGER AS count
        FROM announcements a
       WHERE a.active = true
-        AND a.published_at <= NOW()`,
+        AND a.published_at <= NOW()
+        AND a.category = ANY($1::text[])`,
+    [categories],
   )
   return result.rows[0]?.count ?? 0
 }
 
-export async function countUnreadAnnouncements(client, userId) {
+export async function countUnreadAnnouncements(
+  client,
+  userId,
+  channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+) {
+  const categories = getVisibleAnnouncementCategoriesForChannel(channel)
   const result = await client.query(
     `SELECT COUNT(*)::INTEGER AS count
        FROM announcements a
@@ -109,14 +132,21 @@ export async function countUnreadAnnouncements(client, userId) {
          ON r.announcement_id = a.id AND r.user_id = $1
       WHERE a.active = true
         AND a.published_at <= NOW()
-        AND r.user_id IS NULL`,
-    [userId],
+        AND r.user_id IS NULL
+        AND a.category = ANY($2::text[])`,
+    [userId, categories],
   )
   return result.rows[0]?.count ?? 0
 }
 
-export async function listVisibleAnnouncements(client, userId, pagination) {
+export async function listVisibleAnnouncements(
+  client,
+  userId,
+  pagination,
+  channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+) {
   const { limit, offset } = pagination
+  const categories = getVisibleAnnouncementCategoriesForChannel(channel)
   const [listResult, total, unreadTotal] = await Promise.all([
     client.query(
       `SELECT a.id, a.title, a.content, a.published_at, a.category, a.version,
@@ -126,12 +156,13 @@ export async function listVisibleAnnouncements(client, userId, pagination) {
            ON r.announcement_id = a.id AND r.user_id = $1
         WHERE a.active = true
           AND a.published_at <= NOW()
+          AND a.category = ANY($4::text[])
         ORDER BY a.published_at DESC, a.id DESC
         LIMIT $2 OFFSET $3`,
-      [userId, limit, offset],
+      [userId, limit, offset, categories],
     ),
-    countVisibleAnnouncements(client),
-    countUnreadAnnouncements(client, userId),
+    countVisibleAnnouncements(client, channel),
+    countUnreadAnnouncements(client, userId, channel),
   ])
 
   return {
@@ -143,20 +174,53 @@ export async function listVisibleAnnouncements(client, userId, pagination) {
   }
 }
 
-export async function findVisibleAnnouncement(client, announcementId) {
+export async function findVisibleAnnouncement(
+  client,
+  announcementId,
+  channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+) {
+  const categories = getVisibleAnnouncementCategoriesForChannel(channel)
   const result = await client.query(
     `SELECT id
        FROM announcements
       WHERE id = $1
         AND active = true
-        AND published_at <= NOW()`,
-    [announcementId],
+        AND published_at <= NOW()
+        AND category = ANY($2::text[])`,
+    [announcementId, categories],
   )
   return result.rows[0] ?? null
 }
 
-export async function markVisibleAnnouncementRead(client, userId, announcementId) {
-  const visible = await findVisibleAnnouncement(client, announcementId)
+export async function findLatestUnreadVisibleAnnouncement(
+  client,
+  userId,
+  channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+) {
+  const categories = getVisibleAnnouncementCategoriesForChannel(channel)
+  const result = await client.query(
+    `SELECT a.id, a.title, a.content, a.published_at
+       FROM announcements a
+       LEFT JOIN announcement_reads r
+         ON r.announcement_id = a.id AND r.user_id = $1
+      WHERE a.active = true
+        AND a.published_at <= NOW()
+        AND r.user_id IS NULL
+        AND a.category = ANY($2::text[])
+      ORDER BY a.published_at DESC, a.id DESC
+      LIMIT 1`,
+    [userId, categories],
+  )
+  return result.rows[0] ?? null
+}
+
+export async function markVisibleAnnouncementRead(
+  client,
+  userId,
+  announcementId,
+  channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+) {
+  const visible = await findVisibleAnnouncement(client, announcementId, channel)
   if (!visible) return false
 
   await client.query(

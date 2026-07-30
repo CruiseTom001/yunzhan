@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP,
+  ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+} from './announcement-client-channel.mjs'
+import {
   DEFAULT_ANNOUNCEMENT_CATEGORY,
+  findLatestUnreadVisibleAnnouncement,
   findVisibleAnnouncement,
+  getVisibleAnnouncementCategoriesForChannel,
   listVisibleAnnouncements,
   mapAdminAnnouncementRow,
   mapPublicAnnouncementRow,
@@ -13,6 +19,12 @@ import {
 } from './announcements.mjs'
 
 describe('announcements helpers', () => {
+  it('maps visible categories per client channel', () => {
+    expect(getVisibleAnnouncementCategoriesForChannel(ANNOUNCEMENT_CLIENT_CHANNEL_WEB))
+      .toEqual(['general', 'web_release'])
+    expect(getVisibleAnnouncementCategoriesForChannel(ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP))
+      .toEqual(['general', 'desktop_release'])
+  })
   it('maps public announcement rows with defaults', () => {
     const mapped = mapPublicAnnouncementRow({
       id: 12,
@@ -58,7 +70,12 @@ describe('announcements helpers', () => {
         .mockResolvedValueOnce({ rows: [{ count: 1 }] }),
     }
 
-    const result = await listVisibleAnnouncements(client, 'user-1', { limit: 20, offset: 0 })
+    const result = await listVisibleAnnouncements(
+      client,
+      'user-1',
+      { limit: 20, offset: 0 },
+      ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP,
+    )
     expect(result.announcements).toHaveLength(1)
     expect(result.announcements[0].read).toBe(false)
     expect(result.announcements[0].category).toBe('desktop_release')
@@ -67,9 +84,41 @@ describe('announcements helpers', () => {
     expect(result.unreadTotal).toBe(1)
     expect(result.limit).toBe(20)
     expect(result.offset).toBe(0)
-    expect(client.query.mock.calls[0][0]).toContain('a.category, a.version')
-    expect(client.query.mock.calls[0][0]).toContain('a.active = true')
-    expect(client.query.mock.calls[0][0]).toContain('a.published_at <= NOW()')
+    expect(client.query.mock.calls[0][0]).toContain('a.category = ANY')
+    expect(client.query.mock.calls[0][1]).toEqual([
+      'user-1',
+      20,
+      0,
+      ['general', 'desktop_release'],
+    ])
+    expect(client.query.mock.calls[1][1]).toEqual([['general', 'desktop_release']])
+    expect(client.query.mock.calls[2][1]).toEqual(['user-1', ['general', 'desktop_release']])
+  })
+
+  it('scopes unread latest announcement to channel categories', async () => {
+    const client = {
+      query: vi.fn().mockResolvedValueOnce({
+        rows: [{
+          id: 5,
+          title: '网站更新',
+          content: 'web',
+          published_at: new Date('2026-07-29T08:00:00Z'),
+        }],
+      }),
+    }
+    await expect(findLatestUnreadVisibleAnnouncement(client, 'user-1', ANNOUNCEMENT_CLIENT_CHANNEL_WEB))
+      .resolves.toMatchObject({ id: 5 })
+    expect(client.query.mock.calls[0][0]).toContain('a.category = ANY')
+    expect(client.query.mock.calls[0][1]).toEqual(['user-1', ['general', 'web_release']])
+  })
+
+  it('rejects cross-channel mark read when announcement category is invisible', async () => {
+    const client = {
+      query: vi.fn().mockResolvedValueOnce({ rows: [] }),
+    }
+    await expect(markVisibleAnnouncementRead(client, 'user-1', 3, ANNOUNCEMENT_CLIENT_CHANNEL_WEB))
+      .resolves.toBe(false)
+    expect(client.query.mock.calls[0][1]).toEqual([3, ['general', 'web_release']])
   })
 
   it('maps admin announcement rows with generation metadata', () => {
@@ -133,8 +182,10 @@ describe('announcements helpers', () => {
     const client = {
       query: vi.fn().mockResolvedValueOnce({ rows: [{ id: 3 }] }),
     }
-    await expect(findVisibleAnnouncement(client, 3)).resolves.toEqual({ id: 3 })
+    await expect(findVisibleAnnouncement(client, 3, ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP)).resolves.toEqual({ id: 3 })
     expect(client.query.mock.calls[0][0]).toContain('active = true')
     expect(client.query.mock.calls[0][0]).toContain('published_at <= NOW()')
+    expect(client.query.mock.calls[0][0]).toContain('category = ANY')
+    expect(client.query.mock.calls[0][1]).toEqual([3, ['general', 'desktop_release']])
   })
 })

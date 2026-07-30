@@ -13,6 +13,7 @@ import { createEmailChallenge, verifyEmailChallengeCode } from './email-verifica
 import { persistFeedbackStatus } from './feedback-status.mjs'
 import {
   ANNOUNCEMENT_VERSION_PATTERN,
+  findLatestUnreadVisibleAnnouncement,
   listVisibleAnnouncements,
   mapAdminAnnouncementRow,
   markVisibleAnnouncementRead,
@@ -21,6 +22,7 @@ import {
   readAnnouncementVersionInput,
   RELEASE_ANNOUNCEMENT_CATEGORIES,
 } from './announcements.mjs'
+import { resolveAnnouncementClientChannelFromRequest } from './announcement-client-channel.mjs'
 import {
   EMPTY_FILTERED_RELEASE_NOTICE,
   extractChangelogEntryFromMarkdown,
@@ -2138,25 +2140,15 @@ app.patch('/api/admin/feedback/:id', requireAuth, requireSuperAdmin, asyncRoute(
 }))
 
 app.get('/api/announcements', requireAuth, asyncRoute(async (request, response) => {
+  const channel = resolveAnnouncementClientChannelFromRequest(request)
   const { limit, offset } = parsePagination(request.query)
-  const payload = await listVisibleAnnouncements(pool, request.auth.id, { limit, offset })
+  const payload = await listVisibleAnnouncements(pool, request.auth.id, { limit, offset }, channel)
   response.json(payload)
 }))
 
 app.get('/api/announcements/latest', requireAuth, asyncRoute(async (request, response) => {
-  const result = await pool.query(
-    `SELECT a.id, a.title, a.content, a.published_at
-       FROM announcements a
-       LEFT JOIN announcement_reads r
-         ON r.announcement_id = a.id AND r.user_id = $1
-      WHERE a.active = true
-        AND r.user_id IS NULL
-        AND a.published_at <= NOW()
-      ORDER BY a.published_at DESC, a.id DESC
-      LIMIT 1`,
-    [request.auth.id],
-  )
-  const row = result.rows[0]
+  const channel = resolveAnnouncementClientChannelFromRequest(request)
+  const row = await findLatestUnreadVisibleAnnouncement(pool, request.auth.id, channel)
   if (!row) {
     response.json({ announcement: null })
     return
@@ -2172,12 +2164,13 @@ app.get('/api/announcements/latest', requireAuth, asyncRoute(async (request, res
 }))
 
 app.post('/api/announcements/:id/read', requireAuth, asyncRoute(async (request, response) => {
+  const channel = resolveAnnouncementClientChannelFromRequest(request)
   const announcementId = Number.parseInt(request.params.id ?? '', 10)
   if (!Number.isInteger(announcementId) || announcementId < 1) {
     response.status(400).json({ error: '公告 ID 无效。' })
     return
   }
-  const marked = await markVisibleAnnouncementRead(pool, request.auth.id, announcementId)
+  const marked = await markVisibleAnnouncementRead(pool, request.auth.id, announcementId, channel)
   if (!marked) {
     response.status(404).json({ error: '公告不存在。' })
     return
