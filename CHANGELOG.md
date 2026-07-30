@@ -3,6 +3,15 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/) 简化版,每条变更在括号内标注功能象限:
 A = 必须同步(进度/实验/IPC/Schema) · B = 推荐同步(UI/内容) · C = 桌面专属 · D = 桌面跳过。
 
+## [1.2.7] - 2026-07-30
+
+### 修复
+- 桌面更新对话框：安装失败重试改为调用 installUpdate，检查/下载/校验失败路径分离。(C)
+- 公告 Store：标记已读、列表加载、分页、未读数与最新公告请求在账号切换后忽略过期响应，避免串号污染状态。(B/C)
+- 公告草稿生成：source_key 已存在时跳过 AI；重新润色禁止覆盖已生效公告。(Web)
+- ParticleBg：visibilitychange 监听不依赖初始减少动画状态；补充组件级回归测试。(B)
+- 发版与验证：正式发布禁用 --skip-build；验证脚本移除 shell:true；jsdom 对齐 Node 引擎范围。(C)
+
 ## [1.2.6] - 2026-07-29
 
 ### 新增
