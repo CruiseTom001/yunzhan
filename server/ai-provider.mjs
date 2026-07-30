@@ -1,3 +1,5 @@
+import { formatAiProviderHttpError } from './ai-http-error.mjs'
+
 const AI_ALLOWED_FORMATS = new Set(['anthropic_messages', 'chat_completions', 'responses'])
 const AI_PROVIDER_NAME_MAX_LENGTH = 80
 const AI_BASE_URL_MAX_LENGTH = 2048
@@ -400,7 +402,7 @@ export async function requestStudyNoteAi({
 
   const rawText = await readLimitedResponseText(response)
   if (!response.ok) {
-    const error = new Error(`AI 供应商返回错误：HTTP ${response.status}。`)
+    const error = new Error(formatAiProviderHttpError(response.status))
     error.statusCode = response.status >= 400 && response.status < 600 ? response.status : 502
     throw error
   }
@@ -573,7 +575,7 @@ export async function requestStudyNoteAiStream({
 
   if (!response.ok) {
     cleanup()
-    onError(`AI 供应商返回错误：HTTP ${response.status}。`)
+    onError(formatAiProviderHttpError(response.status))
     return
   }
 

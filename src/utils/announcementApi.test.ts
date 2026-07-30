@@ -14,6 +14,7 @@ import {
   createAdminAnnouncement,
   deleteAdminAnnouncement,
   generateAdminAnnouncementFromChangelog,
+  generateAdminAnnouncementPairFromChangelog,
   getLatestUnread,
   listAdminAnnouncements,
   listAnnouncements,
@@ -237,6 +238,138 @@ describe('announcementApi type guards', () => {
       sourceCommit: '0f3cdbe73add73b47ce0b251fdcc08e6f48a0a0d',
     })
     expect(JSON.parse(String(calledOptions.body))).not.toHaveProperty('sourceKey')
+  })
+
+  it('calls pair generate-from-changelog endpoint and parses channel results', async () => {
+    const web = {
+      ...VALID_ADMIN_ANNOUNCEMENT,
+      id: '8',
+      category: 'web_release',
+      version: '1.2.8',
+      sourceKey: 'web_release:1.2.8',
+      sourceCommit: 'abcdef1',
+      content: '网站内容',
+    }
+    const desktop = {
+      ...web,
+      id: '9',
+      category: 'desktop_release',
+      sourceKey: 'desktop_release:1.2.8',
+      content: '桌面内容',
+    }
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      version: '1.2.8',
+      sourceCommit: 'abcdef1',
+      results: {
+        web: { status: 'created', announcement: web, message: '网站端草稿已创建（仍为未发布）。' },
+        desktop: { status: 'already_exists', announcement: desktop, message: '桌面端草稿已存在。' },
+      },
+    }))
+    const result = await generateAdminAnnouncementPairFromChangelog({
+      version: '1.2.8',
+      sourceCommit: 'abcdef1',
+    })
+    expect(result.version).toBe('1.2.8')
+    expect(result.results.web.status).toBe('created')
+    expect(result.results.desktop.status).toBe('already_exists')
+    expect(mockedApiRequest.mock.calls[0]?.[0]).toBe('/admin/announcements/generate-pair-from-changelog')
+    expect(JSON.parse(String((mockedApiRequest.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      version: '1.2.8',
+      sourceCommit: 'abcdef1',
+    })
+  })
+
+  it('accepts real pair skipped JSON with announcement null and rejects placeholder id:null', async () => {
+    const desktop = {
+      ...VALID_ADMIN_ANNOUNCEMENT,
+      id: '9',
+      category: 'desktop_release',
+      version: '1.2.8',
+      sourceKey: 'desktop_release:1.2.8',
+      sourceCommit: null,
+      content: '桌面内容',
+      generatedByAi: false,
+      generationProvider: null,
+      generationError: null,
+    }
+    const realPairJson = {
+      version: '1.2.8',
+      sourceCommit: null,
+      results: {
+        web: {
+          status: 'skipped',
+          announcement: null,
+          message: '本版本没有用户侧公告内容。',
+        },
+        desktop: {
+          status: 'created',
+          announcement: desktop,
+          message: '桌面端草稿已创建（仍为未发布）。',
+        },
+      },
+    }
+    mockedApiRequest.mockReturnValueOnce(mockResponse(realPairJson))
+    const parsed = await generateAdminAnnouncementPairFromChangelog({ version: '1.2.8' })
+    expect(parsed.results.web).toEqual({
+      status: 'skipped',
+      announcement: null,
+      message: '本版本没有用户侧公告内容。',
+    })
+    expect(parsed.results.desktop.status).toBe('created')
+    expect(parsed.results.desktop.announcement?.id).toBe('9')
+
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      ...realPairJson,
+      results: {
+        ...realPairJson.results,
+        web: {
+          status: 'skipped',
+          announcement: {
+            id: null,
+            title: '',
+            content: '',
+            publishedAt: 0,
+            active: false,
+            createdAt: 0,
+            updatedAt: 0,
+            category: 'web_release',
+            version: '1.2.8',
+            sourceKey: 'web_release:1.2.8',
+            sourceCommit: null,
+            generatedByAi: false,
+            generationProvider: null,
+            generationError: '本版本没有用户侧公告内容。',
+          },
+          message: '本版本没有用户侧公告内容。',
+        },
+      },
+    }))
+    await expect(generateAdminAnnouncementPairFromChangelog({ version: '1.2.8' }))
+      .rejects.toThrow('账号服务返回了无效公告数据。')
+  })
+
+  it('rejects pair payload with invalid version or sourceCommit', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      version: '1.2',
+      sourceCommit: null,
+      results: {
+        web: { status: 'skipped', announcement: null, message: 'x' },
+        desktop: { status: 'skipped', announcement: null, message: 'y' },
+      },
+    }))
+    await expect(generateAdminAnnouncementPairFromChangelog({ version: '1.2' }))
+      .rejects.toThrow('账号服务返回了无效公告数据。')
+
+    mockedApiRequest.mockReturnValueOnce(mockResponse({
+      version: '1.2.8',
+      sourceCommit: 'not-a-sha',
+      results: {
+        web: { status: 'skipped', announcement: null, message: 'x' },
+        desktop: { status: 'skipped', announcement: null, message: 'y' },
+      },
+    }))
+    await expect(generateAdminAnnouncementPairFromChangelog({ version: '1.2.8' }))
+      .rejects.toThrow('账号服务返回了无效公告数据。')
   })
 
   it('does not call regenerate API when confirm is cancelled', async () => {

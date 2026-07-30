@@ -274,6 +274,28 @@ describe('server AI provider request', () => {
     })
   })
 
+  it('throws busy retry hint for non-stream HTTP 529', async () => {
+    await expect(requestStudyNoteAi({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: async () => new Response('{}', { status: 529 }),
+    })).rejects.toMatchObject({
+      message: 'AI 供应商返回错误：HTTP 529。供应商当前可能繁忙，请稍后重试。',
+    })
+  })
+
+  it('does not append busy retry hint for non-stream HTTP 401', async () => {
+    const error = await requestStudyNoteAi({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: async () => new Response('{}', { status: 401 }),
+    }).catch(item => item)
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toBe('AI 供应商返回错误：HTTP 401。')
+    expect(error.message).not.toContain('请稍后重试')
+    expect(error.message).not.toContain('供应商当前可能繁忙')
+  })
+
   it('uses announcement prompt for announcement polish purpose', async () => {
     const requests = []
     const fetchImplementation = async (url, options) => {
@@ -397,6 +419,19 @@ describe('server AI provider streaming limits', () => {
       onError(msg) { errorMessage = msg },
     })
     expect(errorMessage).toBe('AI 供应商返回错误：HTTP 500。')
+  })
+
+  it('calls onError with busy retry hint on upstream HTTP 529', async () => {
+    let errorMessage = null
+    await requestStudyNoteAiStream({
+      content: '内容',
+      environment: VALID_ENVIRONMENT,
+      fetchImplementation: async () => new Response('{}', { status: 529 }),
+      onDelta() {},
+      onDone() {},
+      onError(msg) { errorMessage = msg },
+    })
+    expect(errorMessage).toBe('AI 供应商返回错误：HTTP 529。供应商当前可能繁忙，请稍后重试。')
   })
 })
 

@@ -976,6 +976,33 @@ describe('polishReleaseAnnouncement resilience', () => {
     expect(result.content).toContain('本次更新：')
   })
 
+  it('retries transient HTTP 529 and keeps detailed fallback after exhaustion', async () => {
+    let attempts = 0
+    const result = await polishReleaseAnnouncement({
+      fallback: buildReleaseAnnouncementFallback({
+        category: 'web_release',
+        version: '1.2.6',
+        changelogEntry: '### 修复\n- 修复公告展示',
+      }),
+      category: 'web_release',
+      version: '1.2.6',
+      environment: FLASH_ENVIRONMENT,
+      maxAttempts: 2,
+      retryDelayMs: 0,
+      fetchImplementation: async () => {
+        attempts += 1
+        return new Response('{}', { status: 529 })
+      },
+    })
+
+    expect(attempts).toBeGreaterThanOrEqual(2)
+    expect(result.generatedByAi).toBe(false)
+    expect(result.content).toContain('修复公告展示')
+    expect(result.generationError).toMatch(/HTTP 529/)
+    expect(result.generationError).toContain('请稍后重试')
+    expect(result.generationError).not.toMatch(/sk-/)
+  })
+
   it('falls through to next provider when deepseek-flash keeps returning 503', async () => {
     const requestedModels = []
     const result = await polishReleaseAnnouncement({

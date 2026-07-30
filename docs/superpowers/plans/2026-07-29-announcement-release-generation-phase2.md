@@ -40,3 +40,19 @@
 - 运行：`npm run policy:check`、`npm run check`、`npm run lint`、`npm run server:check`、`npm test`、`npm run build`、`git diff --check`。
 - 依赖未变化则不强制 `npm audit`；若生成脚本/AI 改动引入依赖再运行 `npm audit --omit=dev`。
 - 最终说明包含：行为变化、验证命令、未执行检查（真实测试数据库迁移）、兼容性影响和遗留风险。
+
+## Task 7：成对补建更新草稿（后续增量）
+
+- 新增 `POST /api/admin/announcements/generate-pair-from-changelog` 与 `server/generate-release-announcement-pair.mjs`。
+- commit-only：`server/resolve-release-version-from-commit.mjs` + `limitedHttpsFetch` 白名单解析 GitHub raw。
+- 后台「补建更新草稿」改为一次生成网站端 + 桌面端；分渠道展示 `已创建 / 已存在 / 无用户侧内容 / 失败`。
+- **skipped 协议**：pair 适配层将草稿层 `skipped=true + id:null` 占位对象规范为 `announcement:null`，避免前端类型守卫误判“无效公告数据”；单渠道旧接口协议不变。
+- 部分成功：渠道隔离，HTTP 200 可含单侧 `failed`。
+- 测试：pair 单元、路由、`announcementApi` 真实 JSON 解析、`AdminAnnouncementsPage` 分渠道展示与防重复提交。
+
+## Task 8：AI HTTP 529 提示（后续增量）
+
+- `server/ai-http-error.mjs`：`formatAiProviderHttpError(status)` 仅状态码；529 追加繁忙重试提示。
+- Electron `appendAiHttpBusyRetryHint` / 浏览器直连脱敏后追加同样提示。
+- 公告生成将 529 纳入临时错误有限重试；笔记润色前端不无限自动重试。
+- Webhook Secret 若曾泄露：须在 Vercel Production 与 GitHub Webhook 同步轮换后再正式 Release。

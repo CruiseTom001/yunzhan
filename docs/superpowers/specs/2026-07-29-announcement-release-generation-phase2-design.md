@@ -55,6 +55,22 @@
 - `PATCH /api/admin/announcements/:id`：允许编辑 `title/content/category/version/active`；`active false -> true` 时同时设置 `published_at=NOW()`。
 - `POST /api/admin/announcements/:id/repolish`：仅允许 `active=false` 草稿；成功后更新正文与 AI 元数据，失败保留原文并记录 `generation_error`。
 - `DELETE /api/admin/announcements/:id`：仅允许删除 `active=false` 草稿；生效公告需先下线。
+- `POST /api/admin/announcements/generate-from-changelog`：单渠道补建（保留兼容）；请求含 `category/version/sourceCommit?`。
+- `POST /api/admin/announcements/generate-pair-from-changelog`：一次补建网站端 + 桌面端草稿（推荐后台入口）。
+  - 请求仅允许 `{ version?, sourceCommit? }`，至少一个非空；禁止客户端传入 `category/sourceKey`。
+  - `version` 校验为 `x.y.z`；仅 `sourceCommit` 时通过 GitHub `raw.githubusercontent.com` 白名单读取该 commit 的 `package.json` + `CHANGELOG.md` 解析版本（不猜测）；两者同时填写时必须版本一致，否则 400。
+  - 返回 `{ version, sourceCommit, results: { web, desktop } }`；渠道状态为 `created | already_exists | skipped | failed`。
+  - **skipped / failed**：`announcement` 必须为 `null`（不得返回 `id:null` 占位对象）；`message` 可来自占位 `generationError`。
+  - **created / already_exists**：返回真实 `AdminAnnouncement`；草稿保持 `active=false`，绝不自动发布。
+  - 渠道顺序执行、各自隔离：一条失败不影响另一条已成功结果；整体仍可返回 HTTP 200 + 分渠道 `failed`。
+  - 复用 `generateReleaseAnnouncementDraft()`，`repairExistingGeneric=false`；已存在 inactive 草稿不覆盖、不重跑 AI。
+
+## 5.1 AI HTTP 529
+
+- 网页服务端非流式 / 流式润色：`formatAiProviderHttpError(status)` 仅输出状态码；529 追加「供应商当前可能繁忙，请稍后重试。」；不接受上游错误正文，避免误传密钥。
+- Electron / 浏览器直连：保留供应商错误脱敏后再展示；529 同样追加繁忙重试提示；401/403/404 不提示“供应商繁忙”。
+- 公告 AI 生成：529 纳入临时错误（与 429/503/504），有限重试/供应商回退后仍保留详细 fallback，不生成空泛公告。
+- 每日笔记润色前端不无限自动重试。
 
 ## 6. 异常与安全边界
 

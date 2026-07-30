@@ -12,32 +12,40 @@ vi.mock('@/utils/announcementApi', () => ({
   deleteAdminAnnouncement: vi.fn(),
   repolishAdminAnnouncement: vi.fn(),
   regenerateAdminAnnouncementFromChangelog: vi.fn(),
-  generateAdminAnnouncementFromChangelog: vi.fn(),
+  generateAdminAnnouncementPairFromChangelog: vi.fn(),
 }))
 
 import {
-  generateAdminAnnouncementFromChangelog,
+  generateAdminAnnouncementPairFromChangelog,
   listAdminAnnouncements,
 } from '@/utils/announcementApi'
 
 const mockedList = vi.mocked(listAdminAnnouncements)
-const mockedGenerate = vi.mocked(generateAdminAnnouncementFromChangelog)
+const mockedGenerate = vi.mocked(generateAdminAnnouncementPairFromChangelog)
 
-const DRAFT = {
-  id: '9',
-  title: '云栈桌面端 v1.2.6 更新',
-  content: '云栈桌面端 v1.2.6 已发布。\n\n本次更新：\n新增：\n- 公告中心',
+const WEB_DRAFT = {
+  id: '8',
+  title: '云栈网站 v1.2.6 更新',
+  content: '网站更新内容',
   publishedAt: 1700000000000,
   active: false,
   createdAt: 1700000000000,
   updatedAt: 1700000000000,
-  category: 'desktop_release' as const,
+  category: 'web_release' as const,
   version: '1.2.6',
-  sourceKey: 'desktop_release:1.2.6',
-  sourceCommit: '0f3cdbe73add73b47ce0b251fdcc08e6f48a0a0d',
+  sourceKey: 'web_release:1.2.6',
+  sourceCommit: null,
   generatedByAi: false,
   generationProvider: null,
   generationError: null,
+}
+
+const DESKTOP_DRAFT = {
+  ...WEB_DRAFT,
+  id: '9',
+  title: '云栈桌面端 v1.2.6 更新',
+  category: 'desktop_release' as const,
+  sourceKey: 'desktop_release:1.2.6',
 }
 
 function findButton(wrapper: VueWrapper, text: string) {
@@ -65,17 +73,18 @@ async function openGenerateDialog(wrapper: VueWrapper) {
 async function fillAndSubmitGenerate(
   wrapper: VueWrapper,
   {
-    version,
+    version = '',
     sourceCommit = '',
   }: {
-    version: string
+    version?: string
     sourceCommit?: string
   },
 ) {
-  const versionInput = wrapper.find('input[placeholder="例如 1.2.6"]')
-  await versionInput.setValue(version)
+  if (version) {
+    await wrapper.find('input[placeholder="例如 1.2.6"]').setValue(version)
+  }
   if (sourceCommit) {
-    await wrapper.find('input[placeholder="7-40 位 Git SHA"]').setValue(sourceCommit)
+    await wrapper.find('input[placeholder="7-40 位 Git SHA（可选）"]').setValue(sourceCommit)
   }
   await nextTick()
   const generateForm = wrapper.findAll('form').find(item => item.html().includes('例如 1.2.6'))
@@ -84,7 +93,7 @@ async function fillAndSubmitGenerate(
   await flushPromises()
 }
 
-describe('AdminAnnouncementsPage generate-from-changelog dialog', () => {
+describe('AdminAnnouncementsPage paired generate dialog', () => {
   let wrapper: VueWrapper | null = null
 
   beforeEach(() => {
@@ -101,16 +110,20 @@ describe('AdminAnnouncementsPage generate-from-changelog dialog', () => {
     document.body.innerHTML = ''
   })
 
-  it('submits the correct request body and refreshes the list on success', async () => {
+  it('submits pair generate once, shows channel statuses, and refreshes list once', async () => {
     mockedGenerate.mockResolvedValueOnce({
-      announcement: DRAFT,
-      created: true,
-      repaired: false,
-      skipped: false,
+      version: '1.2.6',
+      sourceCommit: '0f3cdbe73add73b47ce0b251fdcc08e6f48a0a0d',
+      results: {
+        web: { status: 'created', announcement: WEB_DRAFT, message: '网站端草稿已创建（仍为未发布）。' },
+        desktop: { status: 'already_exists', announcement: DESKTOP_DRAFT, message: '桌面端草稿已存在，未重复创建，也未修改正文。' },
+      },
     })
     wrapper = mountPage()
     await flushPromises()
     await openGenerateDialog(wrapper)
+    expect(wrapper.text()).not.toMatch(/公告类型/)
+    expect(wrapper.text()).toMatch(/生成网站与桌面端草稿/)
     mockedList.mockClear()
     await fillAndSubmitGenerate(wrapper, {
       version: '1.2.6',
@@ -119,76 +132,86 @@ describe('AdminAnnouncementsPage generate-from-changelog dialog', () => {
 
     expect(mockedGenerate).toHaveBeenCalledTimes(1)
     expect(mockedGenerate).toHaveBeenCalledWith({
-      category: 'desktop_release',
       version: '1.2.6',
       sourceCommit: '0f3cdbe73add73b47ce0b251fdcc08e6f48a0a0d',
     })
-    expect(mockedList).toHaveBeenCalled()
-    expect(wrapper.text()).toMatch(/草稿已创建/)
-    expect(wrapper.find('#generate-announcement-title').exists()).toBe(false)
+    expect(mockedList).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toMatch(/网站端：已创建/)
+    expect(wrapper.text()).toMatch(/桌面端：已存在/)
+    expect(wrapper.find('#generate-announcement-title').exists()).toBe(true)
   })
 
-  it('closes dialog and shows page status when draft already exists', async () => {
+  it('shows skipped and created from real pair protocol without invalid announcement error', async () => {
     mockedGenerate.mockResolvedValueOnce({
-      announcement: DRAFT,
-      created: false,
-      repaired: false,
-      skipped: false,
+      version: '1.2.8',
+      sourceCommit: null,
+      results: {
+        web: {
+          status: 'skipped',
+          announcement: null,
+          message: '本版本没有用户侧公告内容。',
+        },
+        desktop: {
+          status: 'created',
+          announcement: DESKTOP_DRAFT,
+          message: '桌面端草稿已创建（仍为未发布）。',
+        },
+      },
     })
     wrapper = mountPage()
     await flushPromises()
     await openGenerateDialog(wrapper)
-    expect(wrapper.find('#generate-announcement-title').exists()).toBe(true)
     mockedList.mockClear()
-    await fillAndSubmitGenerate(wrapper, { version: '1.2.6' })
-
+    await fillAndSubmitGenerate(wrapper, { version: '1.2.8' })
     expect(mockedGenerate).toHaveBeenCalledTimes(1)
-    expect(mockedList).toHaveBeenCalled()
-    expect(wrapper.find('#generate-announcement-title').exists()).toBe(false)
-    expect(wrapper.find('.modal-backdrop').exists()).toBe(false)
-
-    const status = wrapper.find('[role="status"]')
-    expect(status.exists()).toBe(true)
-    expect(status.text()).toMatch(/未重复创建/)
-    expect(status.text()).toMatch(/未修改正文/)
-    expect(status.text()).toMatch(/从更新日志重新生成/)
+    expect(mockedList).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toMatch(/网站端：无用户侧内容/)
+    expect(wrapper.text()).toMatch(/桌面端：已创建/)
+    expect(wrapper.text()).not.toMatch(/无效公告数据/)
   })
 
-  it('shows 409 conflict message and prevents double submit while pending', async () => {
-    let rejectGenerate!: (error: unknown) => void
-    mockedGenerate.mockImplementationOnce(() => new Promise((_, reject) => {
-      rejectGenerate = reject
+  it('prevents double submit while pending', async () => {
+    let resolveGenerate!: (value: unknown) => void
+    mockedGenerate.mockImplementationOnce(() => new Promise(resolve => {
+      resolveGenerate = resolve
     }))
     wrapper = mountPage()
     await flushPromises()
     await openGenerateDialog(wrapper)
-    const versionInput = wrapper.find('input[placeholder="例如 1.2.6"]')
-    await versionInput.setValue('1.2.6')
+    await wrapper.find('input[placeholder="例如 1.2.6"]').setValue('1.2.6')
     await nextTick()
     const generateForm = wrapper.findAll('form').find(item => item.html().includes('例如 1.2.6'))
     await generateForm!.trigger('submit.prevent')
     await nextTick()
     expect(wrapper.text()).toMatch(/处理中/)
-    const pendingButton = findButton(wrapper, '处理中')
-    expect(pendingButton.attributes('disabled')).toBeDefined()
+    expect(findButton(wrapper, '处理中').attributes('disabled')).toBeDefined()
     await generateForm!.trigger('submit.prevent')
     expect(mockedGenerate).toHaveBeenCalledTimes(1)
 
-    rejectGenerate(new ApiError('该版本公告已经发布，不能补建覆盖。', 409, {
-      error: '该版本公告已经发布，不能补建覆盖。',
-    }))
+    resolveGenerate({
+      version: '1.2.6',
+      sourceCommit: null,
+      results: {
+        web: { status: 'skipped', announcement: null, message: '网站端无用户侧更新内容，已跳过。' },
+        desktop: { status: 'failed', announcement: null, message: '桌面端生成失败：AI 超时' },
+      },
+    })
     await flushPromises()
-    expect(wrapper.text()).toMatch(/已经发布，不能补建覆盖/)
+    expect(wrapper.text()).toMatch(/网站端：无用户侧内容/)
+    expect(wrapper.text()).toMatch(/桌面端：失败/)
   })
 
-  it('shows server 422 messages for missing changelog content', async () => {
-    mockedGenerate.mockRejectedValueOnce(new ApiError('CHANGELOG 中未找到版本 9.9.9。', 422, {
-      error: 'CHANGELOG 中未找到版本 9.9.9。',
+  it('shows request-level errors without clearing channel-less form', async () => {
+    mockedGenerate.mockRejectedValueOnce(new ApiError('输入版本 1.2.6 与 commit 对应 package.json 版本 1.2.7 不一致。', 400, {
+      error: '输入版本 1.2.6 与 commit 对应 package.json 版本 1.2.7 不一致。',
     }))
     wrapper = mountPage()
     await flushPromises()
     await openGenerateDialog(wrapper)
-    await fillAndSubmitGenerate(wrapper, { version: '9.9.9' })
-    expect(wrapper.text()).toMatch(/未找到版本 9\.9\.9/)
+    await fillAndSubmitGenerate(wrapper, {
+      version: '1.2.6',
+      sourceCommit: 'abcdef1',
+    })
+    expect(wrapper.text()).toMatch(/版本 1\.2\.6.*1\.2\.7 不一致/)
   })
 })

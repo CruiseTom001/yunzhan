@@ -483,9 +483,13 @@ function extractProviderError(rawText: string, provider: AiProviderInput) {
 
 function buildProviderHttpError(response: Response, rawText: string, provider: AiProviderInput) {
   const providerMessage = extractProviderError(rawText, provider)
-  return providerMessage
+  const base = providerMessage
     ? `AI 供应商返回错误：HTTP ${response.status}，${providerMessage}。`
     : `AI 供应商返回错误：HTTP ${response.status}。`
+  if (response.status === 529) {
+    return `${base}供应商当前可能繁忙，请稍后重试。`
+  }
+  return base
 }
 
 async function requestAiFromBrowser(input: {

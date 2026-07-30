@@ -191,4 +191,51 @@ describe('localAiProvider direct browser compatibility helper', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('appends busy retry hint for HTTP 529 and keeps status code', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      error: { message: 'overloaded' },
+    }), { status: 529 })
+    try {
+      const error = await testAiProviderFromBrowser({
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'sk-secret-key',
+        format: 'chat_completions',
+        model: 'deepseek-chat',
+      }).catch(item => item)
+      expect(error).toBeInstanceOf(Error)
+      expect(error.message).toContain('HTTP 529')
+      expect(error.message).toContain('overloaded')
+      expect(error.message).toContain('供应商当前可能繁忙，请稍后重试。')
+      expect(error.message).not.toContain('sk-secret-key')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not append busy retry hint for HTTP 401/403/404', async () => {
+    const originalFetch = globalThis.fetch
+    try {
+      for (const status of [401, 403, 404]) {
+        globalThis.fetch = async () => new Response(JSON.stringify({
+          error: { message: 'denied' },
+        }), { status })
+        const error = await testAiProviderFromBrowser({
+          name: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKey: 'sk-secret-key',
+          format: 'chat_completions',
+          model: 'deepseek-chat',
+        }).catch(item => item)
+        expect(error.message).toContain(`HTTP ${status}`)
+        expect(error.message).not.toContain('供应商当前可能繁忙')
+        expect(error.message).not.toContain('请稍后重试')
+        expect(error.message).not.toContain('sk-secret-key')
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })

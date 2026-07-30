@@ -68,6 +68,26 @@ function readNullableString(value: unknown): string | null | undefined {
   return undefined
 }
 
+const PAIR_VERSION_PATTERN = /^\d+\.\d+\.\d+$/
+const PAIR_COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i
+const PAIR_CHANNEL_STATUSES = ['created', 'already_exists', 'skipped', 'failed'] as const
+
+export type PairGenerateChannelStatus = typeof PAIR_CHANNEL_STATUSES[number]
+
+function isPairGenerateChannelStatus(value: unknown): value is PairGenerateChannelStatus {
+  return typeof value === 'string'
+    && (PAIR_CHANNEL_STATUSES as readonly string[]).includes(value)
+}
+
+function isPairReleaseVersion(value: string): boolean {
+  return PAIR_VERSION_PATTERN.test(value)
+}
+
+function isPairSourceCommit(value: string | null): boolean {
+  if (value === null) return true
+  return PAIR_COMMIT_PATTERN.test(value)
+}
+
 function readAdminAnnouncement(value: unknown): AdminAnnouncement | null {
   if (!isRecord(value)) return null
   const base = readAnnouncement(value)
@@ -262,6 +282,26 @@ export interface GenerateAnnouncementFromChangelogResult {
   skipped: boolean
 }
 
+export interface PairGenerateChannelResult {
+  status: PairGenerateChannelStatus
+  announcement: AdminAnnouncement | null
+  message: string
+}
+
+export interface GenerateAnnouncementPairFromChangelogInput {
+  version?: string | null
+  sourceCommit?: string | null
+}
+
+export interface GenerateAnnouncementPairFromChangelogResult {
+  version: string
+  sourceCommit: string | null
+  results: {
+    web: PairGenerateChannelResult
+    desktop: PairGenerateChannelResult
+  }
+}
+
 export async function generateAdminAnnouncementFromChangelog(
   input: GenerateAnnouncementFromChangelogInput,
 ): Promise<GenerateAnnouncementFromChangelogResult> {
@@ -287,6 +327,59 @@ export async function generateAdminAnnouncementFromChangelog(
     created: payload.created,
     repaired: payload.repaired,
     skipped: payload.skipped === true,
+  }
+}
+
+function readPairChannelResult(value: unknown): PairGenerateChannelResult | null {
+  if (!isRecord(value) || typeof value.message !== 'string' || !isPairGenerateChannelStatus(value.status)) {
+    return null
+  }
+  if (value.status === 'skipped' || value.status === 'failed') {
+    if (value.announcement !== null) return null
+    return {
+      status: value.status,
+      announcement: null,
+      message: value.message,
+    }
+  }
+  const announcement = readAdminAnnouncement(value.announcement)
+  if (!announcement) return null
+  return {
+    status: value.status,
+    announcement,
+    message: value.message,
+  }
+}
+
+export async function generateAdminAnnouncementPairFromChangelog(
+  input: GenerateAnnouncementPairFromChangelogInput,
+): Promise<GenerateAnnouncementPairFromChangelogResult> {
+  const body: Record<string, string> = {}
+  if (typeof input.version === 'string' && input.version.trim()) {
+    body.version = input.version.trim()
+  }
+  if (typeof input.sourceCommit === 'string' && input.sourceCommit.trim()) {
+    body.sourceCommit = input.sourceCommit.trim()
+  }
+  const payload = await apiRequest('/admin/announcements/generate-pair-from-changelog', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!isRecord(payload) || typeof payload.version !== 'string' || !isPairReleaseVersion(payload.version)) {
+    throw new Error('账号服务返回了无效公告数据。')
+  }
+  const sourceCommit = readNullableString(payload.sourceCommit)
+  if (sourceCommit === undefined || !isPairSourceCommit(sourceCommit)) {
+    throw new Error('账号服务返回了无效公告数据。')
+  }
+  if (!isRecord(payload.results)) throw new Error('账号服务返回了无效公告数据。')
+  const web = readPairChannelResult(payload.results.web)
+  const desktop = readPairChannelResult(payload.results.desktop)
+  if (!web || !desktop) throw new Error('账号服务返回了无效公告数据。')
+  return {
+    version: payload.version,
+    sourceCommit,
+    results: { web, desktop },
   }
 }
 

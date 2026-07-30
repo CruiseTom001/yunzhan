@@ -29,6 +29,7 @@ import {
   repolishAnnouncementDraft,
   readChangelogFile,
 } from './announcement-generation.mjs'
+import { generateReleaseAnnouncementPair } from './generate-release-announcement-pair.mjs'
 import { CURRENT_TOUR_VERSION, fetchOnboardingState, toOnboardingResponse } from './onboarding.mjs'
 import { AI_EXPORT_INPUT_MAX_LENGTH, listServerAiProviderSummaries, requestStudyNoteAi, requestStudyNoteAiStream } from './ai-provider.mjs'
 import {
@@ -2536,6 +2537,62 @@ app.post('/api/admin/announcements/generate-from-changelog', requireAuth, requir
       repaired: false,
       skipped: false,
     })
+  } catch (error) {
+    if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
+      response.status(error.statusCode).json({ error: error.message })
+      return
+    }
+    throw error
+  }
+}))
+
+app.post('/api/admin/announcements/generate-pair-from-changelog', requireAuth, requireSuperAdmin, asyncRoute(async (request, response) => {
+  const allowedKeys = new Set(['version', 'sourceCommit'])
+  if (!isRecord(request.body) || !hasOnlyKeys(request.body, allowedKeys)) {
+    response.status(400).json({ error: '补建参数无效。' })
+    return
+  }
+
+  const hasVersion = Object.prototype.hasOwnProperty.call(request.body, 'version')
+    && request.body.version !== null
+    && request.body.version !== undefined
+    && String(request.body.version).trim() !== ''
+  const hasCommit = Object.prototype.hasOwnProperty.call(request.body, 'sourceCommit')
+    && request.body.sourceCommit !== null
+    && request.body.sourceCommit !== undefined
+    && String(request.body.sourceCommit).trim() !== ''
+
+  if (!hasVersion && !hasCommit) {
+    response.status(400).json({ error: '版本号与 Source Commit 至少填写一个。' })
+    return
+  }
+
+  let version = null
+  if (hasVersion) {
+    if (typeof request.body.version !== 'string' || !ANNOUNCEMENT_VERSION_PATTERN.test(request.body.version.trim())) {
+      response.status(400).json({ error: '版本号无效，需为 x.y.z。' })
+      return
+    }
+    version = request.body.version.trim()
+  }
+
+  let sourceCommit = null
+  if (hasCommit) {
+    if (typeof request.body.sourceCommit !== 'string' || !/^[0-9a-f]{7,40}$/i.test(request.body.sourceCommit.trim())) {
+      response.status(400).json({ error: 'sourceCommit 无效，需为 7-40 位十六进制 Git SHA。' })
+      return
+    }
+    sourceCommit = request.body.sourceCommit.trim().toLowerCase()
+  }
+
+  try {
+    const payload = await generateReleaseAnnouncementPair(pool, {
+      version,
+      sourceCommit,
+      actorUserId: request.auth.id,
+      environment: process.env,
+    })
+    response.status(200).json(payload)
   } catch (error) {
     if (error && typeof error === 'object' && Number.isInteger(error.statusCode)) {
       response.status(error.statusCode).json({ error: error.message })

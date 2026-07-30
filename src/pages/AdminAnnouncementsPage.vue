@@ -18,7 +18,7 @@ import {
 import {
   createAdminAnnouncement,
   deleteAdminAnnouncement,
-  generateAdminAnnouncementFromChangelog,
+  generateAdminAnnouncementPairFromChangelog,
   listAdminAnnouncements,
   regenerateAdminAnnouncementFromChangelog,
   repolishAdminAnnouncement,
@@ -26,9 +26,8 @@ import {
   type AdminAnnouncement,
   type AdminAnnouncementInput,
   type AnnouncementCategory,
-  type ReleaseAnnouncementCategory,
+  type PairGenerateChannelResult,
 } from '@/utils/announcementApi'
-import { ApiError } from '@/utils/apiClient'
 import PageState from '@/components/common/PageState.vue'
 
 const PAGE_SIZE = 50
@@ -37,11 +36,6 @@ const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i
 
 const CATEGORY_OPTIONS: Array<{ value: AnnouncementCategory; label: string }> = [
   { value: 'general', label: '公告' },
-  { value: 'web_release', label: '网站更新' },
-  { value: 'desktop_release', label: '桌面端更新' },
-]
-
-const RELEASE_CATEGORY_OPTIONS: Array<{ value: ReleaseAnnouncementCategory; label: string }> = [
   { value: 'web_release', label: '网站更新' },
   { value: 'desktop_release', label: '桌面端更新' },
 ]
@@ -71,27 +65,33 @@ const editorError = ref('')
 const editorSubmitting = ref(false)
 
 const generateOpen = ref(false)
-const generateCategory = ref<ReleaseAnnouncementCategory>('desktop_release')
 const generateVersion = ref('')
 const generateSourceCommit = ref('')
 const generateError = ref('')
 const generateInfo = ref('')
 const generateSubmitting = ref(false)
+const generatePairResults = ref<{ web: PairGenerateChannelResult; desktop: PairGenerateChannelResult } | null>(null)
 
 const displayStart = computed(() => (total.value === 0 ? 0 : offset.value + 1))
 const displayEnd = computed(() => Math.min(offset.value + announcements.value.length, total.value))
 const canPrev = computed(() => !loading.value && offset.value > 0)
 const canNext = computed(() => !loading.value && offset.value + announcements.value.length < total.value)
 const editingGenerated = computed(() => Boolean(editingEntry.value?.sourceKey))
-const canSubmitGenerate = computed(() => (
-  !generateSubmitting.value
-  && VERSION_PATTERN.test(generateVersion.value.trim())
-  && (
-    !generateSourceCommit.value.trim()
-    || COMMIT_PATTERN.test(generateSourceCommit.value.trim())
-  )
-))
+const canSubmitGenerate = computed(() => {
+  if (generateSubmitting.value) return false
+  const version = generateVersion.value.trim()
+  const sourceCommit = generateSourceCommit.value.trim()
+  const versionOk = !version || VERSION_PATTERN.test(version)
+  const commitOk = !sourceCommit || COMMIT_PATTERN.test(sourceCommit)
+  return Boolean((version || sourceCommit) && versionOk && commitOk)
+})
 
+function pairStatusLabel(status: PairGenerateChannelResult['status']) {
+  if (status === 'created') return '已创建'
+  if (status === 'already_exists') return '已存在'
+  if (status === 'skipped') return '无用户侧内容'
+  return '失败'
+}
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
@@ -270,11 +270,11 @@ async function regenerateFromChangelog(entry: AdminAnnouncement) {
 }
 
 function openGenerateDialog() {
-  generateCategory.value = 'desktop_release'
   generateVersion.value = ''
   generateSourceCommit.value = ''
   generateError.value = ''
   generateInfo.value = ''
+  generatePairResults.value = null
   generateOpen.value = true
 }
 
@@ -283,13 +283,18 @@ function closeGenerateDialog() {
   generateOpen.value = false
   generateError.value = ''
   generateInfo.value = ''
+  generatePairResults.value = null
 }
 
 async function submitGenerateDraft() {
   if (generateSubmitting.value) return
   const version = generateVersion.value.trim()
   const sourceCommit = generateSourceCommit.value.trim()
-  if (!VERSION_PATTERN.test(version)) {
+  if (!version && !sourceCommit) {
+    generateError.value = '版本号与 Source Commit 至少填写一个。'
+    return
+  }
+  if (version && !VERSION_PATTERN.test(version)) {
     generateError.value = '版本号需为 x.y.z。'
     return
   }
@@ -301,28 +306,17 @@ async function submitGenerateDraft() {
   generateSubmitting.value = true
   generateError.value = ''
   generateInfo.value = ''
+  generatePairResults.value = null
   try {
-    const result = await generateAdminAnnouncementFromChangelog({
-      category: generateCategory.value,
-      version,
+    const result = await generateAdminAnnouncementPairFromChangelog({
+      version: version || null,
       sourceCommit: sourceCommit || null,
     })
     await loadAnnouncements()
-    if (result.created) {
-      generateInfo.value = result.announcement.generationError
-        ? `草稿已创建（仍为未发布）。AI 已降级：${result.announcement.generationError}`
-        : '草稿已创建（仍为未发布）。'
-      generateOpen.value = false
-    } else {
-      generateInfo.value = `该版本草稿已存在（${result.announcement.sourceKey}），未重复创建，也未修改正文。如需更新正文，请使用“从更新日志重新生成”。`
-      generateOpen.value = false
-    }
+    generatePairResults.value = result.results
+    generateInfo.value = `已处理版本 ${result.version} 的网站端与桌面端草稿（均未自动发布）。`
   } catch (error: unknown) {
-    if (error instanceof ApiError && error.status === 409) {
-      generateError.value = '该版本公告已经发布，不能补建覆盖。'
-    } else {
-      generateError.value = errorMessage(error, '补建更新草稿失败。')
-    }
+    generateError.value = errorMessage(error, '补建更新草稿失败。')
   } finally {
     generateSubmitting.value = false
   }
@@ -641,17 +635,8 @@ onMounted(() => {
 
           <form class="p-5 space-y-4" @submit.prevent="submitGenerateDraft">
             <p class="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3 text-xs text-cyan-100 leading-relaxed">
-              只会根据 CHANGELOG 创建未发布草稿，不会自动发布。source_key 由服务端按分类与版本计算，无需也不允许手工填写。
+              一次生成网站端与桌面端未发布草稿。source_key 由服务端按分类与版本计算；不会自动发布。
             </p>
-
-            <label class="form-field">
-              <span>公告类型</span>
-              <select v-model="generateCategory" :disabled="generateSubmitting">
-                <option v-for="option in RELEASE_CATEGORY_OPTIONS" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
 
             <label class="form-field">
               <span>版本号</span>
@@ -661,34 +646,51 @@ onMounted(() => {
                 maxlength="32"
                 autocomplete="off"
                 placeholder="例如 1.2.6"
-                required
                 :disabled="generateSubmitting"
               />
-              <small>必须与 CHANGELOG 中的版本一致</small>
+              <small>可与 Source Commit 二选一，或同时填写并校验一致</small>
             </label>
 
             <label class="form-field">
-              <span>Source Commit（可选）</span>
+              <span>Source Commit</span>
               <input
                 v-model="generateSourceCommit"
                 type="text"
                 maxlength="40"
                 autocomplete="off"
-                placeholder="7-40 位 Git SHA"
+                placeholder="7-40 位 Git SHA（可选）"
                 :disabled="generateSubmitting"
               />
-              <small>仅记录来源提交，不影响草稿可见性</small>
+              <small>仅填 commit 时，将从 GitHub 官方仓库解析 package.json 版本</small>
             </label>
 
             <div v-if="generateError" class="form-error" role="alert">
               <AlertCircle class="w-4 h-4 shrink-0" />{{ generateError }}
             </div>
 
+            <div
+              v-if="generatePairResults"
+              class="rounded-md border border-white/[0.08] bg-white/[0.02] p-3 space-y-2 text-sm"
+              role="status"
+            >
+              <p v-if="generateInfo" class="text-cyan-100 text-xs">{{ generateInfo }}</p>
+              <div class="flex flex-col gap-1 text-gray-200">
+                <p>
+                  网站端：{{ pairStatusLabel(generatePairResults.web.status) }}
+                  <span class="text-gray-500"> — {{ generatePairResults.web.message }}</span>
+                </p>
+                <p>
+                  桌面端：{{ pairStatusLabel(generatePairResults.desktop.status) }}
+                  <span class="text-gray-500"> — {{ generatePairResults.desktop.message }}</span>
+                </p>
+              </div>
+            </div>
+
             <div class="flex justify-end gap-3 pt-2">
               <button type="button" class="secondary-button" :disabled="generateSubmitting" @click="closeGenerateDialog">取消</button>
               <button type="submit" class="primary-button" :disabled="!canSubmitGenerate">
                 <LoaderCircle v-if="generateSubmitting" class="w-4 h-4 animate-spin" />
-                {{ generateSubmitting ? '处理中…' : '生成草稿' }}
+                {{ generateSubmitting ? '处理中…' : '生成网站与桌面端草稿' }}
               </button>
             </div>
           </form>

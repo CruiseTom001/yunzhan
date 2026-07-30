@@ -3,6 +3,7 @@ const fs = require('fs/promises')
 const fsSync = require('fs')
 const path = require('path')
 const { createDesktopUpdater } = require('./desktop-updater.cjs')
+const { appendAiHttpBusyRetryHint } = require('./ai-http-busy-hint.cjs')
 
 const isDev = !app.isPackaged
 let desktopUpdater = null
@@ -510,9 +511,10 @@ function extractAiProviderError(rawText, provider) {
 
 function buildAiProviderHttpError(response, rawText, provider) {
   const providerMessage = extractAiProviderError(rawText, provider)
-  return providerMessage
+  const base = providerMessage
     ? `AI 供应商返回错误：HTTP ${response.status}，${providerMessage}。`
     : `AI 供应商返回错误：HTTP ${response.status}。`
+  return appendAiHttpBusyRetryHint(response.status, base)
 }
 
 function isAiProviderTimeoutError(error) {

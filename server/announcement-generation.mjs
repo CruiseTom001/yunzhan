@@ -424,7 +424,7 @@ function sanitizeGenerationError(error) {
 
 const ANNOUNCEMENT_AI_MAX_ATTEMPTS = 3
 const ANNOUNCEMENT_AI_RETRY_DELAY_MS = 1500
-const TRANSIENT_AI_STATUS_CODES = new Set([429, 503, 504])
+const TRANSIENT_AI_STATUS_CODES = new Set([429, 503, 504, 529])
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -434,7 +434,7 @@ function isTransientAiError(error) {
   const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : null
   if (statusCode !== null && TRANSIENT_AI_STATUS_CODES.has(statusCode)) return true
   const message = error instanceof Error ? error.message : String(error)
-  return /HTTP (429|503|504)/.test(message)
+  return /HTTP (429|503|504|529)/.test(message)
 }
 
 export function resolveAnnouncementAiProviderCandidates(environment = process.env) {
