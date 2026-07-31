@@ -1303,6 +1303,31 @@ body {
   border-color: var(--border-hover) !important;
 }
 
+/* ===== 全站浅色补丁：账号菜单 ===== */
+/* account-menu-item 是 AppHeader scoped @apply（text-gray-400 hover:text-white），
+   编译后无原子类，全局类补丁无法命中；按组件类覆盖，退出登录项（text-red-300）保持 danger 语义。 */
+[data-theme="light"] .account-menu-item:not(.text-red-300) {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .account-menu-item:hover:not(:disabled):not(.text-red-300),
+[data-theme="light"] .account-menu-item:focus-visible:not(:disabled):not(.text-red-300) {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .account-menu-item.text-red-300:hover:not(:disabled),
+[data-theme="light"] .account-menu-item.text-red-300:focus-visible:not(:disabled) {
+  color: var(--accent-danger) !important;
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .mobile-account-action {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .mobile-account-action:hover:not(:disabled),
+[data-theme="light"] .mobile-account-action:focus-visible:not(:disabled) {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-card-hover) !important;
+}
+
 /* ===== 全站浅色补丁：新手教程弹窗 ===== */
 /* kicker 用 --accent-cyan 在浅色面板上对比度约 3.2:1，下沉到 accent-cyan（cyan-700）保证 ≥4.5:1 */
 [data-theme="light"] .onboarding-kicker {

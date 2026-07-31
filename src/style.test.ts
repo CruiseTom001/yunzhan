@@ -76,8 +76,10 @@ function expectContrastAtLeast(foreground: string, background: string, min: numb
 
 // ---------- 测试 ----------
 
+// 顶层解析一次，供各 describe 复用
+const lightVars = parseVars(extractBlock('\\[data-theme="light"\\]'))
+
 describe('light theme text contrast (WCAG)', () => {
-  const lightVars = parseVars(extractBlock('\\[data-theme="light"\\]'))
   const bgPrimary = lightVars['bg-primary']
   const bgCard = lightVars['bg-card']
 
@@ -188,6 +190,22 @@ describe('light theme patch coverage', () => {
 
   it('covers onboarding tour kicker contrast patch', () => {
     expect(css).toContain('[data-theme="light"] .onboarding-kicker')
+  })
+
+  it('covers account menu item patches with hover and focus-visible', () => {
+    expect(css).toContain('[data-theme="light"] .account-menu-item:not(.text-red-300)')
+    expect(css).toContain('[data-theme="light"] .account-menu-item:hover:not(:disabled):not(.text-red-300)')
+    expect(css).toContain('[data-theme="light"] .account-menu-item:focus-visible:not(:disabled):not(.text-red-300)')
+    expect(css).toContain('[data-theme="light"] .account-menu-item.text-red-300:hover:not(:disabled)')
+    expect(css).toContain('[data-theme="light"] .mobile-account-action')
+    expect(css).toContain('[data-theme="light"] .mobile-account-action:hover:not(:disabled)')
+    // 补丁必须带 !important 以压过 scoped 编译产物
+    const patchStart = css.indexOf('[data-theme="light"] .account-menu-item:not(.text-red-300)')
+    const patchRule = css.slice(patchStart, css.indexOf('}', patchStart))
+    expect(patchRule).toContain('!important')
+    expect(patchRule).toContain('var(--text-secondary)')
+    // 普通态文字必须 ≥4.5:1（text-secondary 对浅底 13:1）
+    expectContrastAtLeast(lightVars['text-secondary'], lightVars['bg-card'], 4.5, 'account-menu text-secondary')
   })
 
   it('does not use prefers-color-scheme', () => {

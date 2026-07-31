@@ -453,7 +453,9 @@ onUnmounted(() => {
 .onboarding-root {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  /* 层级体系：页面内容 ≤110 < 被讲解锚点(.onboarding-anchor-active=129) < 教程容器(130) < 系统级模态框(≥9998)。
+     曾因 root=120 < anchor=121 导致锚点容器（如实验区）覆盖教程面板、按钮不可点击。 */
+  z-index: 130;
   pointer-events: none;
 }
 
@@ -692,8 +694,10 @@ onUnmounted(() => {
 
 <style>
 .onboarding-anchor-active {
+  /* 锚点提升层级：低于教程容器(130)、高于页面内容(≤110)；
+     必须低于 root，否则锚点容器（如实验区 lab-card）会覆盖教程面板导致按钮不可点。 */
   position: relative;
-  z-index: 121;
+  z-index: 129;
   pointer-events: auto;
 }
 </style>

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { computed, reactive } from 'vue'
 import {
@@ -18,8 +20,13 @@ const onboardingMock = reactive({
   tourMode: 'full' as const,
   totalSteps: fullSteps.length,
   syncWarning: '',
-  nextStep: vi.fn(),
-  previousStep: vi.fn(),
+  // nextStep 模拟真实 store 行为：推进步骤（测试通过 store 接口交互，不复制组件分支）
+  nextStep: vi.fn(() => {
+    if (onboardingMock.currentStepIndex < fullSteps.length - 1) onboardingMock.currentStepIndex += 1
+  }),
+  previousStep: vi.fn(() => {
+    if (onboardingMock.currentStepIndex > 0) onboardingMock.currentStepIndex -= 1
+  }),
   completeTour: vi.fn(),
   skipTour: vi.fn(),
   closeTour: vi.fn(),
@@ -184,6 +191,45 @@ describe('OnboardingTour positioning and step availability', () => {
     expect(panelElement()?.querySelector('.onboarding-fallback-note')).not.toBeNull()
     expect(panelElement()?.textContent).toContain('当前讲解区域暂时不可用')
     wrapper.unmount()
+  })
+
+  it('advances from step 6 to step 7 with a real click on the next button', async () => {
+    // 第 6 步锚点是实验区容器：生产站该容器因 .onboarding-anchor-active 提升层级后
+    // 曾覆盖面板导致按钮不可点击；本用例验证组件真实点击路径能推进步骤。
+    createAnchor('course-lab-section')
+    onboardingMock.currentStepIndex = 5 // 第 6 步 course-lab
+    routeStub.fullPath = resolveOnboardingStepRoute(fullSteps[5], 'full')
+
+    const wrapper = mount(OnboardingTour)
+    await advanceToStepReady(wrapper)
+
+    expect(panelElement()?.querySelector('.onboarding-kicker')?.textContent).toContain('6 / 19')
+    // 面板 Teleport 到 body，按钮须从真实 DOM 查询并以真实 click 事件触发
+    const nextBtn = panelElement()?.querySelector<HTMLButtonElement>('.onboarding-primary-button')
+    expect(nextBtn).not.toBeNull()
+    nextBtn!.click()
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(200)
+    await flushPromises()
+
+    expect(onboardingMock.currentStepIndex).toBe(6)
+    // 真实组件：点击后 watch currentStepIndex 触发 prepare，面板进入第 7 步
+    expect(panelElement()?.querySelector('.onboarding-kicker')?.textContent).toContain('7 / 19')
+    wrapper.unmount()
+  })
+
+  it('keeps the tour container above the elevated anchor but below system modals', () => {
+    // 层级回归：root(130) > anchor-active(129) > 页面内容(≤110)；修复前 root=120 < anchor=121
+    const source = readFileSync(resolve(process.cwd(), 'src/components/onboarding/OnboardingTour.vue'), 'utf8')
+    const rootMatch = source.match(/\.onboarding-root\s*\{[^}]*z-index:\s*(\d+)/)
+    const anchorMatch = source.match(/\.onboarding-anchor-active\s*\{[^}]*z-index:\s*(\d+)/)
+    expect(rootMatch).not.toBeNull()
+    expect(anchorMatch).not.toBeNull()
+    const rootZ = Number(rootMatch![1])
+    const anchorZ = Number(anchorMatch![1])
+    expect(anchorZ).toBeLessThan(rootZ)
+    expect(anchorZ).toBeGreaterThan(110) // 高于页面弹窗层
+    expect(rootZ).toBeLessThan(9998) // 低于系统级模态框
   })
 
   it('walks all 19 steps with every panel inside the viewport (desktop 1440x1000)', async () => {
