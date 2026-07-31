@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  DESKTOP_DOWNLOAD_UNAVAILABLE_MESSAGE,
   isAllowedDesktopDownloadUrl,
   openWebDesktopDownloadUrl,
   resolveLandingDesktopDownloadUrl,
+  shouldShowWebDesktopDownloadEntry,
 } from './desktopDownloadUrl'
 
 const VALID_URL = 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.2.5/yunzhan-setup-1.2.5.exe'
@@ -54,6 +56,14 @@ describe('resolveLandingDesktopDownloadUrl', () => {
     expect(resolveLandingDesktopDownloadUrl('http://github.com/foo/setup.exe')).toBeNull()
     expect(resolveLandingDesktopDownloadUrl('https://example.com/setup.exe')).toBeNull()
     expect(resolveLandingDesktopDownloadUrl(undefined)).toBeNull()
+  })
+})
+
+describe('shouldShowWebDesktopDownloadEntry', () => {
+  it('shows on web for guests and logged-in users, hides on Electron', () => {
+    expect(shouldShowWebDesktopDownloadEntry(false)).toBe(true)
+    expect(shouldShowWebDesktopDownloadEntry(true)).toBe(false)
+    expect(DESKTOP_DOWNLOAD_UNAVAILABLE_MESSAGE).toContain('暂无可用')
   })
 })
 

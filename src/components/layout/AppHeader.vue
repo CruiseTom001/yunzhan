@@ -7,6 +7,7 @@ import {
   Brain,
   Cloud,
   CloudOff,
+  Download,
   Home,
   LoaderCircle,
   LogOut,
@@ -30,6 +31,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useTheme } from '@/stores/theme'
+import { useWebDesktopDownload } from '@/composables/useWebDesktopDownload'
 
 const router = useRouter()
 const route = useRoute()
@@ -41,6 +43,13 @@ const { themePreference, toggleTheme } = useTheme()
 const authStore = useAuthStore()
 const progressStore = useProgressStore()
 const onboardingStore = useOnboardingStore()
+const {
+  showEntry: showDesktopDownloadEntry,
+  errorMessage: desktopDownloadError,
+  loading: desktopDownloadLoading,
+  loadDownloadUrl,
+  downloadDesktop,
+} = useWebDesktopDownload()
 
 const themeToggleTitle = computed(() => {
   if (themePreference.value === 'system') return '当前：跟随系统（点击切换）'
@@ -97,13 +106,23 @@ async function logout() {
   }
 }
 
+async function handleDesktopDownload() {
+  accountMenuOpen.value = false
+  await downloadDesktop()
+}
+
 function handleDocumentClick(event: MouseEvent) {
   if (accountMenuRoot.value && event.target instanceof Node && !accountMenuRoot.value.contains(event.target)) {
     accountMenuOpen.value = false
   }
 }
 
-onMounted(() => document.addEventListener('click', handleDocumentClick))
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+  if (showDesktopDownloadEntry.value) {
+    void loadDownloadUrl()
+  }
+})
 onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
 </script>
 
@@ -148,6 +167,29 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
           <Sun v-else-if="themePreference === 'light'" class="w-4 h-4" />
           <Moon v-else class="w-4 h-4" />
         </button>
+        <div
+          v-if="showDesktopDownloadEntry"
+          class="relative mr-1"
+        >
+          <button
+            type="button"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-gray-500 hover:text-gray-300 hover:bg-white/[0.02] transition-all"
+            title="下载桌面端"
+            :disabled="desktopDownloadLoading"
+            @click="handleDesktopDownload"
+          >
+            <LoaderCircle v-if="desktopDownloadLoading" class="w-3.5 h-3.5 animate-spin" />
+            <Download v-else class="w-3.5 h-3.5" />
+            下载桌面端
+          </button>
+          <p
+            v-if="desktopDownloadError"
+            class="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-red-500/30 bg-surface-tertiary px-2 py-1 text-[11px] leading-4 text-red-400 shadow-lg"
+            role="alert"
+          >
+            {{ desktopDownloadError }}
+          </p>
+        </div>
         <div class="w-px h-5 bg-white/[0.04] mr-1"></div>
         <button
           v-for="item in navItems"
@@ -202,6 +244,18 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
             >
               <Settings class="w-4 h-4" />
               账号设置
+            </button>
+            <button
+              v-if="showDesktopDownloadEntry"
+              type="button"
+              class="account-menu-item"
+              role="menuitem"
+              :disabled="desktopDownloadLoading"
+              @click="handleDesktopDownload"
+            >
+              <LoaderCircle v-if="desktopDownloadLoading" class="w-4 h-4 animate-spin" />
+              <Download v-else class="w-4 h-4" />
+              下载桌面端
             </button>
             <button
               v-if="authStore.isSuperAdmin"
@@ -308,6 +362,24 @@ onUnmounted(() => document.removeEventListener('click', handleDocumentClick))
           <Settings class="w-4 h-4" />
           账号设置
         </button>
+        <button
+          v-if="showDesktopDownloadEntry"
+          type="button"
+          class="mobile-account-action"
+          :disabled="desktopDownloadLoading"
+          @click="handleDesktopDownload"
+        >
+          <LoaderCircle v-if="desktopDownloadLoading" class="w-4 h-4 animate-spin" />
+          <Download v-else class="w-4 h-4" />
+          下载桌面端
+        </button>
+        <p
+          v-if="showDesktopDownloadEntry && desktopDownloadError"
+          class="px-0 pb-2 text-xs text-red-400 leading-5"
+          role="alert"
+        >
+          {{ desktopDownloadError }}
+        </p>
         <button
           v-if="authStore.isSuperAdmin"
           type="button"

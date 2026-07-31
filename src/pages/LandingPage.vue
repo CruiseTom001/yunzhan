@@ -20,12 +20,7 @@ import ParticleBg from '@/components/common/ParticleBg.vue'
 import AuthDialog from '@/components/auth/AuthDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/stores/theme'
-import {
-  openWebDesktopDownloadUrl,
-  resolveLandingDesktopDownloadUrl,
-} from '@/utils/desktopDownloadUrl'
-import { getDesktopLatestVersion } from '@/utils/desktopVersionApi'
-import { isDesktopRuntime } from '@/stores/desktopUpdate'
+import { useWebDesktopDownload } from '@/composables/useWebDesktopDownload'
 import {
   buildLandingAuthQuery,
   isAuthMode,
@@ -43,9 +38,12 @@ const { theme, setThemePreference } = useTheme()
 const pageRoot = ref<HTMLElement | null>(null)
 const typedText = ref('')
 const fullText = '从入门到高级，系统化掌握运维全栈技能'
-const desktopDownloadUrl = ref<string | null>(null)
-const isElectronDesktop = computed(() => isDesktopRuntime())
-const showDesktopDownloadButton = computed(() => !isElectronDesktop.value && Boolean(desktopDownloadUrl.value))
+const {
+  showEntry: showDesktopDownloadButton,
+  errorMessage: desktopDownloadError,
+  loadDownloadUrl: loadDesktopDownloadUrl,
+  downloadDesktop,
+} = useWebDesktopDownload()
 
 const authDialogOpen = computed(() => isAuthMode(route.query.auth))
 const authMode = computed(() => parseAuthMode(route.query.auth))
@@ -59,19 +57,8 @@ function toggleLandingTheme() {
   setThemePreference(theme.value === 'dark' ? 'light' : 'dark')
 }
 
-async function loadDesktopDownloadUrl() {
-  try {
-    const latest = await getDesktopLatestVersion()
-    desktopDownloadUrl.value = resolveLandingDesktopDownloadUrl(latest.downloadUrl)
-  } catch {
-    // 静默:落地页不应因版本服务异常影响主流程
-  }
-}
-
-function openDesktopDownload() {
-  const url = desktopDownloadUrl.value
-  if (!url || isElectronDesktop.value) return
-  void openWebDesktopDownloadUrl(url)
+async function openDesktopDownload() {
+  await downloadDesktop()
 }
 
 function openAuth(mode: AuthMode, redirect = '/') {
@@ -158,7 +145,7 @@ function setupReveal() {
 }
 
 onMounted(() => {
-  if (!isElectronDesktop.value) {
+  if (showDesktopDownloadButton.value) {
     void loadDesktopDownloadUrl()
   }
   startTyping()
@@ -216,16 +203,28 @@ const stats = [
             <Sun v-if="theme === 'dark'" class="w-4 h-4" />
             <Moon v-else class="w-4 h-4" />
           </button>
-          <button
+          <div
             v-if="showDesktopDownloadButton"
-            type="button"
-            class="inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-md border border-edge-card text-ink-secondary hover:text-ink-primary hover:bg-surface-elevated text-sm"
-            title="下载桌面端"
-            @click="openDesktopDownload"
+            class="relative flex shrink-0 flex-col items-end"
           >
-            <Download class="w-4 h-4" />
-            下载桌面端
-          </button>
+            <button
+              type="button"
+              class="inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-md border border-edge-card text-ink-secondary hover:text-ink-primary hover:bg-surface-elevated text-sm"
+              title="下载桌面端"
+              @click="openDesktopDownload"
+            >
+              <Download class="w-4 h-4" />
+              <span class="hidden sm:inline">下载桌面端</span>
+              <span class="sm:hidden">下载</span>
+            </button>
+            <p
+              v-if="desktopDownloadError"
+              class="absolute top-full right-0 mt-1 max-w-[16rem] rounded-md border border-red-500/30 bg-surface-tertiary px-2 py-1 text-[11px] leading-4 text-red-400 shadow-lg"
+              role="alert"
+            >
+              {{ desktopDownloadError }}
+            </p>
+          </div>
           <template v-if="authStore.isAuthenticated">
             <button
               type="button"

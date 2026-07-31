@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveLandingDesktopDownloadUrl } from '@/utils/desktopDownloadUrl'
+import {
+  DESKTOP_DOWNLOAD_UNAVAILABLE_MESSAGE,
+  resolveLandingDesktopDownloadUrl,
+  shouldShowWebDesktopDownloadEntry,
+} from '@/utils/desktopDownloadUrl'
 import { isDesktopRuntime } from '@/stores/desktopUpdate'
 
 vi.mock('@/utils/desktopVersionApi', () => ({
@@ -75,18 +79,18 @@ describe('landing desktop download url loading', () => {
     expect(mockedGetLatest).not.toHaveBeenCalled()
   })
 
-  it('shows download button only on web runtime when url is available', () => {
+  it('keeps the download entry for web guests and logged-in users', () => {
     vi.stubGlobal('window', { open: vi.fn() })
     expect(isDesktopRuntime()).toBe(false)
+    expect(shouldShowWebDesktopDownloadEntry(false)).toBe(true)
+  })
 
-    const desktopDownloadUrl = VALID_URL
-    const showDesktopDownloadButton = !isDesktopRuntime() && Boolean(desktopDownloadUrl)
-    expect(showDesktopDownloadButton).toBe(true)
-
+  it('hides the download entry on Electron even when a URL is known', () => {
     vi.stubGlobal('window', {
       electronAPI: { invoke: vi.fn() },
     })
     expect(isDesktopRuntime()).toBe(true)
-    expect(!isDesktopRuntime() && Boolean(desktopDownloadUrl)).toBe(false)
+    expect(shouldShowWebDesktopDownloadEntry(true)).toBe(false)
+    expect(DESKTOP_DOWNLOAD_UNAVAILABLE_MESSAGE.length).toBeGreaterThan(0)
   })
 })

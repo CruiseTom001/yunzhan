@@ -39,6 +39,7 @@ import { registerAppQuitGuard } from '@/utils/appQuitGuard'
 import { resetDesktopCloseBehavior } from '@/utils/desktopCloseBehavior'
 import PageState from '@/components/common/PageState.vue'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useWebDesktopDownload } from '@/composables/useWebDesktopDownload'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 const PASSWORD_HAS_LETTER = /[A-Za-z]/
@@ -51,6 +52,13 @@ const progressStore = useProgressStore()
 const onboardingStore = useOnboardingStore()
 const desktopUpdateStore = useDesktopUpdateStore()
 const preferencesStore = usePreferencesStore()
+const {
+  showEntry: showWebDesktopDownload,
+  errorMessage: webDesktopDownloadError,
+  loading: webDesktopDownloadLoading,
+  loadDownloadUrl: loadWebDesktopDownloadUrl,
+  downloadDesktop: downloadWebDesktop,
+} = useWebDesktopDownload()
 
 // 资料编辑
 const profileEditor = ref({ username: '', displayName: '' })
@@ -471,8 +479,15 @@ function isFeedbackDraftDirty(): boolean {
     || feedbackForm.value.contact.trim().length > 0
 }
 
+async function handleWebDesktopDownload() {
+  await downloadWebDesktop()
+}
+
 onMounted(() => {
   void loadSessions()
+  if (showWebDesktopDownload.value) {
+    void loadWebDesktopDownloadUrl()
+  }
   unregisterFeedbackQuitGuard = registerAppQuitGuard(() => !isFeedbackDraftDirty())
 })
 
@@ -533,6 +548,38 @@ onUnmounted(() => {
             />
             减少动画效果
           </label>
+        </div>
+      </div>
+
+      <div v-if="showWebDesktopDownload" class="card p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+              <Download class="w-4 h-4 text-cyan-400" />
+              下载桌面端
+            </h2>
+            <p class="text-xs text-gray-500 mt-2 leading-6">
+              在 Windows 桌面端继续学习。下载不会退出当前登录，也不会清除学习进度或本地配置。
+            </p>
+            <p
+              v-if="webDesktopDownloadError"
+              class="text-xs text-red-400 mt-2 leading-5"
+              role="alert"
+            >
+              {{ webDesktopDownloadError }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="primary-button h-10 shrink-0"
+            :disabled="webDesktopDownloadLoading"
+            title="下载桌面端"
+            @click="handleWebDesktopDownload"
+          >
+            <LoaderCircle v-if="webDesktopDownloadLoading" class="w-4 h-4 animate-spin" />
+            <Download v-else class="w-4 h-4" />
+            下载桌面端
+          </button>
         </div>
       </div>
 

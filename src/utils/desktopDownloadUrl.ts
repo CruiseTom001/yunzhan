@@ -6,10 +6,16 @@ export const DESKTOP_DOWNLOAD_ALLOWED_HOSTS = [
 
 export const DESKTOP_DOWNLOAD_URL_MAX_LENGTH = 500
 export const DESKTOP_DOWNLOAD_INVALID_MESSAGE = '版本信息格式无效，请稍后再试。'
+export const DESKTOP_DOWNLOAD_UNAVAILABLE_MESSAGE = '当前暂无可用的桌面端安装包，请稍后再试。'
 
 export type OpenDesktopDownloadResult =
   | { ok: true }
   | { ok: false; errorMessage: string }
+
+/** Web 端展示下载入口；Electron 桌面端始终隐藏，避免下载自身。 */
+export function shouldShowWebDesktopDownloadEntry(isDesktopRuntime: boolean): boolean {
+  return !isDesktopRuntime
+}
 
 export function isAllowedDesktopDownloadUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false
