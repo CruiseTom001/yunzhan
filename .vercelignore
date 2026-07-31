@@ -1,0 +1,10 @@
+# Vercel 部署上传忽略：本地安装包与构建产物不进入云端上传
+release/
+node_modules/
+dist/
+.vercel/
+.git/
+*.log
+.env
+.env.*
+!.env.example
