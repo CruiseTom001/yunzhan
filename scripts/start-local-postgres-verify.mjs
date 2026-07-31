@@ -116,21 +116,25 @@ async function ensureAsciiPostgresNative(projectRoot) {
     return systemNative
   }
 
-  const embeddedRoot = path.join(projectRoot, 'node_modules', '@embedded-postgres', 'windows-x64', 'native')
-  const embeddedInitdb = path.join(embeddedRoot, 'bin', 'initdb.exe')
-  if (process.platform === 'win32' && await pathExists(embeddedInitdb)) {
-    logStep(`使用嵌入式 PostgreSQL 二进制：${embeddedRoot}`)
-    return {
-      binDir: path.join(embeddedRoot, 'bin'),
-      initdb: embeddedInitdb,
-      postgres: path.join(embeddedRoot, 'bin', 'postgres.exe'),
-      pgCtl: path.join(embeddedRoot, 'bin', 'pg_ctl.exe'),
-      root: embeddedRoot,
-      label: '嵌入式 PostgreSQL 二进制',
-    }
+  const sourceRoot = path.join(projectRoot, 'node_modules', '@embedded-postgres', 'windows-x64', 'native')
+  const targetRoot = path.join(os.tmpdir(), 'yunzhan-pg-native')
+  const initdbPath = path.join(targetRoot, 'bin', 'initdb.exe')
+  if (!(await pathExists(initdbPath))) {
+    logStep(`复制 PostgreSQL 二进制到 ASCII 临时目录：${targetRoot}`)
+    await fs.mkdir(targetRoot, { recursive: true })
+    await fs.cp(sourceRoot, targetRoot, { recursive: true, force: true })
+    await fs.writeFile(path.join(targetRoot, '.copied'), new Date().toISOString(), 'utf8')
+  } else {
+    logStep(`复用已复制的 PostgreSQL 二进制：${targetRoot}`)
   }
-
-  throw new Error('未找到可用 PostgreSQL。请安装 PostgreSQL 17，或在 Windows 开发机执行 npm i -D @embedded-postgres/windows-x64。')
+  return {
+    binDir: path.join(targetRoot, 'bin'),
+    initdb: initdbPath,
+    postgres: path.join(targetRoot, 'bin', 'postgres.exe'),
+    pgCtl: path.join(targetRoot, 'bin', 'pg_ctl.exe'),
+    root: targetRoot,
+    label: '嵌入式 PostgreSQL 二进制',
+  }
 }
 
 function buildSpawnEnv(binDir) {
