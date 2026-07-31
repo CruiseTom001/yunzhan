@@ -7,6 +7,13 @@ import {
   confirmEmailChange,
   updateAccountProfile,
 } from '@/utils/accountApi'
+import {
+  clearDesktopAutoLoginSession,
+  DESKTOP_AUTO_LOGIN_PERSIST_WARNING,
+  isDesktopRuntime,
+  syncDesktopLoginPreferencesAfterLogin,
+  type DesktopLoginPreferencesInput,
+} from '@/utils/desktopAuthPreferences'
 
 export interface RegistrationInput {
   email: string
@@ -86,10 +93,38 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
   const status = ref<'idle' | 'loading' | 'authenticated' | 'anonymous' | 'error'>('idle')
   const errorMessage = ref('')
+  const sessionNotice = ref('')
   let initialization: Promise<void> | null = null
 
   const isAuthenticated = computed(() => user.value !== null)
   const isSuperAdmin = computed(() => user.value?.role === 'super_admin')
+
+  function markLocalAnonymous(clearError = true) {
+    user.value = null
+    status.value = 'anonymous'
+    sessionNotice.value = ''
+    if (clearError) {
+      errorMessage.value = ''
+    }
+  }
+
+  function cleanupDesktopSessionBestEffort(options: { keepIdentifier?: boolean } = {}) {
+    if (!isDesktopRuntime()) return Promise.resolve(null)
+    return clearDesktopAutoLoginSession(options).catch(() => null)
+  }
+
+  function invalidateLocalSession(message?: string) {
+    markLocalAnonymous()
+    if (message && isDesktopRuntime()) {
+      void cleanupDesktopSessionBestEffort({ keepIdentifier: true }).then((result) => {
+        if (result?.hadAutoLogin) {
+          sessionNotice.value = message
+        }
+      })
+      return
+    }
+    void cleanupDesktopSessionBestEffort({ keepIdentifier: true })
+  }
 
   function initialize() {
     if (initialization) return initialization
@@ -100,31 +135,53 @@ export const useAuthStore = defineStore('auth', () => {
         if (!authenticatedUser) throw new Error('账号服务返回了无效用户数据。')
         user.value = authenticatedUser
         status.value = 'authenticated'
+        sessionNotice.value = ''
       })
       .catch((error: unknown) => {
-        user.value = null
         if (error instanceof ApiError && error.status === 401) {
-          status.value = 'anonymous'
+          invalidateLocalSession(
+            isDesktopRuntime() ? '自动登录信息已失效，请重新登录。' : undefined,
+          )
           return
         }
+        user.value = null
         status.value = 'error'
         errorMessage.value = error instanceof Error ? error.message : '账号服务初始化失败。'
       })
     return initialization
   }
 
-  async function login(username: string, password: string) {
+  async function login(
+    username: string,
+    password: string,
+    options: { remember?: boolean; desktopPreferences?: DesktopLoginPreferencesInput } = {},
+  ) {
     status.value = 'loading'
     errorMessage.value = ''
+    sessionNotice.value = ''
     try {
+      const body: Record<string, unknown> = { username, password }
+      if (!isDesktopRuntime()) {
+        body.remember = options.remember ?? true
+      }
       const payload = await apiRequest('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(body),
       })
       const authenticatedUser = readUserResponse(payload)
       if (!authenticatedUser) throw new Error('账号服务返回了无效用户数据。')
       user.value = authenticatedUser
       status.value = 'authenticated'
+      if (isDesktopRuntime() && options.desktopPreferences) {
+        try {
+          const preferenceResult = await syncDesktopLoginPreferencesAfterLogin(options.desktopPreferences)
+          if (preferenceResult.warning) {
+            sessionNotice.value = preferenceResult.warning
+          }
+        } catch {
+          sessionNotice.value = DESKTOP_AUTO_LOGIN_PERSIST_WARNING
+        }
+      }
       return authenticatedUser
     } catch (error: unknown) {
       user.value = null
@@ -160,6 +217,7 @@ export const useAuthStore = defineStore('auth', () => {
       body: JSON.stringify(input),
     })
     if (!readOkResponse(payload)) throw new Error('账号服务返回了无效密码重置结果。')
+    invalidateLocalSession()
   }
 
   async function register(input: RegistrationInput) {
@@ -186,10 +244,11 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       await apiRequest('/auth/logout', { method: 'POST' })
+    } catch {
+      // 服务端登出失败时仍必须完成本地匿名化。
     } finally {
-      user.value = null
-      status.value = 'anonymous'
-      errorMessage.value = ''
+      markLocalAnonymous()
+      cleanupDesktopSessionBestEffort({ keepIdentifier: true })
     }
   }
 
@@ -212,21 +271,24 @@ export const useAuthStore = defineStore('auth', () => {
   function applySecurityUpdate(updatedUser: AuthUser | null) {
     if (updatedUser) {
       user.value = updatedUser
-    } else {
-      clearLocalSession()
+      return
     }
+    invalidateLocalSession(isDesktopRuntime() ? '当前登录状态已失效，请重新登录。' : undefined)
   }
 
   function clearLocalSession() {
-    user.value = null
-    status.value = 'anonymous'
-    errorMessage.value = ''
+    invalidateLocalSession()
+  }
+
+  function clearSessionNotice() {
+    sessionNotice.value = ''
   }
 
   return {
     user,
     status,
     errorMessage,
+    sessionNotice,
     isAuthenticated,
     isSuperAdmin,
     initialize,
@@ -241,5 +303,6 @@ export const useAuthStore = defineStore('auth', () => {
     changeEmail,
     applySecurityUpdate,
     clearLocalSession,
+    clearSessionNotice,
   }
 })

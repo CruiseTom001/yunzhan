@@ -8,6 +8,12 @@ import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 import { pool, withTransaction } from './db.mjs'
+import {
+  buildClearSessionCookieOptions,
+  buildSessionCookieOptions,
+  parseLoginRememberInput,
+  SESSION_COOKIE_NAME,
+} from './auth-session.mjs'
 import { sendVerificationCode } from './email-service.mjs'
 import { createEmailChallenge, verifyEmailChallengeCode } from './email-verification.mjs'
 import { persistFeedbackStatus } from './feedback-status.mjs'
@@ -88,7 +94,7 @@ const {
   trustProxy,
 } = runtimeConfig
 
-const sessionCookieName = 'yunzhan_session'
+const sessionCookieName = SESSION_COOKIE_NAME
 const sessionDurationMs = 7 * 24 * 60 * 60 * 1000
 const LOGIN_ATTEMPT_LIMIT = 5
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000
@@ -176,23 +182,18 @@ function hashSessionToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
-function sessionCookieOptions() {
-  return {
-    httpOnly: true,
+function sessionCookieOptions(remember = true) {
+  return buildSessionCookieOptions(remember, {
     secure: secureCookie,
     sameSite,
-    path: '/',
-    maxAge: sessionDurationMs,
-  }
+  })
 }
 
 function clearSessionCookie(response) {
-  response.clearCookie(sessionCookieName, {
-    httpOnly: true,
+  response.clearCookie(sessionCookieName, buildClearSessionCookieOptions({
     secure: secureCookie,
     sameSite,
-    path: '/',
-  })
+  }))
 }
 
 function toPublicUser(row) {
@@ -632,7 +633,7 @@ app.post('/api/auth/register', asyncRoute(async (request, response) => {
       response.status(409).json({ error: '用户名或邮箱不可用，请更换后重试。' })
       return
     }
-    response.cookie(sessionCookieName, token, sessionCookieOptions())
+    response.cookie(sessionCookieName, token, sessionCookieOptions(true))
     response.status(201).json({ user: toPublicUser(registration.user) })
   } catch (error) {
     if (error?.code === '23505') {
@@ -767,6 +768,12 @@ app.post('/api/auth/login', asyncRoute(async (request, response) => {
     response.status(400).json({ error: '登录参数无效。' })
     return
   }
+  const rememberResult = parseLoginRememberInput(request.body)
+  if (!rememberResult.ok) {
+    response.status(400).json({ error: '保持登录参数无效。' })
+    return
+  }
+  const remember = rememberResult.value
   const normalizedIdentifier = typeof request.body.username === 'string'
     ? request.body.username.trim().toLowerCase()
     : ''
@@ -809,7 +816,7 @@ app.post('/api/auth/login', asyncRoute(async (request, response) => {
     await client.query('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [user.id])
     await writeAudit(client, user.id, 'auth.login', user.id)
   })
-  response.cookie(sessionCookieName, token, sessionCookieOptions())
+  response.cookie(sessionCookieName, token, sessionCookieOptions(remember))
   response.json({ user: toPublicUser({ ...user, last_login_at: new Date() }) })
 }))
 

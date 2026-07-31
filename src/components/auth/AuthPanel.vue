@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   Eye,
   EyeOff,
@@ -12,6 +12,11 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useProgressStore } from '@/stores/progress'
 import type { AuthMode } from '@/utils/authRedirect'
+import {
+  getDesktopLoginPreferences,
+  isDesktopRuntime,
+  setDesktopLoginPreferences,
+} from '@/utils/desktopAuthPreferences'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
@@ -29,9 +34,15 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const progressStore = useProgressStore()
+const isDesktop = isDesktopRuntime()
 const mode = ref<AuthMode>(props.initialMode)
 const loginIdentifier = ref('')
 const loginPassword = ref('')
+const rememberWebLogin = ref(true)
+const rememberDesktopIdentifier = ref(false)
+const autoLoginOnStartup = ref(false)
+const autoLoginAvailable = ref(true)
+const autoLoginDisabledReason = ref<string | null>(null)
 const registrationEmail = ref('')
 const registrationCode = ref('')
 const registrationUsername = ref('')
@@ -108,8 +119,45 @@ function switchMode(nextMode: AuthMode, options: { emitEvent?: boolean } = { emi
   mode.value = nextMode
   formError.value = ''
   formMessage.value = ''
+  clearSensitiveFields()
   if (options.emitEvent !== false) emit('modeChange', nextMode)
 }
+
+watch(rememberDesktopIdentifier, (enabled) => {
+  if (!enabled) {
+    autoLoginOnStartup.value = false
+    if (isDesktop) {
+      void setDesktopLoginPreferences({
+        rememberIdentifier: false,
+        autoLogin: false,
+        identifier: '',
+      })
+    }
+  }
+})
+
+watch(autoLoginOnStartup, (enabled) => {
+  if (enabled) {
+    rememberDesktopIdentifier.value = true
+  }
+})
+
+async function loadDesktopLoginPreferences() {
+  if (!isDesktop) return
+  const preferences = await getDesktopLoginPreferences()
+  if (!preferences) return
+  rememberDesktopIdentifier.value = preferences.rememberIdentifier
+  autoLoginOnStartup.value = preferences.autoLogin
+  autoLoginAvailable.value = preferences.autoLoginAvailable
+  autoLoginDisabledReason.value = preferences.autoLoginDisabledReason
+  if (preferences.identifier) {
+    loginIdentifier.value = preferences.identifier
+  }
+}
+
+onMounted(() => {
+  void loadDesktopLoginPreferences()
+})
 
 function stopCountdown() {
   if (countdownTimer) {
@@ -160,7 +208,17 @@ async function submitLogin() {
   formError.value = ''
   formMessage.value = ''
   try {
-    const user = await authStore.login(loginIdentifier.value.trim(), loginPassword.value)
+    const identifier = loginIdentifier.value.trim()
+    const user = await authStore.login(loginIdentifier.value.trim(), loginPassword.value, {
+      remember: rememberWebLogin.value,
+      desktopPreferences: isDesktop
+        ? {
+          rememberIdentifier: rememberDesktopIdentifier.value,
+          autoLogin: autoLoginOnStartup.value,
+          identifier: rememberDesktopIdentifier.value ? identifier : '',
+        }
+        : undefined,
+    })
     await completeAuthentication(user.id, user.displayName)
   } catch (error: unknown) {
     formError.value = error instanceof Error ? error.message : '登录失败，请重试。'
@@ -353,6 +411,44 @@ defineExpose({
         <button type="button" class="forgot-password-button" @click="switchMode('forgot-password')">
           忘记密码？
         </button>
+
+        <div v-if="!isDesktop" class="auth-option-row">
+          <label class="auth-checkbox-label" for="remember-web-login">
+            <input
+              id="remember-web-login"
+              v-model="rememberWebLogin"
+              type="checkbox"
+              :disabled="submitting"
+            />
+            <span>保持登录 7 天</span>
+          </label>
+          <p class="auth-option-hint">关闭后关闭浏览器即退出登录；密码仍由浏览器密码管理器保存。</p>
+        </div>
+
+        <div v-else class="auth-option-row">
+          <label class="auth-checkbox-label" for="remember-desktop-identifier">
+            <input
+              id="remember-desktop-identifier"
+              v-model="rememberDesktopIdentifier"
+              type="checkbox"
+              :disabled="submitting"
+            />
+            <span>记住账号</span>
+          </label>
+          <label class="auth-checkbox-label" for="auto-login-on-startup">
+            <input
+              id="auto-login-on-startup"
+              v-model="autoLoginOnStartup"
+              type="checkbox"
+              :disabled="submitting || !autoLoginAvailable"
+            />
+            <span>启动时自动登录</span>
+          </label>
+          <p v-if="autoLoginDisabledReason" class="auth-option-warning" role="status">
+            {{ autoLoginDisabledReason }}
+          </p>
+          <p v-else class="auth-option-hint">仅保存用户名或邮箱，不保存密码；自动登录使用系统安全存储保护会话。</p>
+        </div>
 
         <p v-if="formMessage" class="auth-message" role="status">{{ formMessage }}</p>
         <p v-if="formError" class="auth-error" role="alert">{{ formError }}</p>
@@ -733,6 +829,45 @@ defineExpose({
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.auth-option-row {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.auth-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.auth-checkbox-label input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-cyan);
+}
+
+.auth-checkbox-label input:disabled {
+  cursor: not-allowed;
+}
+
+.auth-option-hint,
+.auth-option-warning {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.auth-option-hint {
+  color: var(--text-muted);
+}
+
+.auth-option-warning {
+  color: #f59e0b;
 }
 
 .auth-error,

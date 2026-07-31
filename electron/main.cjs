@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, net, safeStorage, session, shell } = require('electron')
 const fs = require('fs/promises')
 const fsSync = require('fs')
 const path = require('path')
 const { createDesktopUpdater } = require('./desktop-updater.cjs')
 const { appendAiHttpBusyRetryHint } = require('./ai-http-busy-hint.cjs')
+const { createDesktopAuthStorage } = require('./desktop-auth-storage.cjs')
 
 const isDev = !app.isPackaged
 let desktopUpdater = null
@@ -49,6 +50,19 @@ const desktopApiTimeoutMaxMs = 70_000
 const desktopApiCookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const desktopApiForwardedHeaders = new Set(['accept', 'content-type'])
 const desktopApiCookies = new Map()
+let desktopAuthStorage = null
+
+function getDesktopAuthStorage() {
+  if (!desktopAuthStorage) {
+    desktopAuthStorage = createDesktopAuthStorage({
+      safeStorage,
+      app,
+      desktopApiCookies,
+      platform: process.platform,
+    })
+  }
+  return desktopAuthStorage
+}
 
 function normalizeAccountId(value) {
   if (value === null || value === undefined) return null
@@ -666,6 +680,15 @@ function registerIpc() {
   ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
   ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
   ipcMain.handle('desktop:apiRequest', async (_event, payload) => requestDesktopApi(payload))
+  ipcMain.handle('auth:getDesktopLoginPreferences', () => getDesktopAuthStorage().getDesktopLoginPreferences())
+  ipcMain.handle('auth:setDesktopLoginPreferences', (_event, payload) => {
+    if (!isPlainObject(payload)) throw new Error('invalid preferences payload')
+    return getDesktopAuthStorage().setDesktopLoginPreferences(payload)
+  })
+  ipcMain.handle('auth:clearDesktopAutoLogin', async (_event, payload) => {
+    const keepIdentifier = isPlainObject(payload) && payload.keepIdentifier === true
+    return getDesktopAuthStorage().clearDesktopAutoLogin({ keepIdentifier })
+  })
   ipcMain.handle('ai:polishStudyNote', async (_event, payload) => requestAiProvider(payload, 'polish'))
   ipcMain.handle('ai:testProvider', async (_event, provider) => requestAiProvider({ provider }, 'test'))
 
@@ -816,12 +839,21 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registerSecurityHeaders()
   registerDesktopApiHeaders()
   registerIpc()
   registerUpdaterIpc()
-  createWindow()
+  try {
+    await getDesktopAuthStorage().restoreAutoLoginSessionToCookies()
+  } catch (error) {
+    console.warn('Desktop auto-login restore skipped due to unexpected error.')
+    if (error instanceof Error && error.message) {
+      console.warn(error.message.slice(0, 120))
+    }
+  } finally {
+    createWindow()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

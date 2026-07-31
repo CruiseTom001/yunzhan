@@ -1,7 +1,7 @@
 {
   "name": "yunzhan",
   "private": true,
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "云栈 - 云计算从入门到精通",
   "author": "云栈 <hello@yunzhan.dev>",
   "engines": {
@@ -34,11 +34,11 @@
     "icon:windows": "node scripts/generate-windows-icon.mjs",
     "check:changelog": "node scripts/check-changelog-entry.mjs",
     "release:check": "npm run quality && node scripts/check-changelog-entry.mjs",
-    "release:windows": "npm run release:check && npm run icon:windows && electron-builder --win nsis",
+    "release:windows": "npm run release:check && npm run icon:windows && electron-builder --win nsis --publish never",
     "release:desktop": "node scripts/release-desktop.mjs",
     "electron:dev": "vite build && electron .",
     "electron:build": "vite build && electron-builder --dir",
-    "electron:installer": "vite build && electron-builder --win nsis",
+    "electron:installer": "vite build && electron-builder --win nsis --publish never",
     "electron:start": "electron ."
   },
   "build": {

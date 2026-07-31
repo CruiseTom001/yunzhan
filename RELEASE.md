@@ -9,6 +9,7 @@ npm run release:windows
 
 安装包会生成到 `release/yunzhan-setup-<version>.exe`（含 `.blockmap` 与 `latest.yml`）。
 Windows 图标由发布命令根据 `public/favicon.svg` 自动生成。
+安装命令已显式使用 electron-builder 的 `--publish never`：electron-builder 只生成本地产物，不得因本机、Cursor、Agent、Vercel 或 CI 环境变量自行上传；GitHub Release 资产统一由 `scripts/release-desktop.mjs` 通过 `gh` 上传。
 
 一键发版（构建 + 上传 GitHub Release + 打印 downloadUrl）：
 
@@ -22,7 +23,14 @@ npm run release:desktop
 node scripts/release-desktop.mjs --skip-build --dry-run
 ```
 
-**安全约束**：`--skip-build` 不再允许单独用于正式发布。所有正式 GitHub Release 必须通过完整 `npm run quality` 与 `npm run release:windows` 构建，确保安装包与当前 HEAD 一致。
+`--dry-run --skip-build` 的前提是 `release/` 已包含并通过校验的四项当前版本资产：
+
+- `yunzhan-setup-<version>.exe`
+- `yunzhan-setup-<version>.exe.blockmap`
+- `latest.yml`
+- `yunzhan-desktop-release.json`
+
+没有完整产物时，先运行 `npm run release:windows` 生成产物，再执行 dry-run。**安全约束**：`--skip-build` 不再允许单独用于正式发布。所有正式 GitHub Release 必须通过完整 `npm run quality` 与 `npm run release:windows` 构建，确保安装包与当前 HEAD 一致。
 
 ## 更新公告草稿（Phase 2）
 
@@ -48,11 +56,12 @@ node scripts/release-desktop.mjs --skip-build --dry-run
 每次发布新桌面端版本，按以下顺序操作：
 
 1. 修改 `package.json` 与 `package-lock.json` 中的版本号。
-2. 更新仓库根目录 `desktop-release.json`：填写当前 `version` 与明确的 `minSupported`（禁止猜测；`minSupported` 不得高于 `version`）。
-3. 在 `CHANGELOG.md` 顶部新增条目，标注功能象限（A/B/C/D）与 audience。
-4. 运行 `npm run release:desktop`。该命令会校验版本一致、构建安装包、校验 `latest.yml` / exe / blockmap / `yunzhan-desktop-release.json`，再创建 GitHub Release 并上传上述资产。
-5. GitHub `release/published` Webhook（或超管后台「从 GitHub 同步」）会在 `desktop_releases` 自动创建 `enabled=false` 的版本记录；超管检查后手动启用，桌面端用户才会收到更新。
-6. 同一发版流程仍会 best-effort 生成 `desktop_release` 公告草稿（`active=false`），需超管另行审核发布。
+2. 若本地 `release/latest.yml` 属于旧版本，先将整个旧 `release/` 目录移出工作区或在确认产物可丢弃后清理，再继续版本门禁；禁止为了通过检查而手改旧产物。
+3. 更新仓库根目录 `desktop-release.json`：填写当前 `version` 与明确的 `minSupported`（禁止猜测；`minSupported` 不得高于 `version`）。
+4. 在 `CHANGELOG.md` 顶部新增条目，标注功能象限（A/B/C/D）与 audience。
+5. 运行 `npm run release:desktop`。该命令会校验版本一致、构建安装包、校验 `latest.yml` / exe / blockmap / `yunzhan-desktop-release.json`，再创建 GitHub Release 并上传上述资产。
+6. GitHub `release/published` Webhook（或超管后台「从 GitHub 同步」）会在 `desktop_releases` 自动创建 `enabled=false` 的版本记录；超管检查后手动启用，桌面端用户才会收到更新。
+7. 同一发版流程仍会 best-effort 生成 `desktop_release` 公告草稿（`active=false`），需超管另行审核发布；本机 `DATABASE_URL` 或 AI 失败只告警，不代表 GitHub Release 失败，可在后台补建草稿。
 
 约束：
 
@@ -71,3 +80,26 @@ node scripts/release-desktop.mjs --skip-build --dry-run
    - Secret：与 Vercel 相同
    - 仅勾选 `Releases` 事件
 3. 可选：若需提高 GitHub API 限额，可在服务端配置 `GITHUB_TOKEN`（仅服务端，公共仓库默认可不配）。
+
+以上配置属于一次性初始化，不需要在每次桌面发版时重复。后续正常发版只运行 `npm run release:desktop`，由 GitHub `release/published` Webhook 自动把安装包信息同步为 `enabled=false` 的后台桌面版本记录；超级管理员核对后再启用。
+
+### Webhook Secret 轮换与验证
+
+仅在首次配置、主动轮换、Secret 疑似泄露或 Webhook 持续返回 401 时执行：
+
+1. 生成新的高强度随机 Secret，不在聊天、截图、终端历史或日志中展示。
+2. 将同一 Secret 分别保存到 Vercel Production 的 `GITHUB_RELEASE_WEBHOOK_SECRET` 和 GitHub Webhook。
+3. Vercel 环境变量变更后重新部署 Production，等待新 Deployment 显示 `Ready`。
+4. 在 GitHub Webhook 的 Recent Deliveries 中重投递 `ping` 或有效 `release.published`：
+   - `ping` 返回 2xx，表示配置与签名验证成功。
+   - `release.published` 若返回业务 4xx，应检查响应正文；只要不再是 401 且已进入预期资产或版本校验，就表示签名已通过。
+5. 验证完成后不记录、不打印 Secret；后续发版无需再次轮换。
+
+### 每次正式桌面发版后的核对
+
+1. GitHub Release 中存在 exe、blockmap、`latest.yml` 与 `yunzhan-desktop-release.json`。
+2. `/admin/desktop-releases` 自动出现同版本且 `enabled=false` 的记录，下载地址、文件大小、最低支持版本和更新说明真实一致。
+3. 若自动同步失败，保留 GitHub Release，在后台使用「从 GitHub 同步」按版本号幂等重试，不重复配置 Webhook。
+4. `/admin/announcements` 中存在对应 `active=false` 的桌面更新公告草稿，正文只包含用户可感知内容。
+5. 超级管理员核对版本记录和公告后分别启用、发布；两者均不得由自动流程直接生效。
+6. 更新器实现或安装行为发生变化时，执行旧版本到新版本的真实自动更新 E2E，确认应用内下载、覆盖安装、重启和用户数据保留。

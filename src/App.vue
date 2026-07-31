@@ -6,6 +6,7 @@ import AnnouncementModal from '@/components/common/AnnouncementModal.vue'
 import AnnouncementCenterDialog from '@/components/common/AnnouncementCenterDialog.vue'
 import OnboardingTour from '@/components/onboarding/OnboardingTour.vue'
 import UpdateBanner from '@/components/common/UpdateBanner.vue'
+import SessionNoticeBanner from '@/components/common/SessionNoticeBanner.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import FloatingTerminal from '@/components/ai/FloatingTerminal.vue'
@@ -92,6 +93,7 @@ onUnmounted(() => {
       @open-search="openSearch"
       @toggle-terminal="toggleTerminal"
     />
+    <SessionNoticeBanner />
     <router-view v-slot="{ Component, route: pageRoute }">
       <transition name="page" mode="out-in">
         <keep-alive :include="keepAliveIncludes">
