@@ -1312,6 +1312,12 @@ body {
 [data-theme="light"] .skill-node-current-label {
   color: var(--accent-warning) !important;
 }
+/* 课程卡片技术栈标签：scoped 元素选择器硬编码 cyan-300（浅色下 1.21:1），需全局补丁 */
+[data-theme="light"] .course-tech-stack span {
+  color: var(--accent-cyan) !important;
+  border-color: color-mix(in srgb, var(--accent-cyan) 30%, transparent) !important;
+  background-color: color-mix(in srgb, var(--accent-cyan) 8%, transparent) !important;
+}
 
 /* ===== 全站浅色补丁：扫描发现的剩余文字与悬停态 ===== */
 /* code-lang-badge 由 JS 动态创建（无 scoped data-v 属性），scoped 样式不命中，需全局补丁 */
