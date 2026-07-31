@@ -47,6 +47,8 @@
   --accent-purple: #a78bfa;
   --accent-amber: #fbbf24;
   --accent-emerald: #34d399;
+  --accent-danger: #f87171;
+  --accent-warning: #fbbf24;
 
   /* shiki css-variables 主题：深色参考 github-dark-variable */
   --shiki-foreground: #e2e8f0;
@@ -77,28 +79,30 @@
 
   --text-primary: #17202b;
   --text-secondary: #344253;
-  --text-muted: #5f6f80;
-  --text-dim: #748394;
-  --text-very-dim: #8b98a6;
+  --text-muted: #556675;
+  --text-dim: #4d5d6e;
+  --text-very-dim: #5a6a7b;
 
   --border-subtle: #d7dee7;
   --border-light: #c2ccd7;
   --border-card: #b7c3d1;
   --border-hover: #adb9c6;
 
-  --accent-cyan: #0891b2;
+  --accent-cyan: #0c6b85;
   --accent-purple: #7c3aed;
   --accent-amber: #d97706;
-  --accent-emerald: #059669;
+  --accent-emerald: #03614a;
+  --accent-danger: #b91c1c;
+  --accent-warning: #92400e;
 
-  /* shiki css-variables 主题：浅色参考 github-light-variable */
+  /* shiki css-variables 主题：浅色参考 github-light-variable（注释/函数色已调深至 ≥4.5:1） */
   --shiki-foreground: #24292f;
   --shiki-background: transparent;
   --shiki-token-constant: #0550ae;
   --shiki-token-string: #0a3069;
-  --shiki-token-comment: #6e7781;
+  --shiki-token-comment: #5a6572;
   --shiki-token-keyword: #cf222e;
-  --shiki-token-function: #8250df;
+  --shiki-token-function: #6f42c1;
   --shiki-token-parameter: #953800;
   --shiki-token-punctuation: #24292f;
   --shiki-token-link: #0969da;
@@ -501,20 +505,20 @@ body {
   color: #1d4ed8 !important;
 }
 
-/* 浅色元素的悬停态 hover:bg-white/* → 浅色重背景 */
-[data-theme="light"] .hover\:bg-white\/\[0\.01\] {
+/* 浅色元素的悬停态 hover:bg-white/* → 浅色重背景（必须带 :hover，否则常驻生效） */
+[data-theme="light"] .hover\:bg-white\/\[0\.01\]:hover {
   background-color: var(--bg-card-hover) !important;
 }
-[data-theme="light"] .hover\:bg-white\/\[0\.03\] {
+[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover {
   background-color: var(--bg-card-hover) !important;
 }
-[data-theme="light"] .hover\:bg-white\/\[0\.04\] {
+[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover {
   background-color: var(--bg-card-hover) !important;
 }
-[data-theme="light"] .hover\:bg-white\/\[0\.05\] {
+[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover {
   background-color: var(--bg-card-hover) !important;
 }
-[data-theme="light"] .hover\:bg-white\/\[0\.08\] {
+[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover {
   background-color: var(--bg-card-hover) !important;
 }
 
@@ -600,10 +604,10 @@ body {
   background-color: rgba(217, 119, 6, 0.16) !important;
 }
 [data-theme="light"] .bg-rose-400\/10 {
-  background-color: rgba(159, 18, 57, 0.14) !important;
+  background-color: rgba(159, 18, 57, 0.08) !important;
 }
 [data-theme="light"] .bg-cyan-400\/10 {
-  background-color: rgba(8, 145, 178, 0.14) !important;
+  background-color: rgba(8, 145, 178, 0.08) !important;
 }
 [data-theme="light"] .bg-emerald-400\/5 {
   background-color: rgba(5, 150, 105, 0.10) !important;
@@ -612,7 +616,7 @@ body {
   background-color: rgba(217, 119, 6, 0.10) !important;
 }
 [data-theme="light"] .bg-cyan-400\/5 {
-  background-color: rgba(8, 145, 178, 0.10) !important;
+  background-color: rgba(8, 145, 178, 0.06) !important;
 }
 [data-theme="light"] .bg-blue-400\/5 {
   background-color: rgba(29, 78, 216, 0.08) !important;
@@ -1067,20 +1071,31 @@ body {
 }
 /* ========== 原生 select 下拉选项颜色修正 ========== */
 /* 深色主题下，原生 <option> 默认使用系统白底，会与继承的白色文字撞色，导致看不见选中项。
-   这里显式给 option 设置深色背景与浅色文字，下拉项即可在深色主题下正常可读。 */
+   这里显式给 option 设置深色背景与浅色文字，下拉项即可在深色主题下正常可读。
+   hover/checked 使用不同的背景与文字色，保证普通、悬停、选中三态可区分。 */
 [data-theme="dark"] select option,
-[data-theme="dark"] select option:checked,
-[data-theme="dark"] select option:hover {
+[data-theme="dark"] select option:checked {
   background-color: #1f2937 !important;
   color: #f3f4f6 !important;
 }
+[data-theme="dark"] select option:hover {
+  background-color: #374151 !important;
+  color: #ffffff !important;
+}
 
-/* 浅色主题下，option 用浅灰背景 + 深色文字，保持与页面浅色基调一致 */
-[data-theme="light"] select option,
-[data-theme="light"] select option:checked,
-[data-theme="light"] select option:hover {
+/* 浅色主题下，option 用浅灰背景 + 深色文字，保持与页面浅色基调一致；
+   hover 提亮背景、checked 用品牌青色文字，三态可区分。 */
+[data-theme="light"] select option {
   background-color: var(--bg-tertiary) !important;
   color: var(--text-secondary) !important;
+}
+[data-theme="light"] select option:hover {
+  background-color: var(--bg-card-hover) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] select option:checked {
+  background-color: var(--bg-elevated) !important;
+  color: var(--accent-cyan) !important;
 }
 
 /* ===== 终端强制深色策略 ===== */
@@ -1095,4 +1110,270 @@ body {
 [data-theme="light"] .floating-terminal-header,
 [data-theme="light"] .terminal-title span {
   color: #e2e8f0 !important;
+}
+/* 终端强制深色区域内：文字恢复浅色阶，避免浅色补丁把深灰文字映射到深色底上不可读 */
+[data-theme="light"] .floating-terminal .text-gray-300,
+[data-theme="light"] .floating-terminal .text-gray-400,
+[data-theme="light"] .floating-terminal .text-gray-500,
+[data-theme="light"] .terminal-view-container .text-gray-300,
+[data-theme="light"] .terminal-view-container .text-gray-400,
+[data-theme="light"] .terminal-view-container .text-gray-500 {
+  color: #9ca3af !important;
+}
+
+/* ===== 全站浅色补丁：交互态文字与悬停 ===== */
+/* Tailwind 的 hover:text-white / group-hover:text-white 是独立类名，全局 .text-white
+   补丁无法命中；浅色下必须显式映射，避免悬停时白字配浅色背景。 */
+[data-theme="light"] .hover\:text-white:hover {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .hover\:text-gray-100:hover {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .hover\:text-gray-200:hover,
+[data-theme="light"] .hover\:text-gray-300:hover {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .hover\:text-gray-400:hover {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .hover\:text-cyan-200:hover,
+[data-theme="light"] .hover\:text-cyan-300:hover {
+  color: var(--accent-cyan) !important;
+}
+[data-theme="light"] .hover\:text-amber-300:hover,
+[data-theme="light"] .hover\:text-amber-400:hover {
+  color: var(--accent-warning) !important;
+}
+[data-theme="light"] .hover\:text-red-300:hover,
+[data-theme="light"] .hover\:text-red-400:hover {
+  color: var(--accent-danger) !important;
+}
+[data-theme="light"] .group:hover .group-hover\:text-white {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .group:hover .group-hover\:text-cyan-400 {
+  color: var(--accent-cyan) !important;
+}
+[data-theme="light"] .group\/card:hover .group-hover\/card\:text-cyan-400 {
+  color: var(--accent-cyan) !important;
+}
+[data-theme="light"] .group:hover .group-hover\:text-amber-400 {
+  color: var(--accent-warning) !important;
+}
+
+/* 悬停背景：补齐缺失档位（0.015/0.02/0.025/0.035/0.06、/5、/10、/15），全部带 :hover */
+[data-theme="light"] .hover\:bg-white\/\[0\.015\]:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.02\]:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.025\]:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.035\]:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.06\]:hover {
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .hover\:bg-white\/5:hover,
+[data-theme="light"] .hover\:bg-white\/10:hover,
+[data-theme="light"] .hover\:bg-white\/15:hover {
+  background-color: var(--bg-card-hover) !important;
+}
+
+/* 静态背景：补齐缺失档位 */
+[data-theme="light"] .bg-white\/\[0\.005\] {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .bg-white\/\[0\.035\],
+[data-theme="light"] .bg-white\/5,
+[data-theme="light"] .bg-white\/10,
+[data-theme="light"] .bg-white\/15 {
+  background-color: var(--bg-card-hover) !important;
+}
+
+/* ===== 全站浅色补丁：状态色阶 ===== */
+/* 浅色下 100-300 阶太浅不可读，统一下沉到语义变量（≥4.5:1） */
+[data-theme="light"] .text-cyan-100,
+[data-theme="light"] .text-cyan-200,
+[data-theme="light"] .text-cyan-300 {
+  color: var(--accent-cyan) !important;
+}
+[data-theme="light"] .text-cyan-400\/50,
+[data-theme="light"] .text-cyan-400\/70,
+[data-theme="light"] .text-cyan-400\/80 {
+  color: var(--accent-cyan) !important;
+}
+[data-theme="light"] .text-red-200,
+[data-theme="light"] .text-red-300,
+[data-theme="light"] .text-red-400 {
+  color: var(--accent-danger) !important;
+}
+[data-theme="light"] .text-amber-200,
+[data-theme="light"] .text-amber-300,
+[data-theme="light"] .text-amber-400 {
+  color: var(--accent-warning) !important;
+}
+[data-theme="light"] .text-purple-300,
+[data-theme="light"] .text-purple-400,
+[data-theme="light"] .text-purple-500 {
+  color: var(--accent-purple) !important;
+}
+[data-theme="light"] .text-rose-400 {
+  color: var(--accent-danger) !important;
+}
+[data-theme="light"] .text-emerald-200,
+[data-theme="light"] .text-emerald-200\/70,
+[data-theme="light"] .text-emerald-300,
+[data-theme="light"] .text-emerald-400\/60,
+[data-theme="light"] .text-emerald-400\/70,
+[data-theme="light"] .text-emerald-400\/80 {
+  color: var(--accent-emerald) !important;
+}
+[data-theme="light"] .text-amber-200\/70,
+[data-theme="light"] .text-amber-400\/90 {
+  color: var(--accent-warning) !important;
+}
+
+/* ===== 全站浅色补丁：scoped @apply 组件类 ===== */
+/* 这些类编译为 .xxx[data-v-*] 规则，元素上无 Tailwind 原子类，全局 .text-* 补丁无法命中，
+   必须按组件类覆盖（与 .card / .form-field 先例一致）。 */
+[data-theme="light"] .icon-action {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .icon-action:hover:not(:disabled) {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .form-field {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .form-field small {
+  color: var(--text-dim) !important;
+}
+[data-theme="light"] .form-error {
+  color: var(--accent-danger) !important;
+  border-color: rgba(185, 28, 28, 0.25) !important;
+  background-color: rgba(185, 28, 28, 0.06) !important;
+}
+[data-theme="light"] .modal-header {
+  border-bottom-color: var(--border-light) !important;
+}
+[data-theme="light"] .secondary-button {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .secondary-button:hover:not(:disabled) {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .ghost-button {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .ghost-button:hover:not(:disabled) {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-card-hover) !important;
+}
+[data-theme="light"] .text-input {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-hover) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .text-input::placeholder {
+  color: var(--text-dim) !important;
+}
+/* danger-button 白字红底：bg-red-500 上白字仅 3.9:1，浅色下加深到 red-600 达到 4.5:1 */
+[data-theme="light"] .danger-button {
+  background-color: #dc2626 !important;
+}
+/* 输入框 focus：组件类补丁的 !important 会压过 focus:border-cyan-400/50，需单独恢复青色焦点指示 */
+[data-theme="light"] .form-field input:focus,
+[data-theme="light"] .form-field select:focus,
+[data-theme="light"] .text-input:focus {
+  border-color: var(--accent-cyan) !important;
+}
+
+/* ===== 全站浅色补丁：边框层级与表格分隔线 ===== */
+/* 表格行分隔线（divide-white/[0.05]）在浅色下不可见，统一映射到 --border-subtle，
+   与卡片边框（--border-card）和控件边框（--border-hover）形成三级区分。 */
+[data-theme="light"] .divide-white\/\[0\.05\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-subtle) !important;
+}
+[data-theme="light"] .border-white\/20 {
+  border-color: var(--border-hover) !important;
+}
+[data-theme="light"] .hover\:border-white\/20:hover,
+[data-theme="light"] .hover\:border-white\/\[0\.04\]:hover,
+[data-theme="light"] .hover\:border-white\/\[0\.05\]:hover,
+[data-theme="light"] .hover\:border-white\/\[0\.08\]:hover {
+  border-color: var(--border-hover) !important;
+}
+
+/* ===== 全站浅色补丁：新手教程弹窗 ===== */
+/* kicker 用 --accent-cyan 在浅色面板上对比度约 3.2:1，下沉到 accent-cyan（cyan-700）保证 ≥4.5:1 */
+[data-theme="light"] .onboarding-kicker {
+  color: var(--accent-cyan) !important;
+}
+/* 技能图谱"当前"节点标签用 --accent-amber（浅色下仅 2.66:1），下沉到 warning */
+[data-theme="light"] .skill-node-current-label {
+  color: var(--accent-warning) !important;
+}
+
+/* ===== 全站浅色补丁：扫描发现的剩余文字与悬停态 ===== */
+/* code-lang-badge 由 JS 动态创建（无 scoped data-v 属性），scoped 样式不命中，需全局补丁 */
+[data-theme="light"] .code-lang-badge {
+  color: var(--text-muted) !important;
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .hover\:text-cyan-400:hover {
+  color: var(--accent-cyan) !important;
+}
+[data-theme="light"] .group:hover .group-hover\:text-cyan-300 {
+  color: var(--accent-cyan) !important;
+}
+/* 白色极淡文字（text-white/[0.06]）在浅色下不可见，映射为半透明主文字色保持"淡"语义 */
+[data-theme="light"] .text-white\/\[0\.06\] {
+  color: color-mix(in srgb, var(--text-primary) 55%, transparent) !important;
+}
+
+/* 彩色悬停背景：浅色下 Tailwind 400 阶半透明几乎无反馈，统一映射为 accent 色低 alpha */
+[data-theme="light"] .hover\:bg-cyan-400\/10:hover,
+[data-theme="light"] .hover\:bg-cyan-400\/\[0\.04\]:hover,
+[data-theme="light"] .hover\:bg-cyan-400\/\[0\.05\]:hover,
+[data-theme="light"] .hover\:bg-cyan-500\/20:hover {
+  background-color: color-mix(in srgb, var(--accent-cyan) 8%, transparent) !important;
+}
+[data-theme="light"] .hover\:bg-cyan-400\/15:hover,
+[data-theme="light"] .hover\:bg-cyan-400\/20:hover,
+[data-theme="light"] .hover\:bg-cyan-400\/\[0\.02\]:hover,
+[data-theme="light"] .hover\:bg-cyan-500\/30:hover {
+  background-color: color-mix(in srgb, var(--accent-cyan) 22%, transparent) !important;
+}
+[data-theme="light"] .hover\:bg-emerald-400\/10:hover,
+[data-theme="light"] .hover\:bg-emerald-400\/15:hover {
+  background-color: color-mix(in srgb, var(--accent-emerald) 18%, transparent) !important;
+}
+[data-theme="light"] .hover\:bg-amber-400\/5:hover {
+  background-color: color-mix(in srgb, var(--accent-warning) 8%, transparent) !important;
+}
+[data-theme="light"] .hover\:bg-amber-400\/10:hover {
+  background-color: color-mix(in srgb, var(--accent-warning) 14%, transparent) !important;
+}
+[data-theme="light"] .hover\:bg-purple-400\/10:hover,
+[data-theme="light"] .hover\:bg-purple-400\/15:hover {
+  background-color: color-mix(in srgb, var(--accent-purple) 16%, transparent) !important;
+}
+[data-theme="light"] .hover\:bg-red-400\/10:hover,
+[data-theme="light"] .hover\:bg-red-400\/\[0\.08\]:hover {
+  background-color: color-mix(in srgb, var(--accent-danger) 12%, transparent) !important;
+}
+
+/* 彩色悬停边框：映射为 accent 色半透明边框 */
+[data-theme="light"] .hover\:border-cyan-400\/20:hover,
+[data-theme="light"] .hover\:border-cyan-400\/25:hover {
+  border-color: color-mix(in srgb, var(--accent-cyan) 30%, transparent) !important;
+}
+[data-theme="light"] .hover\:border-cyan-400\/30:hover,
+[data-theme="light"] .hover\:border-cyan-400\/35:hover {
+  border-color: color-mix(in srgb, var(--accent-cyan) 40%, transparent) !important;
+}
+[data-theme="light"] .hover\:border-purple-400\/40:hover {
+  border-color: color-mix(in srgb, var(--accent-purple) 45%, transparent) !important;
+}
+[data-theme="light"] .hover\:border-white\/\[0\.06\]:hover {
+  border-color: var(--border-hover) !important;
 }

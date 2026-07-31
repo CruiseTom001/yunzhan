@@ -7,6 +7,9 @@ import { matchesOnboardingRoute, resolveOnboardingFinishRoute, resolveOnboarding
 
 const MIN_HIGHLIGHT_SIZE = 48
 const LOADING_DELAY_MS = 150
+// 锚点等待窗口：页面为懒加载且 App 使用 out-in 页面过渡（0.32s×2），
+// 路由变化后新页锚点进入 DOM 被推迟，统一用较长窗口，避免误报"讲解区域不可用"。
+const WAIT_FOR_ANCHOR_MS = 2500
 
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
@@ -56,7 +59,8 @@ function resolveAnchorElement(currentStep: OnboardingStepDefinition): HTMLElemen
 }
 
 function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max)
+  // max 可能小于 min（如面板高于视口），此时必须返回 min，保证结果非负、不超视口。
+  return Math.min(Math.max(value, min), Math.max(min, max))
 }
 
 function focusPanel() {
@@ -159,8 +163,10 @@ function updateLayout() {
   const belowTop = rect.bottom + 16
   const aboveTop = rect.top - panelHeight - 16
   const placeBelow = belowTop + panelHeight <= viewportHeight - 12
+  // 两分支都必须钳制在视口内：锚点位于视口上方（rect.bottom 为负）时 belowTop 会为负，
+  // 直接使用会产生超出视口的负数坐标（曾出现 y=-6450）。
   const top = placeBelow
-    ? belowTop
+    ? clamp(belowTop, 12, viewportHeight - panelHeight - 12)
     : clamp(aboveTop, 12, viewportHeight - panelHeight - 12)
   const left = clamp(rect.left, 12, viewportWidth - panelWidth - 12)
 
@@ -222,7 +228,7 @@ async function prepareCurrentStep() {
       if (token !== prepareToken) return
     }
 
-    const primaryFound = await waitForPrimaryAnchor(currentStep, needsNavigation ? 2500 : 1200)
+    const primaryFound = await waitForPrimaryAnchor(currentStep, WAIT_FOR_ANCHOR_MS)
     if (token !== prepareToken) return
 
     if (loadingTimer) {
@@ -242,13 +248,22 @@ async function prepareCurrentStep() {
 
     const anchor = resolveAnchorElement(currentStep)
     informationalMode.value = false
+    // 只有主锚点与 fallback 锚点都不存在时才提示不可用；
+    // fallback 命中说明讲解区域可用（以 fallback 元素定位），不算缺失。
     anchorMissing.value = !anchor
-    if (!primaryFound && anchor && anchor.dataset.tourId !== currentStep.anchorId) {
-      anchorMissing.value = true
-    }
 
     if (anchor) {
-      anchor.scrollIntoView({ block: 'center', behavior: 'auto' })
+      // 全局 html { scroll-behavior: smooth } 会让 scrollIntoView 平滑动画化，
+      // 80ms 后测量会拿到动画中间坐标（曾出现 y=-6450）。滚动期间临时禁用平滑，
+      // 确保测量时锚点已在目标位置；异常时也必须恢复原值，避免污染全局滚动行为。
+      const htmlElement = document.documentElement
+      const previousScrollBehavior = htmlElement.style.scrollBehavior
+      try {
+        htmlElement.style.scrollBehavior = 'auto'
+        anchor.scrollIntoView({ block: 'center', behavior: 'auto' })
+      } finally {
+        htmlElement.style.scrollBehavior = previousScrollBehavior
+      }
       await nextTick()
       await new Promise(resolve => setTimeout(resolve, 80))
       if (token !== prepareToken) return
