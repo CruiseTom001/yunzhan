@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  canProceedWithAppClose,
   canQuitAppForUpdate,
   createContentDirtyGuard,
   registerAppQuitGuard,
@@ -50,5 +51,15 @@ describe('appQuitGuard', () => {
   it('treats blank new note as clean', async () => {
     registerAppQuitGuard(createContentDirtyGuard(() => '', () => ''))
     await expect(canQuitAppForUpdate()).resolves.toEqual({ ok: true })
+  })
+
+  it('blocks app close when content was edited but not saved', async () => {
+    const draft = { content: 'edited note', lastSaved: 'saved note' }
+    registerAppQuitGuard(createContentDirtyGuard(() => draft.content, () => draft.lastSaved))
+    const result = await canProceedWithAppClose()
+    expect(result).toEqual({
+      ok: false,
+      message: '检测到未保存的内容，关闭前请先保存或确认放弃更改。',
+    })
   })
 })

@@ -36,6 +36,7 @@ import {
   type MyFeedback,
 } from '@/utils/feedbackApi'
 import { registerAppQuitGuard } from '@/utils/appQuitGuard'
+import { resetDesktopCloseBehavior } from '@/utils/desktopCloseBehavior'
 import PageState from '@/components/common/PageState.vue'
 import { usePreferencesStore } from '@/stores/preferences'
 
@@ -80,6 +81,9 @@ const sessionsSuccess = ref('')
 
 // 注销账号
 const deleteDialogOpen = ref(false)
+const closeBehaviorResetMessage = ref('')
+const closeBehaviorResetError = ref('')
+const closeBehaviorResetting = ref(false)
 const deleteForm = ref({ currentPassword: '', confirmation: '' })
 const deleteSubmitting = ref(false)
 const deleteError = ref('')
@@ -441,6 +445,25 @@ async function handleDesktopInstallUpdate() {
   await desktopUpdateStore.installUpdate()
 }
 
+async function handleResetCloseBehavior() {
+  if (closeBehaviorResetting.value) return
+  closeBehaviorResetting.value = true
+  closeBehaviorResetMessage.value = ''
+  closeBehaviorResetError.value = ''
+  try {
+    const result = await resetDesktopCloseBehavior()
+    if (!result || result.closeBehavior !== 'ask') {
+      closeBehaviorResetError.value = '恢复关闭确认弹窗失败，请稍后再试。'
+      return
+    }
+    closeBehaviorResetMessage.value = '已恢复关闭确认弹窗，下次关闭窗口时将再次询问。'
+  } catch {
+    closeBehaviorResetError.value = '恢复关闭确认弹窗失败，请稍后再试。'
+  } finally {
+    closeBehaviorResetting.value = false
+  }
+}
+
 let unregisterFeedbackQuitGuard: (() => void) | null = null
 
 function isFeedbackDraftDirty(): boolean {
@@ -626,6 +649,32 @@ onUnmounted(() => {
             >
               重新检查
             </button>
+          </div>
+
+          <div class="pt-4 border-t border-white/10">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-medium text-gray-200">关闭窗口行为</h3>
+                <p class="text-xs text-gray-500 mt-2 leading-6">
+                  若你曾选择「以后不再询问」，可在此恢复关闭确认弹窗。
+                </p>
+                <p v-if="closeBehaviorResetMessage" class="text-xs text-emerald-400 mt-2">
+                  {{ closeBehaviorResetMessage }}
+                </p>
+                <p v-if="closeBehaviorResetError" class="text-xs text-red-400 mt-2" role="alert">
+                  {{ closeBehaviorResetError }}
+                </p>
+              </div>
+              <button
+                type="button"
+                class="secondary-button h-10 shrink-0"
+                :disabled="closeBehaviorResetting"
+                @click="handleResetCloseBehavior"
+              >
+                <LoaderCircle v-if="closeBehaviorResetting" class="w-4 h-4 animate-spin" />
+                恢复关闭确认弹窗
+              </button>
+            </div>
           </div>
         </div>
       </div>

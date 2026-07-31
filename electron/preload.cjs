@@ -9,6 +9,11 @@ const allowedInvokeChannels = [
   'app:getVersion',
   'app:getApiBaseUrl',
   'app:openDataFolder',
+  'app:getCloseBehavior',
+  'app:setCloseBehavior',
+  'app:resetCloseBehavior',
+  'app:closeAck',
+  'app:resolveClose',
   'desktop:apiRequest',
   'auth:getDesktopLoginPreferences',
   'auth:setDesktopLoginPreferences',
@@ -25,6 +30,7 @@ const allowedInvokeChannels = [
 ]
 
 const UPDATER_EVENT_CHANNEL = 'updater:stateChanged'
+const CLOSE_REQUEST_EVENT_CHANNEL = 'app:closeRequested'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
@@ -53,6 +59,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(UPDATER_EVENT_CHANNEL, wrapped)
     return () => {
       ipcRenderer.removeListener(UPDATER_EVENT_CHANNEL, wrapped)
+    }
+  },
+
+  getCloseBehavior: () => ipcRenderer.invoke('app:getCloseBehavior'),
+
+  setCloseBehavior: (payload) => ipcRenderer.invoke('app:setCloseBehavior', payload),
+
+  resetCloseBehavior: () => ipcRenderer.invoke('app:resetCloseBehavior'),
+
+  acknowledgeDesktopClose: () => ipcRenderer.invoke('app:closeAck'),
+
+  resolveDesktopClose: (payload) => ipcRenderer.invoke('app:resolveClose', payload),
+
+  onCloseRequested: (listener) => {
+    if (typeof listener !== 'function') {
+      return () => {}
+    }
+    const wrapped = (_event, payload) => listener(payload)
+    ipcRenderer.on(CLOSE_REQUEST_EVENT_CHANNEL, wrapped)
+    return () => {
+      ipcRenderer.removeListener(CLOSE_REQUEST_EVENT_CHANNEL, wrapped)
     }
   },
 })

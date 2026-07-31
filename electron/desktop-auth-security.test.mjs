@@ -35,4 +35,24 @@ describe('electron auth security wiring', () => {
     expect(preloadSource).not.toContain('getSessionToken')
     expect(preloadSource).not.toContain('readSession')
   })
+
+  it('whitelists desktop close behavior IPC channels without exposing secrets', () => {
+    expect(preloadSource).toContain('app:getCloseBehavior')
+    expect(preloadSource).toContain('app:setCloseBehavior')
+    expect(preloadSource).toContain('app:resetCloseBehavior')
+    expect(preloadSource).toContain('app:closeAck')
+    expect(preloadSource).toContain('app:resolveClose')
+    expect(preloadSource).toContain('app:closeRequested')
+    expect(preloadSource).not.toContain('safeStorage')
+    expect(preloadSource).not.toContain('readFile')
+  })
+
+  it('registers close behavior IPC handlers in main process', () => {
+    expect(mainSource).toContain('app:getCloseBehavior')
+    expect(mainSource).toContain('app:setCloseBehavior')
+    expect(mainSource).toContain('app:resetCloseBehavior')
+    expect(mainSource).toContain('app:closeAck')
+    expect(mainSource).toContain('app:resolveClose')
+    expect(mainSource).toContain('getDesktopCloseManager().attachWindow(win)')
+  })
 })

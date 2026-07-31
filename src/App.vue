@@ -7,12 +7,16 @@ import AnnouncementCenterDialog from '@/components/common/AnnouncementCenterDial
 import OnboardingTour from '@/components/onboarding/OnboardingTour.vue'
 import UpdateBanner from '@/components/common/UpdateBanner.vue'
 import SessionNoticeBanner from '@/components/common/SessionNoticeBanner.vue'
+import DesktopCloseDialog from '@/components/common/DesktopCloseDialog.vue'
+import DesktopUnsavedGuardDialog from '@/components/common/DesktopUnsavedGuardDialog.vue'
 import ConceptPopover from '@/components/common/ConceptPopover.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import FloatingTerminal from '@/components/ai/FloatingTerminal.vue'
 import { useProgressStore } from '@/stores/progress'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { useDesktopCloseHandler } from '@/composables/useDesktopCloseHandler'
+import { isDesktopRuntime } from '@/utils/desktopAuthPreferences'
 
 const globalSearch = ref<InstanceType<typeof GlobalSearch> | null>(null)
 const showTerminal = ref(false)
@@ -20,6 +24,16 @@ const progressStore = useProgressStore()
 const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const route = useRoute()
+const isDesktop = isDesktopRuntime()
+const {
+  closeDialogVisible,
+  unsavedDialogVisible,
+  handleUnsavedConfirm,
+  handleUnsavedCancel,
+  handleCloseDialogQuit,
+  handleCloseDialogTray,
+  handleCloseDialogCancel,
+} = useDesktopCloseHandler()
 const STUDY_SAMPLE_SECONDS = 30
 const ACTIVE_WINDOW_MS = 2 * 60 * 1000
 let lastActivityAt = Date.now()
@@ -94,6 +108,19 @@ onUnmounted(() => {
       @toggle-terminal="toggleTerminal"
     />
     <SessionNoticeBanner />
+    <DesktopUnsavedGuardDialog
+      v-if="isDesktop"
+      :open="unsavedDialogVisible"
+      @confirm="handleUnsavedConfirm()"
+      @cancel="handleUnsavedCancel()"
+    />
+    <DesktopCloseDialog
+      v-if="isDesktop"
+      :open="closeDialogVisible"
+      @quit="handleCloseDialogQuit($event)"
+      @tray="handleCloseDialogTray($event)"
+      @cancel="handleCloseDialogCancel()"
+    />
     <router-view v-slot="{ Component, route: pageRoute }">
       <transition name="page" mode="out-in">
         <keep-alive :include="keepAliveIncludes">

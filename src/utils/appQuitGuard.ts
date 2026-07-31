@@ -17,12 +17,22 @@ export function registerAppQuitGuard(guard: QuitGuard): () => void {
 }
 
 export async function canQuitAppForUpdate(): Promise<{ ok: true } | { ok: false; message: string }> {
+  return evaluateAppQuitGuards('检测到未保存的内容，请先保存后再安装更新。')
+}
+
+export async function canProceedWithAppClose(): Promise<{ ok: true } | { ok: false; message: string }> {
+  return evaluateAppQuitGuards('检测到未保存的内容，关闭前请先保存或确认放弃更改。')
+}
+
+async function evaluateAppQuitGuards(
+  blockedMessage: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
   for (const guard of guards) {
     const result = await guard()
     if (!result) {
       return {
         ok: false,
-        message: '检测到未保存的内容，请先保存后再安装更新。',
+        message: blockedMessage,
       }
     }
   }

@@ -1,13 +1,17 @@
-const { app, BrowserWindow, ipcMain, net, safeStorage, session, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, nativeImage, net, safeStorage, session, shell, Tray } = require('electron')
 const fs = require('fs/promises')
 const fsSync = require('fs')
 const path = require('path')
 const { createDesktopUpdater } = require('./desktop-updater.cjs')
 const { appendAiHttpBusyRetryHint } = require('./ai-http-busy-hint.cjs')
 const { createDesktopAuthStorage } = require('./desktop-auth-storage.cjs')
+const { createDesktopCloseBehaviorStorage } = require('./desktop-close-behavior.cjs')
+const { createDesktopCloseManager } = require('./desktop-close-manager.cjs')
 
 const isDev = !app.isPackaged
 let desktopUpdater = null
+let desktopCloseBehaviorStorage = null
+let desktopCloseManager = null
 
 function getDesktopUpdater() {
   if (!desktopUpdater) {
@@ -17,6 +21,29 @@ function getDesktopUpdater() {
     })
   }
   return desktopUpdater
+}
+
+function getDesktopCloseBehaviorStorage() {
+  if (!desktopCloseBehaviorStorage) {
+    desktopCloseBehaviorStorage = createDesktopCloseBehaviorStorage({ app })
+  }
+  return desktopCloseBehaviorStorage
+}
+
+function getDesktopCloseManager() {
+  if (!desktopCloseManager) {
+    desktopCloseManager = createDesktopCloseManager({
+      app,
+      Tray,
+      Menu,
+      nativeImage,
+      closeBehaviorStorage: getDesktopCloseBehaviorStorage(),
+      getUpdaterState: () => getDesktopUpdater().getState(),
+      iconPath: path.join(__dirname, '../public/icon.ico'),
+    })
+    desktopCloseManager.registerLifecycleHooks()
+  }
+  return desktopCloseManager
 }
 
 function registerUpdaterIpc() {
@@ -679,6 +706,15 @@ function registerIpc() {
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getApiBaseUrl', () => getConfiguredApiOrigin())
   ipcMain.handle('app:openDataFolder', () => shell.openPath(app.getPath('userData')))
+  ipcMain.handle('app:getCloseBehavior', () => getDesktopCloseBehaviorStorage().getCloseBehavior())
+  ipcMain.handle('app:setCloseBehavior', (_event, payload) => {
+    const validated = getDesktopCloseBehaviorStorage().validateSetInput(payload)
+    if (!validated) throw new Error('invalid close behavior payload')
+    return getDesktopCloseBehaviorStorage().setCloseBehavior(validated.closeBehavior)
+  })
+  ipcMain.handle('app:resetCloseBehavior', () => getDesktopCloseBehaviorStorage().resetCloseBehavior())
+  ipcMain.handle('app:closeAck', () => getDesktopCloseManager().acknowledgeCloseFromRenderer())
+  ipcMain.handle('app:resolveClose', (_event, payload) => getDesktopCloseManager().resolveCloseFromRenderer(payload))
   ipcMain.handle('desktop:apiRequest', async (_event, payload) => requestDesktopApi(payload))
   ipcMain.handle('auth:getDesktopLoginPreferences', () => getDesktopAuthStorage().getDesktopLoginPreferences())
   ipcMain.handle('auth:setDesktopLoginPreferences', (_event, payload) => {
@@ -837,6 +873,8 @@ function createWindow() {
   win.on('page-title-updated', (e) => {
     e.preventDefault()
   })
+
+  getDesktopCloseManager().attachWindow(win)
 }
 
 app.whenReady().then(async () => {
@@ -845,6 +883,7 @@ app.whenReady().then(async () => {
   registerIpc()
   registerUpdaterIpc()
   try {
+    await getDesktopCloseBehaviorStorage().init()
     await getDesktopAuthStorage().restoreAutoLoginSessionToCookies()
   } catch (error) {
     console.warn('Desktop auto-login restore skipped due to unexpected error.')
