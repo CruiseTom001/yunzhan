@@ -82,6 +82,21 @@ describe('desktopUpdateVersionSync', () => {
     expect(outcome).toEqual({ kind: 'available', notice })
   })
 
+  it('allows downloaded state when server and updater versions align', () => {
+    const notice = decideUpdateNotice('1.2.5', REMOTE)!
+    const outcome = reconcileDesktopUpdateSources(notice, {
+      status: 'downloaded',
+      version: '1.3.0',
+      percent: 100,
+      transferred: null,
+      total: null,
+      bytesPerSecond: null,
+      errorCode: null,
+      errorMessage: null,
+    })
+    expect(outcome).toEqual({ kind: 'available', notice })
+  })
+
   it('marks version_sync error state for store consumption', () => {
     const next = applyVersionSyncErrorState({
       status: 'available',

@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
 const { createDesktopUpdater } = require('./desktop-updater.cjs')
+const { createDesktopPendingUpdateStorage } = require('./desktop-pending-update.cjs')
 
 const autoUpdaterHandlers = new Map()
 const autoUpdater = {
@@ -26,6 +30,17 @@ function emit(event, payload) {
   if (handler) handler(payload)
 }
 
+const tempDirs = []
+
+async function createPendingStorage() {
+  const userData = await fs.mkdtemp(path.join(os.tmpdir(), 'yunzhan-updater-marker-'))
+  tempDirs.push(userData)
+  return createDesktopPendingUpdateStorage({
+    app: { getPath: () => userData },
+    logWarning: () => {},
+  })
+}
+
 function createTestUpdater(options = {}) {
   autoUpdaterHandlers.clear()
   autoUpdater.checkForUpdates.mockReset()
@@ -38,12 +53,18 @@ function createTestUpdater(options = {}) {
     platform: options.platform ?? 'win32',
     BrowserWindow,
     autoUpdater,
+    pendingUpdateStorage: options.pendingUpdateStorage ?? null,
+    getAppVersion: options.getAppVersion ?? (() => '1.2.9'),
   })
 }
 
 describe('desktop-updater service', () => {
   beforeEach(() => {
     autoUpdaterHandlers.clear()
+  })
+
+  afterEach(async () => {
+    await Promise.allSettled(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })))
   })
 
   it('rejects real updates in development environment', async () => {
@@ -176,5 +197,96 @@ describe('desktop-updater service', () => {
     autoUpdater.quitAndInstall.mockImplementation(() => undefined)
     const retry = updater.installUpdate()
     expect(retry.status).toBe('installing')
+  })
+
+  it('writes pending marker on update-downloaded', async () => {
+    const pendingUpdateStorage = await createPendingStorage()
+    const updater = createTestUpdater({ pendingUpdateStorage })
+
+    autoUpdater.checkForUpdates.mockImplementation(async () => {
+      emit('update-available', { version: '1.3.0' })
+    })
+    await updater.checkForUpdates()
+    autoUpdater.downloadUpdate.mockImplementation(async () => {
+      emit('update-downloaded', { version: '1.3.0' })
+    })
+    await updater.downloadUpdate()
+
+    const resolved = pendingUpdateStorage.resolvePendingUpdateMarkerSync({
+      currentVersion: '1.2.9',
+      now: Date.now(),
+    })
+    expect(resolved.action).toBe('restore')
+    expect(resolved.marker.version).toBe('1.3.0')
+  })
+
+  it('restores downloaded state from pending marker on startup', async () => {
+    const pendingUpdateStorage = await createPendingStorage()
+    await pendingUpdateStorage.writePendingUpdateMarker('1.3.0', Date.now())
+
+    const updater = createTestUpdater({
+      pendingUpdateStorage,
+      getAppVersion: () => '1.2.9',
+    })
+    expect(updater.getState()).toMatchObject({
+      status: 'downloaded',
+      version: '1.3.0',
+      percent: 100,
+    })
+  })
+
+  it('clears marker and stays idle when app already reached marker version', async () => {
+    const pendingUpdateStorage = await createPendingStorage()
+    await pendingUpdateStorage.writePendingUpdateMarker('1.3.0', Date.now())
+
+    const updater = createTestUpdater({
+      pendingUpdateStorage,
+      getAppVersion: () => '1.3.0',
+    })
+    expect(updater.getState().status).toBe('idle')
+    expect(pendingUpdateStorage.resolvePendingUpdateMarkerSync({
+      currentVersion: '1.3.0',
+      now: Date.now(),
+    }).action).toBe('none')
+  })
+
+  it('keeps marker after install failure so restart can restore', async () => {
+    const pendingUpdateStorage = await createPendingStorage()
+    const updater = createTestUpdater({ pendingUpdateStorage })
+
+    autoUpdater.checkForUpdates.mockImplementation(async () => {
+      emit('update-available', { version: '1.3.0' })
+    })
+    await updater.checkForUpdates()
+    autoUpdater.downloadUpdate.mockImplementation(async () => {
+      emit('update-downloaded', { version: '1.3.0' })
+    })
+    await updater.downloadUpdate()
+
+    autoUpdater.quitAndInstall.mockImplementation(() => {
+      throw new Error('install failed')
+    })
+    updater.installUpdate()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(updater.getState().status).toBe('error')
+
+    const resolved = pendingUpdateStorage.resolvePendingUpdateMarkerSync({
+      currentVersion: '1.2.9',
+      now: Date.now(),
+    })
+    expect(resolved.action).toBe('restore')
+  })
+
+  it('does not re-check GitHub when already downloaded', async () => {
+    const pendingUpdateStorage = await createPendingStorage()
+    await pendingUpdateStorage.writePendingUpdateMarker('1.3.0', Date.now())
+    const updater = createTestUpdater({
+      pendingUpdateStorage,
+      getAppVersion: () => '1.2.9',
+    })
+
+    const state = await updater.checkForUpdates()
+    expect(state.status).toBe('downloaded')
+    expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled()
   })
 })

@@ -238,21 +238,12 @@ onUnmounted(() => {
 
             <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
               <button
-                v-if="canDismiss && status !== 'downloaded'"
+                v-if="canDismiss"
                 type="button"
                 class="update-dialog-secondary"
                 @click="requestClose"
               >
                 {{ isRequired ? '稍后处理' : '稍后提醒' }}
-              </button>
-
-              <button
-                v-if="status === 'downloaded'"
-                type="button"
-                class="update-dialog-secondary"
-                @click="requestClose"
-              >
-                稍后安装
               </button>
 
               <button

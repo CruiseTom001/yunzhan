@@ -34,7 +34,7 @@ export function reconcileDesktopUpdateSources(
     return { kind: 'version_sync_error' }
   }
 
-  if (updaterState.status !== 'available') {
+  if (updaterState.status !== 'available' && updaterState.status !== 'downloaded') {
     return { kind: 'no_update' }
   }
 

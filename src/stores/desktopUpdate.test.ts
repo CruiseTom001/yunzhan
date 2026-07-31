@@ -574,6 +574,65 @@ describe('desktopUpdate download and install flow', () => {
     }))
     expect(store.status).toBe('downloaded')
     expect(store.hasUpdate).toBe(true)
+    expect(store.dialogPending).toBe(true)
+    expect(store.shouldRenderDialog).toBe(true)
     store.dispose()
+  })
+
+  it('restores ready-to-install dialog after restart when updater is already downloaded', async () => {
+    mockedGetLatest.mockResolvedValue(VALID_REMOTE)
+    updaterState = createUpdaterState('downloaded', {
+      version: VALID_REMOTE.version,
+      percent: 100,
+    })
+    window.electronAPI!.getUpdaterState = vi.fn(async () => updaterState)
+    window.electronAPI!.checkForDesktopUpdate = vi.fn(async () => updaterState)
+
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'startup' })
+
+    expect(store.status).toBe('downloaded')
+    expect(store.activeNotice?.remoteVersion).toBe(VALID_REMOTE.version)
+    expect(store.releaseNotes).toBe(VALID_REMOTE.releaseNotes)
+    expect(store.dialogPending).toBe(true)
+    expect(store.shouldRenderDialog).toBe(true)
+    expect(store.shouldRenderDialog && store.status === 'downloaded').toBe(true)
+  })
+
+  it('does not snooze optional notices when downloaded dialog cannot be dismissed', async () => {
+    const snoozeModule = await import('@/utils/desktopUpdateCheck')
+    const snoozeSpy = vi.spyOn(snoozeModule, 'snoozeOptionalNotice')
+
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'manual', force: true })
+    await store.downloadUpdate()
+    expect(store.status).toBe('downloaded')
+
+    store.dismissNotice()
+    store.closeDialog()
+    expect(store.dialogPending).toBe(true)
+    expect(store.shouldRenderDialog).toBe(true)
+    expect(snoozeSpy).not.toHaveBeenCalled()
+    snoozeSpy.mockRestore()
+  })
+
+  it('keeps downloaded install prompt when startup network check fails', async () => {
+    updaterState = createUpdaterState('downloaded', {
+      version: VALID_REMOTE.version,
+      percent: 100,
+    })
+    window.electronAPI!.getUpdaterState = vi.fn(async () => updaterState)
+    mockedGetLatest.mockRejectedValueOnce(new ApiError('网络错误', 0, null))
+
+    const store = useDesktopUpdateStore()
+    store.localVersion = '1.2.5'
+    await store.checkForUpdates({ source: 'startup' })
+
+    expect(store.status).toBe('downloaded')
+    expect(store.dialogPending).toBe(true)
+    expect(store.activeNotice?.remoteVersion).toBe(VALID_REMOTE.version)
+    expect(store.shouldRenderDialog).toBe(true)
   })
 })

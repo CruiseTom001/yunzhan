@@ -7,17 +7,28 @@ const { appendAiHttpBusyRetryHint } = require('./ai-http-busy-hint.cjs')
 const { createDesktopAuthStorage } = require('./desktop-auth-storage.cjs')
 const { createDesktopCloseBehaviorStorage } = require('./desktop-close-behavior.cjs')
 const { createDesktopCloseManager } = require('./desktop-close-manager.cjs')
+const { createDesktopPendingUpdateStorage } = require('./desktop-pending-update.cjs')
 
 const isDev = !app.isPackaged
 let desktopUpdater = null
 let desktopCloseBehaviorStorage = null
 let desktopCloseManager = null
+let desktopPendingUpdateStorage = null
+
+function getDesktopPendingUpdateStorage() {
+  if (!desktopPendingUpdateStorage) {
+    desktopPendingUpdateStorage = createDesktopPendingUpdateStorage({ app })
+  }
+  return desktopPendingUpdateStorage
+}
 
 function getDesktopUpdater() {
   if (!desktopUpdater) {
     desktopUpdater = createDesktopUpdater({
       isPackaged: app.isPackaged,
       platform: process.platform,
+      pendingUpdateStorage: getDesktopPendingUpdateStorage(),
+      getAppVersion: () => app.getVersion(),
     })
   }
   return desktopUpdater

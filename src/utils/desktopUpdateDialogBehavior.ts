@@ -7,6 +7,7 @@ export function canCloseUpdateDialog(
   status: DesktopUpdaterStatus,
 ): boolean {
   if (status === 'installing') return false
+  if (status === 'downloaded') return false
   if (status === 'downloading' && noticeMode === 'required') return false
   return true
 }

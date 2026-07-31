@@ -17,6 +17,12 @@ describe('desktopUpdateDialogBehavior', () => {
     expect(canCloseUpdateDialog('optional', 'available')).toBe(true)
   })
 
+  it('blocks closing for downloaded updates in both required and optional modes', () => {
+    expect(canCloseUpdateDialog('optional', 'downloaded')).toBe(false)
+    expect(canCloseUpdateDialog('required', 'downloaded')).toBe(false)
+    expect(canCloseUpdateDialog(null, 'downloaded')).toBe(false)
+  })
+
   it('dismisses optional notices and closes required notices on escape', () => {
     expect(resolveUpdateDialogCloseAction('optional')).toBe('dismiss')
     expect(resolveUpdateDialogCloseAction('required')).toBe('close')

@@ -152,6 +152,9 @@ export const useDesktopUpdateStore = defineStore('desktopUpdate', () => {
 
   function applyUpdaterState(next: unknown): void {
     updaterState.value = parseDesktopUpdaterPublicState(next)
+    if (updaterState.value.status === 'downloaded') {
+      ensureDownloadedDialogVisible()
+    }
   }
 
   function resetRemoteFields() {
@@ -178,9 +181,17 @@ export const useDesktopUpdateStore = defineStore('desktopUpdate', () => {
   }
 
   function shouldOpenDialog(notice: UpdateNotice, source: DesktopUpdateSource, force: boolean, now: number): boolean {
+    // Downloaded packages must always resurface; optional snooze must not hide install.
+    if (status.value === 'downloaded') return true
     if (source === 'manual' || force) return true
     if (notice.mode === 'required') return shouldShowRequiredAutoNotice(notice, now)
     return shouldShowOptionalAutoNotice(notice, now)
+  }
+
+  function ensureDownloadedDialogVisible(): void {
+    if (status.value !== 'downloaded') return
+    if (activeNotice.value === null) return
+    requestDialogDisplay()
   }
 
   function syncDialogVisibility(): void {
@@ -271,7 +282,10 @@ export const useDesktopUpdateStore = defineStore('desktopUpdate', () => {
         const remote = await getDesktopLatestVersion()
         const notice = decideUpdateNotice(localVersion.value, remote)
 
-        applyUpdaterState({ status: 'checking' })
+        const previousStatus = status.value
+        if (previousStatus !== 'downloaded' && previousStatus !== 'installing') {
+          applyUpdaterState({ status: 'checking' })
+        }
         const nextUpdaterState = await window.electronAPI!.checkForDesktopUpdate()
         applyUpdaterState(nextUpdaterState)
         lastCheckedAt.value = Date.now()
@@ -302,10 +316,36 @@ export const useDesktopUpdateStore = defineStore('desktopUpdate', () => {
 
         applyNotice(outcome.notice)
 
-        if (shouldOpenDialog(outcome.notice, source, force, Date.now())) {
+        if (
+          nextUpdaterState.status === 'downloaded'
+          || shouldOpenDialog(outcome.notice, source, force, Date.now())
+        ) {
           requestDialogDisplay()
         }
       } catch (error: unknown) {
+        try {
+          const latest = await window.electronAPI!.getUpdaterState()
+          applyUpdaterState(latest)
+        } catch {
+          // Keep existing updater state when refresh fails.
+        }
+
+        if (updaterState.value.status === 'downloaded' && updaterState.value.version) {
+          if (!activeNotice.value) {
+            applyNotice({
+              mode: 'optional',
+              remoteVersion: updaterState.value.version,
+              minSupported: localVersion.value || updaterState.value.version,
+              downloadUrl: `https://github.com/CruiseTom001/yunzhan/releases/download/v${updaterState.value.version}/yunzhan-setup-${updaterState.value.version}.exe`,
+              releaseNotes: releaseNotes.value || '',
+            })
+          }
+          // Keep pending install across transient network failures; do not snooze.
+          requestDialogDisplay()
+          lastCheckedAt.value = Date.now()
+          return
+        }
+
         if (error instanceof InvalidDesktopUpdateInfoError) {
           errorMessage.value = resolveDesktopUpdateCheckError(error)
         } else {
@@ -403,6 +443,7 @@ export const useDesktopUpdateStore = defineStore('desktopUpdate', () => {
 
     unsubscribeUpdater = window.electronAPI!.onDesktopUpdaterStateChanged((state) => {
       applyUpdaterState(state)
+      ensureDownloadedDialogVisible()
       syncDialogVisibility()
     })
 
@@ -449,7 +490,10 @@ export const useDesktopUpdateStore = defineStore('desktopUpdate', () => {
     },
   )
 
-  watch(status, () => {
+  watch(status, (nextStatus) => {
+    if (nextStatus === 'downloaded') {
+      ensureDownloadedDialogVisible()
+    }
     syncDialogVisibility()
   })
 

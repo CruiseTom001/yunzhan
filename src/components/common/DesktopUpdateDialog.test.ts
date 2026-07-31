@@ -6,6 +6,8 @@ import DesktopUpdateDialog from './DesktopUpdateDialog.vue'
 import { useDesktopUpdateStore } from '@/stores/desktopUpdate'
 import type { DesktopUpdaterPublicState } from '@/utils/desktopUpdaterTypes'
 import { resetAppQuitGuardsForTests } from '@/utils/appQuitGuard'
+import * as desktopUpdateCheck from '@/utils/desktopUpdateCheck'
+import * as desktopDownloadUrl from '@/utils/desktopDownloadUrl'
 
 vi.mock('@/utils/authDialogFocus', () => ({
   lockBodyScroll: vi.fn(),
@@ -76,13 +78,13 @@ function removeMockDesktopApi() {
   delete (window as { electronAPI?: unknown }).electronAPI
 }
 
-function makeNotice() {
+function makeNotice(mode: 'optional' | 'required' = 'optional') {
   return {
     remoteVersion: '1.3.0',
-    minSupported: '1.2.0',
+    minSupported: mode === 'required' ? '1.3.0' : '1.2.0',
     downloadUrl: 'https://github.com/CruiseTom001/yunzhan/releases/download/v1.3.0/yunzhan-setup-1.3.0.exe',
-    releaseNotes: '',
-    mode: 'optional' as const,
+    releaseNotes: '更新说明',
+    mode,
   }
 }
 
@@ -101,6 +103,30 @@ async function mountErrorDialog(errorCode: string) {
   store.dialogVisible = true
 
   const wrapper = mount(DesktopUpdateDialog, {
+    global: {
+      stubs: { Teleport: true },
+    },
+  })
+  mountedWrappers.push(wrapper)
+  await flushPromises()
+  return { store, wrapper }
+}
+
+async function mountDownloadedDialog(mode: 'optional' | 'required' = 'optional') {
+  const store = useDesktopUpdateStore()
+  store.localVersion = '1.2.5'
+  store.activeNotice = makeNotice(mode)
+  store.noticeMode = mode
+  store.remoteVersion = '1.3.0'
+  store.applyUpdaterState(createUpdaterState('downloaded', {
+    version: '1.3.0',
+    percent: 100,
+  }))
+  store.dialogPending = true
+  store.dialogVisible = true
+
+  const wrapper = mount(DesktopUpdateDialog, {
+    attachTo: document.body,
     global: {
       stubs: { Teleport: true },
     },
@@ -208,5 +234,82 @@ describe('DesktopUpdateDialog primary action', () => {
     expect(downloadSpy).not.toHaveBeenCalled()
     expect(api.downloadDesktopUpdate).not.toHaveBeenCalled()
     expect(api.installDesktopUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('DesktopUpdateDialog downloaded state', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    onboardingBlocked.value = false
+    resetAppQuitGuardsForTests()
+  })
+
+  afterEach(() => {
+    while (mountedWrappers.length > 0) {
+      mountedWrappers.pop()?.unmount()
+    }
+    removeMockDesktopApi()
+    document.body.innerHTML = ''
+  })
+
+  it.each(['optional', 'required'] as const)(
+    'cannot close downloaded %s dialog via backdrop, Escape, or close button',
+    async (mode) => {
+      const api = createMockDesktopApi()
+      installMockDesktopApi(api)
+      const snoozeSpy = vi.spyOn(desktopUpdateCheck, 'snoozeOptionalNotice')
+      const { store, wrapper } = await mountDownloadedDialog(mode)
+
+      expect(wrapper.find('.update-dialog-icon-button').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('稍后安装')
+      expect(wrapper.text()).not.toContain('稍后提醒')
+      expect(wrapper.text()).not.toContain('稍后处理')
+
+      await wrapper.find('.update-dialog-backdrop').trigger('click')
+      await wrapper.find('.update-dialog-root').trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+
+      expect(store.dialogPending).toBe(true)
+      expect(store.shouldRenderDialog).toBe(true)
+      expect(store.status).toBe('downloaded')
+      expect(snoozeSpy).not.toHaveBeenCalled()
+      snoozeSpy.mockRestore()
+    },
+  )
+
+  it('only shows the immediate install button when downloaded', async () => {
+    const api = createMockDesktopApi()
+    installMockDesktopApi(api)
+    const openSpy = vi.spyOn(desktopDownloadUrl, 'openWebDesktopDownloadUrl')
+    const windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const { wrapper } = await mountDownloadedDialog('optional')
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0]?.text()).toContain('立即重启并安装')
+    expect(wrapper.text()).toContain('更新已准备好')
+    expect(openSpy).not.toHaveBeenCalled()
+    expect(windowOpenSpy).not.toHaveBeenCalled()
+
+    openSpy.mockRestore()
+    windowOpenSpy.mockRestore()
+  })
+
+  it('installs locally and never opens a web download', async () => {
+    const api = createMockDesktopApi()
+    installMockDesktopApi(api)
+    const openSpy = vi.spyOn(desktopDownloadUrl, 'openWebDesktopDownloadUrl')
+    const { store, wrapper } = await mountDownloadedDialog('optional')
+    const installSpy = vi.spyOn(store, 'installUpdate')
+
+    await wrapper.find('.update-dialog-primary').trigger('click')
+    await flushPromises()
+
+    expect(installSpy).toHaveBeenCalledTimes(1)
+    expect(api.installDesktopUpdate).toHaveBeenCalledTimes(1)
+    expect(api.downloadDesktopUpdate).not.toHaveBeenCalled()
+    expect(openSpy).not.toHaveBeenCalled()
+    openSpy.mockRestore()
   })
 })
