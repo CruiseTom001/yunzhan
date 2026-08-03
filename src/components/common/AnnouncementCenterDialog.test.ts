@@ -9,6 +9,7 @@ import { useAnnouncementsStore } from '@/stores/announcements'
 vi.mock('@/utils/announcementApi', () => ({
   getLatestUnread: vi.fn(),
   listAnnouncements: vi.fn(),
+  markAllAnnouncementsRead: vi.fn(),
   markAnnouncementRead: vi.fn(),
 }))
 
@@ -155,6 +156,92 @@ describe('AnnouncementCenterDialog mark read button', () => {
     resolveCall?.()
     await flushPromises()
 
+    wrapper.unmount()
+  })
+})
+
+describe('AnnouncementCenterDialog mark all read button', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ''
+  })
+
+  it('shows the button only when there are unread announcements', async () => {
+    const store = useAnnouncementsStore()
+    store.announcements = [{ ...LIST_ITEM }]
+    store.total = 1
+    store.unreadTotal = 1
+    store.centerVisible = true
+
+    const wrapper = mount(AnnouncementCenterDialog, {
+      global: { stubs: { Teleport: true } },
+    })
+    expect(wrapper.find('.announcement-read-all').exists()).toBe(true)
+
+    // 全部已读后按钮隐藏
+    store.unreadTotal = 0
+    store.announcements = [{ ...LIST_ITEM, read: true }]
+    await nextTick()
+    expect(wrapper.find('.announcement-read-all').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('marks all read with real click and hides the button afterwards', async () => {
+    const store = useAnnouncementsStore()
+    store.announcements = [{ ...LIST_ITEM }]
+    store.total = 1
+    store.unreadTotal = 1
+    store.centerVisible = true
+
+    const wrapper = mount(AnnouncementCenterDialog, {
+      global: { stubs: { Teleport: true } },
+    })
+    await wrapper.find('.announcement-read-all').trigger('click')
+    await flushPromises()
+
+    expect(store.unreadTotal).toBe(0)
+    expect(store.announcements[0].read).toBe(true)
+    expect(wrapper.find('.announcement-read-all').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows pending text and disables the button while in flight', async () => {
+    let resolveCall: (() => void) | null = null
+    vi.mocked(markAnnouncementRead)
+    // 用 store 的真实 markAllRead：mock api 挂起
+    const apiModule = await import('@/utils/announcementApi')
+    vi.mocked(apiModule.markAllAnnouncementsRead).mockImplementation(() => new Promise<void>((resolve) => {
+      resolveCall = resolve
+    }))
+
+    const store = useAnnouncementsStore()
+    store.announcements = [{ ...LIST_ITEM }]
+    store.total = 1
+    store.unreadTotal = 1
+    store.centerVisible = true
+
+    const wrapper = mount(AnnouncementCenterDialog, {
+      global: { stubs: { Teleport: true } },
+    })
+    await wrapper.find('.announcement-read-all').trigger('click')
+    await nextTick()
+
+    const button = wrapper.find('.announcement-read-all')
+    expect((button.element as HTMLButtonElement).disabled).toBe(true)
+    expect(button.text()).toContain('处理中')
+
+    resolveCall?.()
+    await flushPromises()
     wrapper.unmount()
   })
 })

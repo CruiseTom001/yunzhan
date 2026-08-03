@@ -178,6 +178,11 @@ export async function markAnnouncementRead(id: string) {
   if (!readOk(payload)) throw new Error('账号服务返回了无效结果。')
 }
 
+export async function markAllAnnouncementsRead() {
+  const payload = await apiRequest('/announcements/read-all', { method: 'POST' })
+  if (!readOk(payload)) throw new Error('账号服务返回了无效结果。')
+}
+
 export async function listAnnouncements(input: { limit?: number; offset?: number } = {}) {
   const params = new URLSearchParams({
     limit: String(input.limit ?? 20),

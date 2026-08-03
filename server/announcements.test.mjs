@@ -11,6 +11,7 @@ import {
   listVisibleAnnouncements,
   mapAdminAnnouncementRow,
   mapPublicAnnouncementRow,
+  markAllVisibleAnnouncementsRead,
   markVisibleAnnouncementRead,
   parseAnnouncementCategory,
   readAnnouncementCategoryInput,
@@ -176,6 +177,26 @@ describe('announcements helpers', () => {
     }
     await expect(markVisibleAnnouncementRead(client, 'user-1', 12)).resolves.toBe(true)
     expect(client.query.mock.calls[1][0]).toContain('ON CONFLICT')
+  })
+
+  it('marks all visible announcements read per channel and returns inserted count', async () => {
+    const webClient = {
+      query: vi.fn().mockResolvedValue({ rowCount: 3 }),
+    }
+    await expect(markAllVisibleAnnouncementsRead(webClient, 'user-1', ANNOUNCEMENT_CLIENT_CHANNEL_WEB))
+      .resolves.toBe(3)
+    const webSql = String(webClient.query.mock.calls[0][0])
+    expect(webSql).toContain('INSERT INTO announcement_reads')
+    expect(webSql).toContain('NOT EXISTS')
+    expect(webSql).toContain('ON CONFLICT')
+    expect(webClient.query.mock.calls[0][1][1]).toEqual(['general', 'web_release'])
+
+    const desktopClient = {
+      query: vi.fn().mockResolvedValue({ rowCount: 0 }),
+    }
+    await expect(markAllVisibleAnnouncementsRead(desktopClient, 'user-1', ANNOUNCEMENT_CLIENT_CHANNEL_DESKTOP))
+      .resolves.toBe(0)
+    expect(desktopClient.query.mock.calls[0][1][1]).toEqual(['general', 'desktop_release'])
   })
 
   it('findVisibleAnnouncement filters inactive and future rows in SQL', async () => {

@@ -5,6 +5,7 @@ import { flushPromises } from '@vue/test-utils'
 vi.mock('@/utils/announcementApi', () => ({
   getLatestUnread: vi.fn(),
   listAnnouncements: vi.fn(),
+  markAllAnnouncementsRead: vi.fn(),
   markAnnouncementRead: vi.fn(),
 }))
 
@@ -28,6 +29,7 @@ vi.mock('@/stores/desktopUpdate', () => ({
 import {
   getLatestUnread,
   listAnnouncements,
+  markAllAnnouncementsRead,
   markAnnouncementRead,
 } from '@/utils/announcementApi'
 import { useAuthStore } from '@/stores/auth'
@@ -36,6 +38,7 @@ import { useAnnouncementsStore } from '@/stores/announcements'
 const mockedList = vi.mocked(listAnnouncements)
 const mockedLatest = vi.mocked(getLatestUnread)
 const mockedMarkRead = vi.mocked(markAnnouncementRead)
+const mockedMarkAllRead = vi.mocked(markAllAnnouncementsRead)
 
 const LIST_ITEM = {
   id: '1',
@@ -101,6 +104,70 @@ describe('announcements store', () => {
 
     await store.markRead('1')
     expect(store.announcements[0].read).toBe(true)
+    expect(store.unreadTotal).toBe(0)
+  })
+
+  it('marks all announcements read and zeroes unread count', async () => {
+    mockedMarkAllRead.mockResolvedValue(undefined)
+
+    const store = useAnnouncementsStore()
+    store.announcements = [
+      { ...LIST_ITEM, id: '1' },
+      { ...LIST_ITEM, id: '2', read: true },
+    ]
+    store.unreadTotal = 1
+
+    const result = await store.markAllRead()
+    expect(result).toBe(true)
+    expect(store.announcements.every((item) => item.read)).toBe(true)
+    expect(store.unreadTotal).toBe(0)
+    expect(mockedMarkAllRead).toHaveBeenCalledOnce()
+  })
+
+  it('clears latest modal after mark all read', async () => {
+    mockedMarkAllRead.mockResolvedValue(undefined)
+
+    const store = useAnnouncementsStore()
+    store.latestAnnouncement = { id: '9', title: '最新', content: 'x', publishedAt: 1 }
+    store.latestModalVisible = true
+
+    await store.markAllRead()
+    expect(store.latestAnnouncement).toBeNull()
+    expect(store.latestModalVisible).toBe(false)
+  })
+
+  it('keeps unread count when mark all read fails', async () => {
+    mockedMarkAllRead.mockRejectedValue(new Error('network'))
+
+    const store = useAnnouncementsStore()
+    store.announcements = [{ ...LIST_ITEM, id: '1' }]
+    store.unreadTotal = 1
+
+    const result = await store.markAllRead()
+    expect(result).toBe(false)
+    expect(store.announcements[0].read).toBe(false)
+    expect(store.unreadTotal).toBe(1)
+    expect(store.markReadError).toBe('标记已读失败，请稍后再试。')
+  })
+
+  it('deduplicates concurrent mark all read calls', async () => {
+    let resolveFirst: () => void = () => {}
+    mockedMarkAllRead.mockImplementation(() => new Promise<void>((resolve) => {
+      resolveFirst = resolve
+    }))
+
+    const store = useAnnouncementsStore()
+    store.announcements = [{ ...LIST_ITEM, id: '1' }]
+    store.unreadTotal = 1
+
+    const first = store.markAllRead()
+    const second = store.markAllRead()
+    expect(store.markAllReadInFlight).toBe(true)
+    resolveFirst()
+    await Promise.all([first, second])
+
+    expect(mockedMarkAllRead).toHaveBeenCalledOnce()
+    expect(store.markAllReadInFlight).toBe(false)
     expect(store.unreadTotal).toBe(0)
   })
 

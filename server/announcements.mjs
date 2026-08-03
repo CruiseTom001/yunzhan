@@ -231,3 +231,28 @@ export async function markVisibleAnnouncementRead(
   )
   return true
 }
+
+export async function markAllVisibleAnnouncementsRead(
+  client,
+  userId,
+  channel = ANNOUNCEMENT_CLIENT_CHANNEL_WEB,
+) {
+  // 按渠道可见类别批量标记已读：幂等（NOT EXISTS + ON CONFLICT DO NOTHING），
+  // 返回本次实际新增的已读行数。
+  const categories = getVisibleAnnouncementCategoriesForChannel(channel)
+  const result = await client.query(
+    `INSERT INTO announcement_reads (user_id, announcement_id)
+     SELECT $1, a.id
+       FROM announcements a
+      WHERE a.active = true
+        AND a.published_at <= NOW()
+        AND a.category = ANY($2::text[])
+        AND NOT EXISTS (
+          SELECT 1 FROM announcement_reads r
+           WHERE r.announcement_id = a.id AND r.user_id = $1
+        )
+     ON CONFLICT (user_id, announcement_id) DO NOTHING`,
+    [userId, categories],
+  )
+  return result.rowCount ?? 0
+}

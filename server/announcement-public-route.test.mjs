@@ -291,6 +291,53 @@ describe('public announcement routes by client channel', () => {
     })
   })
 
+  it('read-all marks visible announcements per channel and is idempotent', async () => {
+    await withServer(async (port) => {
+      const webResult = await request(port, {
+        method: 'POST',
+        path: '/api/announcements/read-all',
+        cookie: COOKIE,
+      })
+      expect(webResult.status).toBe(200)
+      expect(webResult.json).toEqual({ ok: true })
+
+      // 幂等：再次调用同样 200
+      const webAgain = await request(port, {
+        method: 'POST',
+        path: '/api/announcements/read-all',
+        cookie: COOKIE,
+      })
+      expect(webAgain.status).toBe(200)
+
+      const desktopResult = await request(port, {
+        method: 'POST',
+        path: '/api/announcements/read-all',
+        cookie: COOKIE,
+        headers: { 'x-yunzhan-client': 'desktop' },
+      })
+      expect(desktopResult.status).toBe(200)
+
+      // 断言渠道过滤：web 渠道只含 general+web_release，desktop 只含 general+desktop_release
+      const readAllCalls = query.mock.calls
+        .map(([sql, params]) => ({ sql: String(sql), params }))
+        .filter((call) => call.sql.includes('INSERT INTO announcement_reads') && call.sql.includes('NOT EXISTS'))
+      expect(readAllCalls.length).toBeGreaterThanOrEqual(3)
+      expect(readAllCalls[0].params[1]).toEqual(['general', 'web_release'])
+      expect(readAllCalls[1].params[1]).toEqual(['general', 'web_release'])
+      expect(readAllCalls[readAllCalls.length - 1].params[1]).toEqual(['general', 'desktop_release'])
+    })
+  })
+
+  it('read-all requires authentication', async () => {
+    await withServer(async (port) => {
+      const result = await request(port, {
+        method: 'POST',
+        path: '/api/announcements/read-all',
+      })
+      expect(result.status).toBe(401)
+    })
+  })
+
   it('admin list still returns all announcement categories', async () => {
     query.mockImplementation(async (sql) => {
       if (String(sql).includes('active_session')) {

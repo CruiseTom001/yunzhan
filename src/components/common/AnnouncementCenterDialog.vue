@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { AlertCircle, ArrowLeft, Loader2, Megaphone, RefreshCw, X } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, CheckCheck, Loader2, Megaphone, RefreshCw, X } from 'lucide-vue-next'
 import { useAnnouncementsStore } from '@/stores/announcements'
 import {
   formatAnnouncementCategory,
@@ -74,6 +74,10 @@ async function handleMarkRead() {
   await store.markRead(selected.id)
 }
 
+async function handleMarkAllRead() {
+  await store.markAllRead()
+}
+
 watch(
   () => store.centerVisible,
   async (visible) => {
@@ -123,6 +127,18 @@ onUnmounted(() => {
               </h2>
             </div>
           </div>
+          <button
+            v-if="store.hasUnread"
+            type="button"
+            class="announcement-read-all"
+            :disabled="store.markAllReadInFlight"
+            :title="store.markAllReadInFlight ? '正在标记全部已读' : '全部标记为已读'"
+            @click="handleMarkAllRead"
+          >
+            <Loader2 v-if="store.markAllReadInFlight" class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+            <CheckCheck v-else class="w-3.5 h-3.5" aria-hidden="true" />
+            {{ store.markAllReadInFlight ? '处理中…' : '全部已读' }}
+          </button>
           <button
             ref="closeButtonRef"
             type="button"
@@ -258,6 +274,11 @@ onUnmounted(() => {
 <style scoped>
 .announcement-backdrop {
   @apply fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4;
+}
+
+/* 全部已读：语义色类直接引用主题变量，浅色下自动适配，无需全局补丁 */
+.announcement-read-all {
+  @apply inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-edge-card px-2.5 text-xs text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .announcement-panel {

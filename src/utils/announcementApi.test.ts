@@ -18,6 +18,7 @@ import {
   getLatestUnread,
   listAdminAnnouncements,
   listAnnouncements,
+  markAllAnnouncementsRead,
   markAnnouncementRead,
   regenerateAdminAnnouncementFromChangelog,
   repolishAdminAnnouncement,
@@ -96,6 +97,17 @@ describe('announcementApi type guards', () => {
   it('rejects mark read when ok missing', async () => {
     mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: false }))
     await expect(markAnnouncementRead('a-1')).rejects.toThrow('无效结果')
+  })
+
+  it('calls read-all endpoint for mark all read', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: true }))
+    await expect(markAllAnnouncementsRead()).resolves.toBeUndefined()
+    expect(mockedApiRequest).toHaveBeenCalledWith('/announcements/read-all', { method: 'POST' })
+  })
+
+  it('rejects mark all read when ok missing', async () => {
+    mockedApiRequest.mockReturnValueOnce(mockResponse({ ok: false }))
+    await expect(markAllAnnouncementsRead()).rejects.toThrow('无效结果')
   })
 
   it('parses admin announcement list', async () => {

@@ -6,6 +6,7 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import {
   getLatestUnread,
   listAnnouncements,
+  markAllAnnouncementsRead,
   markAnnouncementRead,
   type Announcement,
   type AnnouncementListItem,
@@ -50,6 +51,7 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
   const initialized = ref(false)
   const centerBlockedMessage = ref('')
   const markReadInFlight = reactive(new Map<string, number>())
+  const markAllReadInFlight = ref(false)
 
   let loadPromise: Promise<void> | null = null
   let loadMorePromise: Promise<void> | null = null
@@ -100,6 +102,7 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     loadMorePromise = null
     latestCheckPromise = null
     markReadInFlight.clear()
+    markAllReadInFlight.value = false
     stateEpoch += 1
   }
 
@@ -278,6 +281,28 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     return markReadInFlight.has(id)
   }
 
+  async function markAllRead() {
+    if (markAllReadInFlight.value) return false
+    markAllReadInFlight.value = true
+    markReadError.value = ''
+    const requestEpoch = stateEpoch
+    try {
+      await markAllAnnouncementsRead()
+      if (!isCurrentEpoch(requestEpoch)) return false
+      announcements.value = announcements.value.map((item) => ({ ...item, read: true }))
+      unreadTotal.value = 0
+      latestAnnouncement.value = null
+      latestModalVisible.value = false
+      return true
+    } catch {
+      if (!isCurrentEpoch(requestEpoch)) return false
+      markReadError.value = '标记已读失败，请稍后再试。'
+      return false
+    } finally {
+      markAllReadInFlight.value = false
+    }
+  }
+
   function closeLatestModal() {
     if (latestAnnouncement.value) {
       suppressedLatestId.value = latestAnnouncement.value.id
@@ -389,6 +414,8 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     closeCenter,
     selectAnnouncement,
     markRead,
+    markAllRead,
+    markAllReadInFlight,
     isMarkReadInFlight,
     refreshUnreadCount,
     resetForLogout,

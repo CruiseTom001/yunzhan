@@ -22,6 +22,7 @@ import {
   findLatestUnreadVisibleAnnouncement,
   listVisibleAnnouncements,
   mapAdminAnnouncementRow,
+  markAllVisibleAnnouncementsRead,
   markVisibleAnnouncementRead,
   readAnnouncementCategoryInput,
   readAnnouncementSourceKeyInput,
@@ -2182,6 +2183,12 @@ app.post('/api/announcements/:id/read', requireAuth, asyncRoute(async (request, 
     response.status(404).json({ error: '公告不存在。' })
     return
   }
+  response.json({ ok: true })
+}))
+
+app.post('/api/announcements/read-all', requireAuth, asyncRoute(async (request, response) => {
+  const channel = resolveAnnouncementClientChannelFromRequest(request)
+  await markAllVisibleAnnouncementsRead(pool, request.auth.id, channel)
   response.json({ ok: true })
 }))
 
