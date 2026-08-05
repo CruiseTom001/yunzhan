@@ -32,9 +32,10 @@ vi.mock('@/utils/authDialogFocus', () => ({
   unlockBodyScroll: vi.fn(),
 }))
 
-import { markAnnouncementRead } from '@/utils/announcementApi'
+import { markAllAnnouncementsRead, markAnnouncementRead } from '@/utils/announcementApi'
 
 const mockedMarkRead = vi.mocked(markAnnouncementRead)
+const mockedMarkAllRead = vi.mocked(markAllAnnouncementsRead)
 
 const LIST_ITEM = {
   id: '1',
@@ -217,10 +218,7 @@ describe('AnnouncementCenterDialog mark all read button', () => {
 
   it('shows pending text and disables the button while in flight', async () => {
     let resolveCall: (() => void) | null = null
-    vi.mocked(markAnnouncementRead)
-    // 用 store 的真实 markAllRead：mock api 挂起
-    const apiModule = await import('@/utils/announcementApi')
-    vi.mocked(apiModule.markAllAnnouncementsRead).mockImplementation(() => new Promise<void>((resolve) => {
+    mockedMarkAllRead.mockImplementation(() => new Promise<void>((resolve) => {
       resolveCall = resolve
     }))
 
@@ -242,6 +240,33 @@ describe('AnnouncementCenterDialog mark all read button', () => {
 
     resolveCall?.()
     await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('shows mark-all-read failure near the button, not only in detail pane', async () => {
+    mockedMarkAllRead.mockRejectedValue(new Error('network'))
+
+    const store = useAnnouncementsStore()
+    store.announcements = [{ ...LIST_ITEM }]
+    store.total = 1
+    store.unreadTotal = 1
+    store.selectedAnnouncementId = null
+    store.centerVisible = true
+
+    const wrapper = mount(AnnouncementCenterDialog, {
+      global: { stubs: { Teleport: true } },
+    })
+    await wrapper.find('.announcement-read-all').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    const nearButtonError = wrapper.find('.announcement-read-all-error')
+    expect(nearButtonError.exists()).toBe(true)
+    expect(nearButtonError.text()).toContain('标记已读失败')
+    expect(store.markReadError).toContain('标记已读失败')
+    // 未选中详情时，错误仍应出现在「全部已读」按钮旁
+    expect(wrapper.find('.detail-actions .text-amber-400').exists()).toBe(false)
+
     wrapper.unmount()
   })
 })

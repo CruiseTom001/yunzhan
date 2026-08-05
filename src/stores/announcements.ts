@@ -58,7 +58,12 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
   let latestCheckPromise: Promise<void> | null = null
   let activeUserId: string | null = null
   let stateEpoch = 0
+  /** 已读相关状态世代：markRead / markAllRead 成功后递增，防止旧列表请求回写未读 */
+  let readStateRevision = 0
   let nextMarkReadOperationId = 1
+  let nextMarkAllReadOperationId = 1
+  let activeMarkAllReadOperationId: number | null = null
+  let pendingReadStateRefresh = false
 
   const selectedAnnouncement = computed(() => (
     announcements.value.find((item) => item.id === selectedAnnouncementId.value) ?? null
@@ -103,7 +108,10 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     latestCheckPromise = null
     markReadInFlight.clear()
     markAllReadInFlight.value = false
+    activeMarkAllReadOperationId = null
     stateEpoch += 1
+    readStateRevision = 0
+    pendingReadStateRefresh = false
   }
 
   function resetForLogout() {
@@ -116,12 +124,45 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     return requestEpoch === stateEpoch
   }
 
+  function isCurrentReadRevision(requestRevision: number): boolean {
+    return requestRevision === readStateRevision
+  }
+
+  function canApplyReadState(requestEpoch: number, requestRevision: number): boolean {
+    return isCurrentEpoch(requestEpoch) && isCurrentReadRevision(requestRevision)
+  }
+
+  function bumpReadStateRevision(): void {
+    readStateRevision += 1
+  }
+
+  /**
+   * 旧列表请求因已读 revision 过期被忽略后，受控刷新一次，避免空白或分页卡住。
+   * requestEpoch / expectedReadRevision 用于隔离账号与后续已读变更，避免误刷新新账号。
+   */
+  function scheduleControlledListRefresh(
+    requestEpoch: number,
+    expectedReadRevision: number,
+  ): void {
+    if (pendingReadStateRefresh) return
+    pendingReadStateRefresh = true
+    queueMicrotask(() => {
+      pendingReadStateRefresh = false
+      if (!authStore.isAuthenticated) return
+      if (!isCurrentEpoch(requestEpoch)) return
+      if (!isCurrentReadRevision(expectedReadRevision)) return
+      if (loadPromise) return
+      void loadAnnouncements({ reset: true })
+    })
+  }
+
   async function refreshUnreadCount() {
     if (!authStore.isAuthenticated) return
     const requestEpoch = stateEpoch
+    const requestRevision = readStateRevision
     try {
       const result = await listAnnouncements({ limit: 1, offset: 0 })
-      if (!isCurrentEpoch(requestEpoch)) return
+      if (!canApplyReadState(requestEpoch, requestRevision)) return
       unreadTotal.value = result.unreadTotal
       total.value = result.total
     } catch {
@@ -140,10 +181,16 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     }
 
     const requestEpoch = stateEpoch
+    const requestRevision = readStateRevision
     const requestPromise = (async () => {
+      let ignoredDueToReadRevision = false
       try {
         const result = await listAnnouncements({ limit: ANNOUNCEMENT_PAGE_SIZE, offset: 0 })
         if (!isCurrentEpoch(requestEpoch)) return
+        if (!isCurrentReadRevision(requestRevision)) {
+          ignoredDueToReadRevision = true
+          return
+        }
         announcements.value = result.announcements
         total.value = result.total
         unreadTotal.value = result.unreadTotal
@@ -157,6 +204,10 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
         }
       } catch {
         if (!isCurrentEpoch(requestEpoch)) return
+        if (!isCurrentReadRevision(requestRevision)) {
+          ignoredDueToReadRevision = true
+          return
+        }
         errorMessage.value = ANNOUNCEMENT_LOAD_ERROR_MESSAGE
       } finally {
         if (isCurrentEpoch(requestEpoch)) {
@@ -164,6 +215,13 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
         }
         if (loadPromise === requestPromise) {
           loadPromise = null
+        }
+        if (
+          ignoredDueToReadRevision
+          && isCurrentEpoch(requestEpoch)
+          && announcements.value.length === 0
+        ) {
+          scheduleControlledListRefresh(requestEpoch, readStateRevision)
         }
       }
     })()
@@ -180,18 +238,28 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     errorMessage.value = ''
 
     const requestEpoch = stateEpoch
+    const requestRevision = readStateRevision
     const requestPromise = (async () => {
+      let ignoredDueToReadRevision = false
       try {
         const result = await listAnnouncements({
           limit: ANNOUNCEMENT_PAGE_SIZE,
           offset: announcements.value.length,
         })
         if (!isCurrentEpoch(requestEpoch)) return
+        if (!isCurrentReadRevision(requestRevision)) {
+          ignoredDueToReadRevision = true
+          return
+        }
         announcements.value = mergeAnnouncements(announcements.value, result.announcements)
         total.value = result.total
         unreadTotal.value = result.unreadTotal
       } catch {
         if (!isCurrentEpoch(requestEpoch)) return
+        if (!isCurrentReadRevision(requestRevision)) {
+          ignoredDueToReadRevision = true
+          return
+        }
         errorMessage.value = ANNOUNCEMENT_LOAD_ERROR_MESSAGE
       } finally {
         if (isCurrentEpoch(requestEpoch)) {
@@ -199,6 +267,13 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
         }
         if (loadMorePromise === requestPromise) {
           loadMorePromise = null
+        }
+        if (
+          ignoredDueToReadRevision
+          && isCurrentEpoch(requestEpoch)
+          && announcements.value.length === 0
+        ) {
+          scheduleControlledListRefresh(requestEpoch, readStateRevision)
         }
       }
     })()
@@ -212,10 +287,11 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     if (latestCheckPromise) return latestCheckPromise
 
     const requestEpoch = stateEpoch
+    const requestRevision = readStateRevision
     const requestPromise = (async () => {
       try {
         const latest = await getLatestUnread()
-        if (!isCurrentEpoch(requestEpoch)) return
+        if (!canApplyReadState(requestEpoch, requestRevision)) return
         if (!latest || latest.id === suppressedLatestId.value) {
           latestAnnouncement.value = null
           latestModalVisible.value = false
@@ -224,7 +300,7 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
         latestAnnouncement.value = latest
         latestModalVisible.value = true
       } catch {
-        if (!isCurrentEpoch(requestEpoch)) return
+        if (!canApplyReadState(requestEpoch, requestRevision)) return
         latestAnnouncement.value = null
         latestModalVisible.value = false
       } finally {
@@ -255,6 +331,7 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
     try {
       await markAnnouncementRead(id)
       if (!isCurrentEpoch(requestEpoch)) return false
+      bumpReadStateRevision()
       announcements.value = announcements.value.map((item) => (
         item.id === id ? { ...item, read: true } : item
       ))
@@ -283,23 +360,37 @@ export const useAnnouncementsStore = defineStore('announcements', () => {
 
   async function markAllRead() {
     if (markAllReadInFlight.value) return false
+    const requestEpoch = stateEpoch
+    const operationId = nextMarkAllReadOperationId
+    nextMarkAllReadOperationId += 1
+    activeMarkAllReadOperationId = operationId
     markAllReadInFlight.value = true
     markReadError.value = ''
-    const requestEpoch = stateEpoch
     try {
       await markAllAnnouncementsRead()
-      if (!isCurrentEpoch(requestEpoch)) return false
+      if (!isCurrentEpoch(requestEpoch) || activeMarkAllReadOperationId !== operationId) {
+        return false
+      }
+      bumpReadStateRevision()
       announcements.value = announcements.value.map((item) => ({ ...item, read: true }))
       unreadTotal.value = 0
       latestAnnouncement.value = null
       latestModalVisible.value = false
       return true
     } catch {
-      if (!isCurrentEpoch(requestEpoch)) return false
+      if (!isCurrentEpoch(requestEpoch) || activeMarkAllReadOperationId !== operationId) {
+        return false
+      }
       markReadError.value = '标记已读失败，请稍后再试。'
       return false
     } finally {
-      markAllReadInFlight.value = false
+      if (
+        isCurrentEpoch(requestEpoch)
+        && activeMarkAllReadOperationId === operationId
+      ) {
+        markAllReadInFlight.value = false
+        activeMarkAllReadOperationId = null
+      }
     }
   }
 

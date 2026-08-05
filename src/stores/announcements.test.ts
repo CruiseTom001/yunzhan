@@ -50,12 +50,12 @@ const LIST_ITEM = {
   version: null,
 }
 
-function authenticateTestUser() {
+function authenticateTestUser(userId = 'user-1') {
   const authStore = useAuthStore()
   authStore.$patch({
     status: 'authenticated',
     user: {
-      id: 'user-1',
+      id: userId,
       username: 'test',
       displayName: 'Test',
       email: 'test@example.com',
@@ -533,6 +533,264 @@ describe('announcements store', () => {
 
     expect(store.total).toBe(9)
     expect(store.unreadTotal).toBe(4)
+  })
+
+  it('ignores stale loadAnnouncements after markAllRead without resetting loading', async () => {
+    const store = await settleAuthenticatedStore()
+
+    type ListResult = Awaited<ReturnType<typeof listAnnouncements>>
+    let resolveLoad: ((value: ListResult) => void) | null = null
+    mockedList.mockImplementation(() => new Promise<ListResult>((resolve) => {
+      resolveLoad = resolve
+    }))
+    mockedMarkAllRead.mockResolvedValue(undefined)
+
+    store.centerVisible = true
+    const loadPending = store.loadAnnouncements({ reset: true })
+    expect(store.loading).toBe(true)
+
+    store.announcements = [
+      { ...LIST_ITEM, id: '1', read: false },
+      { ...LIST_ITEM, id: '2', read: false, title: '公告二' },
+    ]
+    store.total = 2
+    store.unreadTotal = 2
+    store.latestAnnouncement = {
+      id: '1',
+      title: '最新',
+      content: 'x',
+      publishedAt: 1700000000000,
+    }
+    store.latestModalVisible = true
+
+    const markResult = await store.markAllRead()
+    expect(markResult).toBe(true)
+    expect(store.unreadTotal).toBe(0)
+    expect(store.announcements.every((item) => item.read)).toBe(true)
+    expect(store.latestAnnouncement).toBeNull()
+    expect(store.latestModalVisible).toBe(false)
+
+    resolveLoad?.({
+      announcements: [
+        { ...LIST_ITEM, id: '1', read: false },
+        { ...LIST_ITEM, id: '2', read: false, title: '公告二' },
+      ],
+      total: 2,
+      unreadTotal: 2,
+    })
+    await loadPending
+    await flushPromises()
+
+    expect(store.loading).toBe(false)
+    expect(store.unreadTotal).toBe(0)
+    expect(store.announcements.every((item) => item.read)).toBe(true)
+    expect(store.latestAnnouncement).toBeNull()
+    expect(store.latestModalVisible).toBe(false)
+  })
+
+  it('ignores stale loadMore after markAllRead without resetting loadingMore', async () => {
+    const store = await settleAuthenticatedStore()
+
+    type ListResult = Awaited<ReturnType<typeof listAnnouncements>>
+    let resolveMore: ((value: ListResult) => void) | null = null
+    mockedList.mockImplementation(() => new Promise<ListResult>((resolve) => {
+      resolveMore = resolve
+    }))
+    mockedMarkAllRead.mockResolvedValue(undefined)
+
+    store.announcements = [{ ...LIST_ITEM, id: '1', read: false }]
+    store.total = 3
+    store.unreadTotal = 2
+    store.centerVisible = true
+
+    const morePending = store.loadMore()
+    expect(store.loadingMore).toBe(true)
+
+    await store.markAllRead()
+    expect(store.unreadTotal).toBe(0)
+    expect(store.announcements.every((item) => item.read)).toBe(true)
+
+    resolveMore?.({
+      announcements: [
+        { ...LIST_ITEM, id: '2', read: false, title: '第二页未读' },
+      ],
+      total: 3,
+      unreadTotal: 2,
+    })
+    await morePending
+    await flushPromises()
+
+    expect(store.loadingMore).toBe(false)
+    expect(store.unreadTotal).toBe(0)
+    expect(store.announcements.every((item) => item.read)).toBe(true)
+    expect(store.announcements.some((item) => item.id === '2' && item.read === false)).toBe(false)
+  })
+
+  it('ignores stale checkLatestUnread after markAllRead', async () => {
+    const store = await settleAuthenticatedStore()
+
+    type LatestResult = Awaited<ReturnType<typeof getLatestUnread>>
+    let resolveLatest: ((value: LatestResult) => void) | null = null
+    mockedLatest.mockImplementation(() => new Promise<LatestResult>((resolve) => {
+      resolveLatest = resolve
+    }))
+    mockedMarkAllRead.mockResolvedValue(undefined)
+
+    const latestPending = store.checkLatestUnread()
+    expect(resolveLatest).not.toBeNull()
+
+    store.announcements = [{ ...LIST_ITEM, id: '9', read: false }]
+    store.unreadTotal = 1
+    await store.markAllRead()
+    expect(store.unreadTotal).toBe(0)
+    expect(store.latestAnnouncement).toBeNull()
+    expect(store.latestModalVisible).toBe(false)
+
+    resolveLatest?.({
+      id: '9',
+      title: '旧未读最新',
+      content: 'should not resurrect',
+      publishedAt: 1700000000000,
+    })
+    await latestPending
+    await flushPromises()
+
+    expect(store.unreadTotal).toBe(0)
+    expect(store.latestAnnouncement).toBeNull()
+    expect(store.latestModalVisible).toBe(false)
+  })
+
+  it('does not clear account B markAllReadInFlight when account A request finishes', async () => {
+    const store = await settleAuthenticatedStore()
+
+    const resolvers: Array<() => void> = []
+    mockedMarkAllRead.mockImplementation(() => new Promise<void>((resolve) => {
+      resolvers.push(resolve)
+    }))
+    mockedList.mockResolvedValue({
+      announcements: [],
+      total: 0,
+      unreadTotal: 0,
+    })
+    mockedLatest.mockResolvedValue(null)
+
+    store.announcements = [{ ...LIST_ITEM, id: 'a1', read: false }]
+    store.unreadTotal = 1
+    const accountAPending = store.markAllRead()
+    expect(store.markAllReadInFlight).toBe(true)
+    expect(resolvers).toHaveLength(1)
+
+    store.resetForLogout()
+    expect(store.markAllReadInFlight).toBe(false)
+
+    authenticateTestUser('user-2')
+    await flushPromises()
+    store.announcements = [{ ...LIST_ITEM, id: 'b1', read: false }]
+    store.unreadTotal = 1
+
+    const accountBPending = store.markAllRead()
+    expect(store.markAllReadInFlight).toBe(true)
+    expect(resolvers).toHaveLength(2)
+
+    resolvers[0]?.()
+    await accountAPending
+    expect(store.markAllReadInFlight).toBe(true)
+
+    resolvers[1]?.()
+    await accountBPending
+    expect(store.markAllReadInFlight).toBe(false)
+    expect(store.unreadTotal).toBe(0)
+    expect(store.announcements.every((item) => item.read)).toBe(true)
+  })
+
+  it('schedules controlled refresh once when stale load leaves empty list', async () => {
+    const store = await settleAuthenticatedStore()
+
+    type ListResult = Awaited<ReturnType<typeof listAnnouncements>>
+    const resolvers: Array<(value: ListResult) => void> = []
+    mockedList.mockImplementation(() => new Promise<ListResult>((resolve) => {
+      resolvers.push(resolve)
+    }))
+    mockedMarkAllRead.mockResolvedValue(undefined)
+
+    const loadPending = store.loadAnnouncements({ reset: true })
+    expect(store.loading).toBe(true)
+    expect(store.announcements).toHaveLength(0)
+    expect(resolvers).toHaveLength(1)
+
+    await store.markAllRead()
+    expect(store.unreadTotal).toBe(0)
+
+    resolvers[0]?.({
+      announcements: [{ ...LIST_ITEM, id: '1', read: false }],
+      total: 1,
+      unreadTotal: 1,
+    })
+    await loadPending
+    await flushPromises()
+
+    expect(resolvers).toHaveLength(2)
+    expect(store.loading).toBe(true)
+
+    resolvers[1]?.({
+      announcements: [{ ...LIST_ITEM, id: '1', read: true }],
+      total: 1,
+      unreadTotal: 0,
+    })
+    await flushPromises()
+
+    expect(resolvers).toHaveLength(2)
+    expect(store.loading).toBe(false)
+    expect(store.announcements).toHaveLength(1)
+    expect(store.announcements[0].read).toBe(true)
+    expect(store.unreadTotal).toBe(0)
+  })
+
+  it('does not trigger controlled refresh for account B after account A stale load', async () => {
+    const store = await settleAuthenticatedStore()
+
+    type ListResult = Awaited<ReturnType<typeof listAnnouncements>>
+    const resolvers: Array<(value: ListResult) => void> = []
+    mockedList.mockImplementation(() => new Promise<ListResult>((resolve) => {
+      resolvers.push(resolve)
+    }))
+    mockedMarkAllRead.mockResolvedValue(undefined)
+    mockedLatest.mockResolvedValue(null)
+
+    const accountAPending = store.loadAnnouncements({ reset: true })
+    expect(store.announcements).toHaveLength(0)
+    expect(resolvers).toHaveLength(1)
+    await store.markAllRead()
+
+    store.resetForLogout()
+    mockedList.mockResolvedValue({
+      announcements: [],
+      total: 0,
+      unreadTotal: 0,
+    })
+    mockedLatest.mockResolvedValue(null)
+    authenticateTestUser('user-2')
+    await flushPromises()
+    vi.clearAllMocks()
+    mockedList.mockResolvedValue({
+      announcements: [],
+      total: 0,
+      unreadTotal: 0,
+    })
+    mockedLatest.mockResolvedValue(null)
+
+    resolvers[0]?.({
+      announcements: [{ ...LIST_ITEM, id: 'a1', read: false }],
+      total: 1,
+      unreadTotal: 1,
+    })
+    await accountAPending
+    await flushPromises()
+
+    expect(mockedList).not.toHaveBeenCalled()
+    expect(store.announcements).toEqual([])
+    expect(store.unreadTotal).toBe(0)
+    expect(store.loading).toBe(false)
   })
 
   it('ignores stale loadMore result after logout and account switch', async () => {

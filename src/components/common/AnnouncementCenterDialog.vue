@@ -127,28 +127,41 @@ onUnmounted(() => {
               </h2>
             </div>
           </div>
-          <button
-            v-if="store.hasUnread"
-            type="button"
-            class="announcement-read-all"
-            :disabled="store.markAllReadInFlight"
-            :title="store.markAllReadInFlight ? '正在标记全部已读' : '全部标记为已读'"
-            @click="handleMarkAllRead"
-          >
-            <Loader2 v-if="store.markAllReadInFlight" class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-            <CheckCheck v-else class="w-3.5 h-3.5" aria-hidden="true" />
-            {{ store.markAllReadInFlight ? '处理中…' : '全部已读' }}
-          </button>
-          <button
-            ref="closeButtonRef"
-            type="button"
-            class="icon-action"
-            title="关闭公告中心"
-            aria-label="关闭公告中心"
-            @click="requestClose"
-          >
-            <X class="w-4 h-4" />
-          </button>
+          <div class="announcement-header-actions">
+            <div
+              v-if="store.hasUnread"
+              class="announcement-read-all-wrap"
+            >
+              <button
+                type="button"
+                class="announcement-read-all"
+                :disabled="store.markAllReadInFlight"
+                :title="store.markAllReadInFlight ? '正在标记全部已读' : '全部标记为已读'"
+                @click="handleMarkAllRead"
+              >
+                <Loader2 v-if="store.markAllReadInFlight" class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                <CheckCheck v-else class="w-3.5 h-3.5" aria-hidden="true" />
+                {{ store.markAllReadInFlight ? '处理中…' : '全部已读' }}
+              </button>
+              <p
+                v-if="store.markReadError"
+                class="announcement-read-all-error"
+                role="alert"
+              >
+                {{ store.markReadError }}
+              </p>
+            </div>
+            <button
+              ref="closeButtonRef"
+              type="button"
+              class="icon-action"
+              title="关闭公告中心"
+              aria-label="关闭公告中心"
+              @click="requestClose"
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
         </header>
 
         <div v-if="store.loading" class="announcement-state" role="status">
@@ -287,6 +300,18 @@ onUnmounted(() => {
 
 .announcement-header {
   @apply flex items-start justify-between gap-4 px-4 sm:px-5 py-4 border-b border-edge-card shrink-0;
+}
+
+.announcement-header-actions {
+  @apply flex items-start gap-2 shrink-0;
+}
+
+.announcement-read-all-wrap {
+  @apply flex flex-col items-end gap-1;
+}
+
+.announcement-read-all-error {
+  @apply max-w-[12rem] text-right text-xs text-amber-400;
 }
 
 .announcement-body {
