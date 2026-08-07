@@ -51,6 +51,7 @@ import {
   testAiProviderLocally,
 } from '@/utils/localAiProvider'
 import { createContentDirtyGuard, registerAppQuitGuard } from '@/utils/appQuitGuard'
+import { formatAiModelDisplayName } from '@/utils/aiModelDisplay'
 
 const notes = ref<StudyNote[]>([])
 const selectedDate = ref(formatLocalDate(new Date()))
@@ -141,9 +142,9 @@ const displayProviderName = computed(() => {
   return selectedPolishProvider.value?.name.trim() ?? null
 })
 const displayModel = computed(() => {
-  if (currentAiModel.value) return currentAiModel.value
-  if (!desktopLocalAi.value) return selectedServerProvider.value?.model ?? null
-  return selectedPolishProvider.value?.model.trim() ?? null
+  if (currentAiModel.value) return formatAiModelDisplayName(currentAiModel.value)
+  if (!desktopLocalAi.value) return selectedServerProvider.value ? formatAiModelDisplayName(selectedServerProvider.value.model) : null
+  return selectedPolishProvider.value ? formatAiModelDisplayName(selectedPolishProvider.value.model) : null
 })
 
 // 模型选择弹窗
@@ -151,15 +152,18 @@ const showModelPicker = ref(false)
 const selectedModelDisplay = computed(() => {
   if (!desktopLocalAi.value) {
     if (loadingServerProviders.value) return '加载中…'
-    return selectedServerProvider.value?.model ?? '选择模型'
+    return selectedServerProvider.value ? formatAiModelDisplayName(selectedServerProvider.value.model) : '选择模型'
   }
-  return selectedPolishProvider.value?.model ?? '选择模型'
+  return selectedPolishProvider.value ? formatAiModelDisplayName(selectedPolishProvider.value.model) : '选择模型'
 })
+const selectedModelProviderId = computed(() => (
+  desktopLocalAi.value ? selectedPolishProviderId.value : selectedServerProviderId.value
+))
 const availableModels = computed(() => {
   if (!desktopLocalAi.value) {
-    return serverAiProviders.value.map(p => ({ model: p.model, providerId: p.id, providerName: p.name }))
+    return serverAiProviders.value.map(p => ({ model: p.model, displayName: formatAiModelDisplayName(p.model), providerId: p.id, providerName: p.name }))
   }
-  return localAiProviders.value.map(p => ({ model: p.model, providerId: p.id, providerName: p.name }))
+  return localAiProviders.value.map(p => ({ model: p.model, displayName: formatAiModelDisplayName(p.model), providerId: p.id, providerName: p.name }))
 })
 function getModelTraits(model: string): { green: string; red: string } {
   const lower = model.toLowerCase()
@@ -1069,15 +1073,15 @@ onUnmounted(() => {
                   :key="entry.providerId"
                   type="button"
                   class="w-full rounded-md border px-3 py-2.5 text-left transition"
-                  :class="selectedModelDisplay === entry.model
+                  :class="selectedModelProviderId === entry.providerId
                     ? 'border-purple-400/40 bg-purple-400/10'
                     : 'border-white/[0.06] hover:bg-white/[0.03]'"
                   @click="selectModel(entry.model, entry.providerId)"
                 >
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-theme">{{ entry.model }}</span>
+                    <span class="text-sm font-medium text-theme">{{ entry.displayName }}</span>
                     <span v-if="entry.model.includes('flash')" class="rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400">推荐使用</span>
-                    <span v-if="selectedModelDisplay === entry.model" class="rounded border border-purple-400/20 bg-purple-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-500">当前</span>
+                    <span v-if="selectedModelProviderId === entry.providerId" class="rounded border border-purple-400/20 bg-purple-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-500">当前</span>
                   </div>
                   <div class="mt-1 flex items-center gap-2">
                     <span class="text-xs text-theme-muted">{{ entry.providerName }}</span>
@@ -1153,7 +1157,7 @@ onUnmounted(() => {
               class="mt-2 w-full rounded-md border border-edge-light bg-surface-secondary px-3 py-2 text-sm text-theme outline-none transition focus:border-cyan-400/50"
             >
               <option v-for="entry in serverAiProviders" :key="entry.id" :value="entry.id">
-                {{ entry.name }} / {{ entry.model }}
+                {{ entry.name }} / {{ formatAiModelDisplayName(entry.model) }}
               </option>
             </select>
             <p class="mt-2 text-xs text-theme-muted">只影响本次 Word AI 排版，不会修改笔记润色的默认选择。</p>
@@ -1243,7 +1247,7 @@ onUnmounted(() => {
                     {{ entry.name }}
                     <span v-if="entry.id === selectedServerProviderId" class="ml-2 text-xs text-cyan-300">当前使用</span>
                   </div>
-                  <div class="mt-1 truncate text-xs text-gray-500">{{ entry.model }} · {{ entry.format }}</div>
+                  <div class="mt-1 truncate text-xs text-gray-500">{{ formatAiModelDisplayName(entry.model) }} · {{ entry.format }}</div>
                 </button>
               </div>
             </div>
