@@ -218,7 +218,7 @@ describe('server AI provider request', () => {
     expect(JSON.parse(requests[0].options.body).model).toBe('deepseek-chat')
   })
 
-  it('uses exportModel when configured', async () => {
+  it('uses the selected provider model for export even when legacy exportModel exists', async () => {
     const env = {
       AI_PROVIDERS_JSON: JSON.stringify([
         {
@@ -248,8 +248,8 @@ describe('server AI provider request', () => {
       providerId: 'glm',
     })
 
-    expect(result.model).toBe('glm-4-air')
-    expect(JSON.parse(requests[0].options.body).model).toBe('glm-4-air')
+    expect(result.model).toBe('glm-4-flash')
+    expect(JSON.parse(requests[0].options.body).model).toBe('glm-4-flash')
   })
 
   it('rejects export input exceeding AI_EXPORT_INPUT_MAX_LENGTH', async () => {

@@ -21,7 +21,6 @@ import {
   generateAdminAnnouncementPairFromChangelog,
   listAdminAnnouncements,
   regenerateAdminAnnouncementFromChangelog,
-  repolishAdminAnnouncement,
   updateAdminAnnouncement,
   type AdminAnnouncement,
   type AdminAnnouncementInput,
@@ -237,15 +236,6 @@ async function takeOffline(entry: AdminAnnouncement) {
     entry,
     () => updateAdminAnnouncement(entry.id, { active: false }),
     '公告下线失败。',
-  )
-}
-
-async function repolishDraft(entry: AdminAnnouncement) {
-  if (entry.active || actionBusyId.value) return
-  await runAnnouncementAction(
-    entry,
-    () => repolishAdminAnnouncement(entry.id),
-    '重新润色失败。',
   )
 }
 
@@ -491,17 +481,6 @@ onMounted(() => {
                     @click="publishDraft(entry)"
                   >
                     <Send class="w-4 h-4" />
-                  </button>
-                  <button
-                    v-if="!entry.active"
-                    type="button"
-                    class="icon-action text-cyan-300"
-                    title="重新润色"
-                    :disabled="actionBusyId === entry.id"
-                    @click="repolishDraft(entry)"
-                  >
-                    <LoaderCircle v-if="actionBusyId === entry.id" class="w-4 h-4 animate-spin" />
-                    <Sparkles v-else class="w-4 h-4" />
                   </button>
                   <button
                     v-if="canRegenerateFromChangelog(entry)"

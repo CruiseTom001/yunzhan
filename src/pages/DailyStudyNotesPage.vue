@@ -82,6 +82,7 @@ const editingProviderId = ref<string | null>(null)
 const deletingProviderId = ref<string | null>(null)
 const serverAiProviders = ref<ServerAiProviderSummary[]>([])
 const selectedServerProviderId = ref<string | null>(null)
+const selectedExportProviderId = ref<string | null>(null)
 const loadingServerProviders = ref(false)
 // 导出 Word 文档相关状态
 const selectedExportDates = ref<string[]>([])
@@ -123,6 +124,13 @@ const aiReady = computed(() => {
 const selectedServerProvider = computed(() => {
   if (desktopLocalAi.value) return null
   return serverAiProviders.value.find(item => item.id === selectedServerProviderId.value)
+    ?? serverAiProviders.value[0]
+    ?? null
+})
+const selectedExportProvider = computed(() => {
+  if (desktopLocalAi.value) return null
+  return serverAiProviders.value.find(item => item.id === selectedExportProviderId.value)
+    ?? selectedServerProvider.value
     ?? serverAiProviders.value[0]
     ?? null
 })
@@ -636,6 +644,10 @@ function openExportConfirm() {
     exportMode.value = 'raw'
   } else if (!exportCanUseAi.value) {
     exportMode.value = 'raw'
+  } else {
+    selectedExportProviderId.value = selectedServerProvider.value?.id
+      ?? serverAiProviders.value[0]?.id
+      ?? null
   }
   exportError.value = ''
   showExportConfirm.value = true
@@ -663,7 +675,7 @@ async function executeExport() {
   exportError.value = ''
   try {
     const providerId: string | undefined = !desktopLocalAi.value && exportMode.value === 'ai-layout'
-      ? (selectedServerProvider.value?.id ?? undefined)
+      ? (selectedExportProvider.value?.id ?? undefined)
       : undefined
     const { blob, filename } = await exportStudyNotesAsWord(
       [...selectedExportDates.value].sort(),
@@ -1129,7 +1141,24 @@ onUnmounted(() => {
               </p>
             </div>
           </label>
-          <label class="flex cursor-pointer items-start gap-3 rounded-md border border-white/[0.08] px-3 py-2.5 transition hover:bg-white/[0.03]" :class="exportMode === 'raw' ? 'border-cyan-400/30 bg-cyan-400/5' : ''">
+          <div
+            v-if="exportMode === 'ai-layout' && !desktopLocalAi && serverAiProviders.length > 0"
+            class="mt-3 rounded-md border border-cyan-400/20 bg-cyan-400/5 p-3"
+          >
+            <label for="export-ai-provider" class="block text-xs font-medium text-theme-muted">本次导出使用的 AI</label>
+            <select
+              id="export-ai-provider"
+              v-model="selectedExportProviderId"
+              :disabled="exporting"
+              class="mt-2 w-full rounded-md border border-edge-light bg-surface-secondary px-3 py-2 text-sm text-theme outline-none transition focus:border-cyan-400/50"
+            >
+              <option v-for="entry in serverAiProviders" :key="entry.id" :value="entry.id">
+                {{ entry.name }} / {{ entry.model }}
+              </option>
+            </select>
+            <p class="mt-2 text-xs text-theme-muted">只影响本次 Word AI 排版，不会修改笔记润色的默认选择。</p>
+          </div>
+          <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-md border border-white/[0.08] px-3 py-2.5 transition hover:bg-white/[0.03]" :class="exportMode === 'raw' ? 'border-cyan-400/30 bg-cyan-400/5' : ''">
             <input
               type="radio"
               value="raw"

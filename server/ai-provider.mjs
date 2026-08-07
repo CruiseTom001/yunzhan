@@ -226,10 +226,9 @@ function buildAiEndpoint(provider) {
   return `${provider.baseUrl}${endpointByFormat[provider.format]}`
 }
 
-function resolveEffectiveModel(provider, purpose) {
-  if (purpose === 'export' && typeof provider.exportModel === 'string' && provider.exportModel.trim()) {
-    return provider.exportModel
-  }
+function resolveEffectiveModel(provider) {
+  // Word 导出与其他 AI 能力统一使用用户所选供应商的 model。
+  // 仍接受旧配置中的 exportModel 字段以保持环境变量兼容，但不再让它覆盖选择。
   return provider.model
 }
 
@@ -242,7 +241,7 @@ function buildAiRequest(provider, content, purpose) {
         ? buildAnnouncementPolishPrompt()
         : buildStudyNotePolishPrompt()
   const maxTokens = purpose === 'test' ? 64 : purpose === 'export' ? 4000 : 2000
-  const effectiveModel = resolveEffectiveModel(provider, purpose)
+  const effectiveModel = resolveEffectiveModel(provider)
   if (provider.format === 'anthropic_messages') {
     return {
       headers: {
@@ -381,7 +380,7 @@ export async function requestStudyNoteAi({
       purpose === 'export' ? 'exportContent' : 'content',
     )
   const requestPayload = buildAiRequest(provider, normalizedContent, purpose)
-  const requestedModel = resolveEffectiveModel(provider, purpose)
+  const requestedModel = resolveEffectiveModel(provider)
 
   let response
   try {
@@ -486,7 +485,7 @@ export async function requestStudyNoteAiStream({
   const normalizedContent = validateBoundedString(content, AI_CONTENT_MAX_LENGTH, 'content')
   const requestPayload = buildAiRequest(provider, normalizedContent, 'polish')
   const streamBody = { ...requestPayload.body, stream: true }
-  const requestedModel = resolveEffectiveModel(provider, 'polish')
+  const requestedModel = resolveEffectiveModel(provider)
 
   const controller = new AbortController()
   let timeoutId = null
