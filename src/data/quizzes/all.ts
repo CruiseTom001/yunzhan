@@ -18,8 +18,9 @@ import { questions as git } from './git'
 import { questions as pythonOps } from './python-ops'
 import { questions as virtualization } from './virtualization'
 import { questions as devopsProject } from './devops-project'
+import { withOptionExplanations } from '@/utils/quizOptionExplanation'
 
-export const allQuestions = [
+const rawQuestions = [
   ...linuxBasics,
   ...networking,
   ...webServer,
@@ -41,6 +42,9 @@ export const allQuestions = [
   ...virtualization,
   ...devopsProject,
 ]
+
+/** 所有题库统一在装配时补齐选项级解析，避免历史题目漏项。 */
+export const allQuestions = rawQuestions.map(withOptionExplanations)
 
 export function getQuestionsByCategory(categoryId: string) {
   return allQuestions.filter((q) => q.categoryId === categoryId)

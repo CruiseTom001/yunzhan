@@ -46,6 +46,7 @@ const emit = defineEmits<{
   <div
     class="course-card group relative overflow-hidden bg-white/[0.01] border border-white/[0.04] rounded-xl p-5 cursor-pointer transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.08] hover:-translate-y-0.5"
     :class="{ 'course-card-complete': isComplete }"
+    :aria-label="`${course.title}${isComplete ? '，已完成' : ''}`"
     role="button"
     tabindex="0"
     @click="emit('click', course.id)"
@@ -140,9 +141,19 @@ const emit = defineEmits<{
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #6ee7b7;
+  color: var(--course-complete-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 9px;
+}
+
+.course-card-complete {
+  border-color: var(--course-complete-border);
+  background: var(--course-complete-bg);
+}
+
+.course-card-complete:hover {
+  border-color: var(--course-complete-border-hover);
+  background: var(--course-complete-bg-hover);
 }
 
 .course-card-complete::after {
@@ -150,7 +161,7 @@ const emit = defineEmits<{
   inset: 0;
   pointer-events: none;
   content: '';
-  background: linear-gradient(105deg, transparent 20%, rgb(52 211 153 / 0.1) 50%, transparent 78%);
+  background: linear-gradient(105deg, transparent 20%, var(--course-complete-sheen) 50%, transparent 78%);
   transform: translateX(-100%);
   animation: course-complete-scan 1.2s ease-out 0.25s both;
 }

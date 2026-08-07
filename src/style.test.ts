@@ -91,6 +91,25 @@ describe('light theme text contrast (WCAG)', () => {
     expect(lightVars['accent-emerald']).toBeDefined()
   })
 
+  it('defines course completion tokens for both themes', () => {
+    const darkVars = parseVars(extractBlock(':root,\\s*\\[data-theme="dark"\\]'))
+    for (const name of [
+      'course-complete-bg',
+      'course-complete-bg-hover',
+      'course-complete-border',
+      'course-complete-border-hover',
+      'course-complete-text',
+      'course-complete-sheen',
+    ]) {
+      expect(lightVars[name], `浅色主题缺少 ${name}`).toBeDefined()
+      expect(darkVars[name], `深色主题缺少 ${name}`).toBeDefined()
+    }
+    expect(lightVars['course-complete-text']).toBe('#075c3b')
+    expect(darkVars['course-complete-text']).toBe('#6ee7b7')
+    expectContrastAtLeast(lightVars['course-complete-text'], bgPrimary, 4.5, 'course completion text')
+    expectContrastAtLeast(lightVars['course-complete-text'], bgCard, 4.5, 'course completion text on card')
+  })
+
   it('keeps dark theme variables untouched', () => {
     const darkVars = parseVars(extractBlock(':root,\\s*\\[data-theme="dark"\\]'))
     expect(darkVars['bg-primary']).toBe('#06060b')

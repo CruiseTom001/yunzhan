@@ -50,6 +50,13 @@
   --accent-danger: #f87171;
   --accent-warning: #fbbf24;
 
+  --course-complete-bg: rgba(52, 211, 153, 0.08);
+  --course-complete-bg-hover: rgba(52, 211, 153, 0.14);
+  --course-complete-border: rgba(52, 211, 153, 0.5);
+  --course-complete-border-hover: rgba(52, 211, 153, 0.75);
+  --course-complete-text: #6ee7b7;
+  --course-complete-sheen: rgba(52, 211, 153, 0.1);
+
   /* shiki css-variables 主题：深色参考 github-dark-variable */
   --shiki-foreground: #e2e8f0;
   --shiki-background: transparent;
@@ -94,6 +101,13 @@
   --accent-emerald: #03614a;
   --accent-danger: #b91c1c;
   --accent-warning: #92400e;
+
+  --course-complete-bg: #e1f5ec;
+  --course-complete-bg-hover: #d4f0e2;
+  --course-complete-border: #278a62;
+  --course-complete-border-hover: #176b4b;
+  --course-complete-text: #075c3b;
+  --course-complete-sheen: rgba(5, 150, 105, 0.12);
 
   /* shiki css-variables 主题：浅色参考 github-light-variable（注释/函数色已调深至 ≥4.5:1） */
   --shiki-foreground: #24292f;

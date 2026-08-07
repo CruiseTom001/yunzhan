@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Filter, Route, ArrowRight } from 'lucide-vue-next'
+import { Search, Filter, Route, ArrowRight, CheckCircle2 } from 'lucide-vue-next'
 import { courseIndex, chapterCounts } from '@/data/courses/index'
 import { beginnerPathSteps } from '@/data/beginner-path'
 import type { Difficulty } from '@/types'
@@ -31,6 +31,7 @@ interface RecommendedStep {
 interface RecommendedCourseWithIndex {
   id: string
   index: number
+  completed: boolean
 }
 
 interface RecommendedStepWithIndex {
@@ -52,14 +53,9 @@ const recommendedStepsWithIndex = computed<RecommendedStepWithIndex[]>(() => {
   return recommendedSteps.map((step) => {
     const courses = step.courses.map((course) => {
       counter += 1
-      return { id: course.id, index: counter }
+      return { id: course.id, index: counter, completed: isCourseCompleted(course.id) }
     })
-    const completedCourses = courses.filter((course) => {
-      const total = chapterCounts[course.id] ?? 0
-      if (total <= 0) return false
-      const completed = progressStore.progress.completedChapters[course.id]?.length ?? 0
-      return completed >= total
-    }).length
+    const completedCourses = courses.filter(course => course.completed).length
     return {
       title: step.title,
       description: step.description,
@@ -69,6 +65,11 @@ const recommendedStepsWithIndex = computed<RecommendedStepWithIndex[]>(() => {
     }
   })
 })
+
+function isCourseCompleted(id: string): boolean {
+  const total = chapterCounts[id] ?? 0
+  return total > 0 && progressStore.isCourseComplete(id, total)
+}
 
 function getCourseTitle(id: string) {
   return courseIndex.find(course => course.id === id)?.title ?? id
@@ -195,12 +196,18 @@ onUnmounted(() => {
                 :key="entry.id"
                 type="button"
                 class="learning-order-course"
+                :class="{ 'is-complete': entry.completed }"
+                :aria-label="`${getCourseTitle(entry.id)}${entry.completed ? '，已完成' : ''}`"
                 :data-tour-id="entry.index === 1 ? 'courses-first-course' : undefined"
                 @click="goToCourse(entry.id)"
               >
                 <span class="learning-order-course-index">{{ String(entry.index).padStart(2, '0') }}</span>
                 <span class="learning-order-course-title">{{ getCourseTitle(entry.id) }}</span>
-                <ArrowRight class="w-3.5 h-3.5" aria-hidden="true" />
+                <span v-if="entry.completed" class="learning-order-course-status">
+                  <CheckCircle2 class="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>已完成</span>
+                </span>
+                <ArrowRight v-else class="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
           </article>
@@ -417,6 +424,17 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 
+.learning-order-course.is-complete {
+  border-color: var(--course-complete-border);
+  color: var(--course-complete-text);
+  background: var(--course-complete-bg);
+}
+
+.learning-order-course.is-complete:hover {
+  border-color: var(--course-complete-border-hover);
+  background: var(--course-complete-bg-hover);
+}
+
 .learning-order-course-index {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
@@ -432,6 +450,17 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.learning-order-course-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--course-complete-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .learning-order-hint {

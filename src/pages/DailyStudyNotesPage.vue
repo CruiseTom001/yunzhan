@@ -92,13 +92,13 @@ const exportMode = ref<ExportMode>('ai-layout')
 const desktopLocalAi = computed(() => typeof window !== 'undefined' && Boolean(window.electronAPI))
 
 const provider = reactive({
-  name: 'DeepSeek',
-  baseUrl: 'https://api.deepseek.com/v1',
+  name: 'GLM 5.2',
+  baseUrl: 'https://integrate.api.nvidia.com/v1',
   apiKey: '',
   format: 'chat_completions' as AiProviderFormat,
-  model: 'deepseek-flash',
+  model: 'z-ai/glm-5.2',
 })
-const modelList = ref(['deepseek-flash'])
+const modelList = ref(['z-ai/glm-5.2', 'minimaxai/minimax-m3'])
 
 const formatOptions: Array<{ value: AiProviderFormat; label: string }> = [
   { value: 'anthropic_messages', label: 'Anthropic Messages (/v1/messages)' },
@@ -266,11 +266,11 @@ function formatUpdatedAt(timestamp: number) {
 
 function defaultProviderInput(): AiProviderInput {
   return {
-    name: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com/v1',
+    name: 'GLM 5.2',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
     apiKey: '',
     format: 'chat_completions',
-    model: 'deepseek-flash',
+    model: 'z-ai/glm-5.2',
   }
 }
 

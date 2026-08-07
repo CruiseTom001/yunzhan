@@ -59,6 +59,8 @@ export interface QuizOption {
   id: string
   text: string
   isCorrect: boolean
+  /** 选项级解析；旧题库缺失时由题库装配层生成安全的详细解析。 */
+  explanation?: string
 }
 
 export interface Bookmark {

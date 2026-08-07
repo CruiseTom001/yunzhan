@@ -323,6 +323,23 @@ onUnmounted(() => {
                 </span>
               </div>
               <p class="text-gray-400 text-xs leading-relaxed">{{ currentQuestion.explanation }}</p>
+
+              <div class="quiz-option-explanations mt-4" aria-label="选项解析">
+                <div
+                  v-for="option in currentQuestion.options"
+                  :key="`explanation-${option.id}`"
+                  class="quiz-option-explanation"
+                  :class="option.isCorrect ? 'quiz-option-explanation--correct' : 'quiz-option-explanation--wrong'"
+                >
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="quiz-option-explanation-label">{{ option.id.toUpperCase() }}</span>
+                    <span class="text-xs font-medium">
+                      {{ option.isCorrect ? '正确选项' : '干扰项' }}
+                    </span>
+                  </div>
+                  <p class="text-xs leading-relaxed">{{ option.explanation }}</p>
+                </div>
+              </div>
             </div>
           </Transition>
         </div>
@@ -398,6 +415,44 @@ onUnmounted(() => {
 .answer-explanation-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+.quiz-option-explanations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.quiz-option-explanation {
+  border-left: 2px solid var(--border-hover);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.quiz-option-explanation--correct {
+  border-left-color: var(--accent-emerald);
+  background: var(--course-complete-bg);
+}
+
+.quiz-option-explanation--wrong {
+  border-left-color: var(--text-dim);
+}
+
+.quiz-option-explanation-label {
+  display: inline-flex;
+  min-width: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .perfect-celebration {
